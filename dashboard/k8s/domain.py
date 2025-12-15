@@ -1,0 +1,609 @@
+"""
+Domain CR Operations
+
+CRUD operations for Domain custom resources in Kubernetes.
+This is the main integration point between Django and the KubePanel operator.
+"""
+
+from kubernetes.client.rest import ApiException
+from typing import Optional
+import logging
+import re
+
+from .client import (
+    get_custom_api,
+    handle_api_exception,
+    K8sNotFoundError,
+    K8sClientError,
+)
+
+logger = logging.getLogger(__name__)
+
+# Domain CRD constants
+DOMAIN_GROUP = "kubepanel.io"
+DOMAIN_VERSION = "v1alpha1"
+DOMAIN_PLURAL = "domains"
+
+
+def _sanitize_cr_name(domain_name: str) -> str:
+    """
+    Convert domain name to a valid CR name.
+    
+    e.g., 'example.com' -> 'example-com'
+    e.g., 'my.sub.domain.com' -> 'my-sub-domain-com'
+    """
+    sanitized = re.sub(r'[^a-z0-9-]', '-', domain_name.lower())
+    sanitized = re.sub(r'-+', '-', sanitized)  # collapse multiple dashes
+    return sanitized.strip('-')
+
+
+class DomainSpec:
+    """
+    Domain specification builder.
+    
+    Provides a clean interface to build Domain CR specs with validation.
+    """
+    
+    def __init__(
+        self,
+        domain_name: str,
+        php_version: str,
+        storage: str,
+        cpu_limit: str,
+        memory_limit: str,
+    ):
+        """
+        Initialize required fields.
+        
+        Args:
+            domain_name: Primary domain name (e.g., 'example.com')
+            php_version: PHP version (e.g., '8.2')
+            storage: Storage size (e.g., '5Gi')
+            cpu_limit: CPU limit (e.g., '500m')
+            memory_limit: Memory limit (e.g., '256Mi')
+        """
+        self.domain_name = domain_name
+        self.php_version = php_version
+        self.storage = storage
+        self.cpu_limit = cpu_limit
+        self.memory_limit = memory_limit
+        
+        # Optional fields with defaults
+        self.title: Optional[str] = None
+        self.aliases: list[str] = []
+        self.suspended: bool = False
+        
+        # PHP settings (optional)
+        self.php_memory_limit: Optional[str] = None
+        self.php_max_execution_time: Optional[int] = None
+        self.php_upload_max_filesize: Optional[str] = None
+        self.php_post_max_size: Optional[str] = None
+        
+        # Resource requests (optional, operator uses low defaults)
+        self.cpu_request: Optional[str] = None
+        self.memory_request: Optional[str] = None
+        
+        # Webserver settings (optional)
+        self.document_root: Optional[str] = None
+        self.client_max_body_size: Optional[str] = None
+        self.ssl_redirect: Optional[bool] = None
+        self.www_redirect: Optional[str] = None
+        self.custom_nginx_config: Optional[str] = None
+        
+        # Feature toggles (optional)
+        self.database_enabled: Optional[bool] = None
+        self.email_enabled: Optional[bool] = None
+        self.dkim_selector: Optional[str] = None
+        self.sftp_enabled: Optional[bool] = None
+    
+    def to_dict(self) -> dict:
+        """Convert to Domain CR spec dict."""
+        spec = {
+            "domainName": self.domain_name,
+            "php": {
+                "version": self.php_version,
+            },
+            "resources": {
+                "storage": self.storage,
+                "limits": {
+                    "cpu": self.cpu_limit,
+                    "memory": self.memory_limit,
+                },
+            },
+        }
+        
+        # Add optional title
+        if self.title:
+            spec["title"] = self.title
+        
+        # Add aliases if any
+        if self.aliases:
+            spec["aliases"] = self.aliases
+        
+        # Add suspended if True
+        if self.suspended:
+            spec["suspended"] = True
+        
+        # Add PHP settings if any are set
+        php_settings = {}
+        if self.php_memory_limit:
+            php_settings["memoryLimit"] = self.php_memory_limit
+        if self.php_max_execution_time:
+            php_settings["maxExecutionTime"] = self.php_max_execution_time
+        if self.php_upload_max_filesize:
+            php_settings["uploadMaxFilesize"] = self.php_upload_max_filesize
+        if self.php_post_max_size:
+            php_settings["postMaxSize"] = self.php_post_max_size
+        if php_settings:
+            spec["php"]["settings"] = php_settings
+        
+        # Add resource requests if any are set
+        if self.cpu_request or self.memory_request:
+            spec["resources"]["requests"] = {}
+            if self.cpu_request:
+                spec["resources"]["requests"]["cpu"] = self.cpu_request
+            if self.memory_request:
+                spec["resources"]["requests"]["memory"] = self.memory_request
+        
+        # Add webserver settings if any are set
+        webserver = {}
+        if self.document_root:
+            webserver["documentRoot"] = self.document_root
+        if self.client_max_body_size:
+            webserver["clientMaxBodySize"] = self.client_max_body_size
+        if self.ssl_redirect is not None:
+            webserver["sslRedirect"] = self.ssl_redirect
+        if self.www_redirect:
+            webserver["wwwRedirect"] = self.www_redirect
+        if self.custom_nginx_config:
+            webserver["customConfig"] = self.custom_nginx_config
+        if webserver:
+            spec["webserver"] = webserver
+        
+        # Add feature toggles if explicitly set
+        if self.database_enabled is not None:
+            spec["database"] = {"enabled": self.database_enabled}
+        
+        if self.email_enabled is not None or self.dkim_selector:
+            spec["email"] = {}
+            if self.email_enabled is not None:
+                spec["email"]["enabled"] = self.email_enabled
+            if self.dkim_selector:
+                spec["email"]["dkimSelector"] = self.dkim_selector
+        
+        if self.sftp_enabled is not None:
+            spec["sftp"] = {"enabled": self.sftp_enabled}
+        
+        return spec
+
+
+class DomainStatus:
+    """
+    Parsed Domain CR status.
+    
+    Provides easy access to status fields.
+    """
+    
+    def __init__(self, status_dict: dict):
+        self._raw = status_dict or {}
+    
+    @property
+    def phase(self) -> str:
+        return self._raw.get("phase", "Unknown")
+    
+    @property
+    def message(self) -> str:
+        return self._raw.get("message", "")
+    
+    @property
+    def namespace(self) -> str:
+        return self._raw.get("namespace", "")
+    
+    @property
+    def is_ready(self) -> bool:
+        return self.phase == "Ready"
+    
+    @property
+    def is_failed(self) -> bool:
+        return self.phase == "Failed"
+    
+    @property
+    def conditions(self) -> list[dict]:
+        return self._raw.get("conditions", [])
+    
+    def get_condition(self, condition_type: str) -> Optional[dict]:
+        """Get a specific condition by type."""
+        for cond in self.conditions:
+            if cond.get("type") == condition_type:
+                return cond
+        return None
+    
+    # SFTP access
+    @property
+    def sftp_host(self) -> Optional[str]:
+        return self._raw.get("sftp", {}).get("host")
+    
+    @property
+    def sftp_port(self) -> Optional[int]:
+        return self._raw.get("sftp", {}).get("port")
+    
+    @property
+    def sftp_username(self) -> Optional[str]:
+        return self._raw.get("sftp", {}).get("username")
+    
+    @property
+    def sftp_password_secret_ref(self) -> Optional[dict]:
+        return self._raw.get("sftp", {}).get("passwordSecretRef")
+    
+    # Database access
+    @property
+    def database_host(self) -> Optional[str]:
+        return self._raw.get("database", {}).get("host")
+    
+    @property
+    def database_name(self) -> Optional[str]:
+        return self._raw.get("database", {}).get("name")
+    
+    @property
+    def database_username(self) -> Optional[str]:
+        return self._raw.get("database", {}).get("username")
+    
+    @property
+    def database_password_secret_ref(self) -> Optional[dict]:
+        return self._raw.get("database", {}).get("passwordSecretRef")
+    
+    # Email/DKIM
+    @property
+    def dkim_public_key(self) -> Optional[str]:
+        return self._raw.get("email", {}).get("dkimPublicKey")
+    
+    @property
+    def dkim_dns_record(self) -> Optional[str]:
+        return self._raw.get("email", {}).get("dkimDnsRecord")
+
+
+class Domain:
+    """
+    Domain CR wrapper.
+    
+    Represents a Domain custom resource with easy access to spec and status.
+    """
+    
+    def __init__(self, cr_dict: dict):
+        self._raw = cr_dict
+    
+    @property
+    def name(self) -> str:
+        """CR metadata name."""
+        return self._raw.get("metadata", {}).get("name", "")
+    
+    @property
+    def domain_name(self) -> str:
+        """Actual domain name from spec."""
+        return self._raw.get("spec", {}).get("domainName", "")
+    
+    @property
+    def owner(self) -> str:
+        """Owner from labels."""
+        return self._raw.get("metadata", {}).get("labels", {}).get("kubepanel.io/owner", "")
+    
+    @property
+    def spec(self) -> dict:
+        """Raw spec dict."""
+        return self._raw.get("spec", {})
+    
+    @property
+    def status(self) -> DomainStatus:
+        """Parsed status."""
+        return DomainStatus(self._raw.get("status"))
+    
+    @property
+    def generation(self) -> int:
+        return self._raw.get("metadata", {}).get("generation", 0)
+    
+    @property
+    def creation_timestamp(self) -> str:
+        return self._raw.get("metadata", {}).get("creationTimestamp", "")
+    
+    def to_dict(self) -> dict:
+        """Return raw CR dict."""
+        return self._raw
+
+
+# =============================================================================
+# CRUD Operations
+# =============================================================================
+
+def create_domain(spec: DomainSpec, owner: str, labels: Optional[dict] = None) -> Domain:
+    """
+    Create a new Domain CR.
+    
+    Args:
+        spec: DomainSpec with domain configuration
+        owner: Username of the domain owner (stored in label)
+        labels: Additional labels to add
+    
+    Returns:
+        Created Domain object
+    
+    Raises:
+        K8sConflictError: If domain already exists
+        K8sValidationError: If spec is invalid
+        K8sClientError: For other K8s errors
+    """
+    custom_api = get_custom_api()
+    cr_name = _sanitize_cr_name(spec.domain_name)
+    
+    # Build labels
+    all_labels = {
+        "kubepanel.io/owner": owner,
+        "app.kubernetes.io/managed-by": "kubepanel",
+    }
+    if labels:
+        all_labels.update(labels)
+    
+    # Build CR
+    domain_cr = {
+        "apiVersion": f"{DOMAIN_GROUP}/{DOMAIN_VERSION}",
+        "kind": "Domain",
+        "metadata": {
+            "name": cr_name,
+            "labels": all_labels,
+        },
+        "spec": spec.to_dict(),
+    }
+    
+    logger.info(f"Creating Domain CR '{cr_name}' for domain '{spec.domain_name}'")
+    
+    try:
+        result = custom_api.create_cluster_custom_object(
+            group=DOMAIN_GROUP,
+            version=DOMAIN_VERSION,
+            plural=DOMAIN_PLURAL,
+            body=domain_cr,
+        )
+        logger.info(f"Created Domain CR '{cr_name}'")
+        return Domain(result)
+    except ApiException as e:
+        handle_api_exception(e, f"Domain '{spec.domain_name}'")
+
+
+def get_domain(domain_name: str) -> Domain:
+    """
+    Get a Domain CR by domain name.
+    
+    Args:
+        domain_name: The domain name (e.g., 'example.com')
+    
+    Returns:
+        Domain object
+    
+    Raises:
+        K8sNotFoundError: If domain not found
+        K8sClientError: For other K8s errors
+    """
+    custom_api = get_custom_api()
+    cr_name = _sanitize_cr_name(domain_name)
+    
+    try:
+        result = custom_api.get_cluster_custom_object(
+            group=DOMAIN_GROUP,
+            version=DOMAIN_VERSION,
+            plural=DOMAIN_PLURAL,
+            name=cr_name,
+        )
+        return Domain(result)
+    except ApiException as e:
+        handle_api_exception(e, f"Domain '{domain_name}'")
+
+
+def get_domain_by_cr_name(cr_name: str) -> Domain:
+    """
+    Get a Domain CR by its CR name (metadata.name).
+    
+    Args:
+        cr_name: The CR name (e.g., 'example-com')
+    
+    Returns:
+        Domain object
+    
+    Raises:
+        K8sNotFoundError: If domain not found
+        K8sClientError: For other K8s errors
+    """
+    custom_api = get_custom_api()
+    
+    try:
+        result = custom_api.get_cluster_custom_object(
+            group=DOMAIN_GROUP,
+            version=DOMAIN_VERSION,
+            plural=DOMAIN_PLURAL,
+            name=cr_name,
+        )
+        return Domain(result)
+    except ApiException as e:
+        handle_api_exception(e, f"Domain CR '{cr_name}'")
+
+
+def list_domains(owner: Optional[str] = None) -> list[Domain]:
+    """
+    List Domain CRs, optionally filtered by owner.
+    
+    Args:
+        owner: If provided, filter by owner label
+    
+    Returns:
+        List of Domain objects
+    
+    Raises:
+        K8sClientError: For K8s errors
+    """
+    custom_api = get_custom_api()
+    
+    label_selector = None
+    if owner:
+        label_selector = f"kubepanel.io/owner={owner}"
+    
+    try:
+        result = custom_api.list_cluster_custom_object(
+            group=DOMAIN_GROUP,
+            version=DOMAIN_VERSION,
+            plural=DOMAIN_PLURAL,
+            label_selector=label_selector,
+        )
+        return [Domain(item) for item in result.get("items", [])]
+    except ApiException as e:
+        handle_api_exception(e, "Domain list")
+
+
+def update_domain(domain_name: str, spec: DomainSpec) -> Domain:
+    """
+    Update a Domain CR's spec.
+    
+    Note: domainName is immutable and cannot be changed.
+    
+    Args:
+        domain_name: The domain name to update
+        spec: New DomainSpec (domainName must match)
+    
+    Returns:
+        Updated Domain object
+    
+    Raises:
+        K8sNotFoundError: If domain not found
+        K8sValidationError: If spec is invalid
+        K8sClientError: For other K8s errors
+    """
+    custom_api = get_custom_api()
+    cr_name = _sanitize_cr_name(domain_name)
+    
+    # Get current CR to preserve metadata
+    current = get_domain(domain_name)
+    
+    # Build updated CR (preserve metadata, update spec)
+    updated_cr = current.to_dict()
+    updated_cr["spec"] = spec.to_dict()
+    
+    logger.info(f"Updating Domain CR '{cr_name}'")
+    
+    try:
+        result = custom_api.replace_cluster_custom_object(
+            group=DOMAIN_GROUP,
+            version=DOMAIN_VERSION,
+            plural=DOMAIN_PLURAL,
+            name=cr_name,
+            body=updated_cr,
+        )
+        logger.info(f"Updated Domain CR '{cr_name}'")
+        return Domain(result)
+    except ApiException as e:
+        handle_api_exception(e, f"Domain '{domain_name}'")
+
+
+def patch_domain(domain_name: str, patch: dict) -> Domain:
+    """
+    Patch a Domain CR's spec (partial update).
+    
+    Args:
+        domain_name: The domain name to patch
+        patch: Dict with fields to update (merged with existing spec)
+    
+    Returns:
+        Updated Domain object
+    
+    Raises:
+        K8sNotFoundError: If domain not found
+        K8sClientError: For other K8s errors
+    """
+    custom_api = get_custom_api()
+    cr_name = _sanitize_cr_name(domain_name)
+    
+    patch_body = {"spec": patch}
+    
+    logger.info(f"Patching Domain CR '{cr_name}'")
+    
+    try:
+        result = custom_api.patch_cluster_custom_object(
+            group=DOMAIN_GROUP,
+            version=DOMAIN_VERSION,
+            plural=DOMAIN_PLURAL,
+            name=cr_name,
+            body=patch_body,
+        )
+        logger.info(f"Patched Domain CR '{cr_name}'")
+        return Domain(result)
+    except ApiException as e:
+        handle_api_exception(e, f"Domain '{domain_name}'")
+
+
+def delete_domain(domain_name: str) -> None:
+    """
+    Delete a Domain CR.
+    
+    The operator will handle cleanup of associated resources.
+    
+    Args:
+        domain_name: The domain name to delete
+    
+    Raises:
+        K8sNotFoundError: If domain not found
+        K8sClientError: For other K8s errors
+    """
+    custom_api = get_custom_api()
+    cr_name = _sanitize_cr_name(domain_name)
+    
+    logger.info(f"Deleting Domain CR '{cr_name}'")
+    
+    try:
+        custom_api.delete_cluster_custom_object(
+            group=DOMAIN_GROUP,
+            version=DOMAIN_VERSION,
+            plural=DOMAIN_PLURAL,
+            name=cr_name,
+        )
+        logger.info(f"Deleted Domain CR '{cr_name}'")
+    except ApiException as e:
+        handle_api_exception(e, f"Domain '{domain_name}'")
+
+
+def suspend_domain(domain_name: str) -> Domain:
+    """
+    Suspend a domain (scales workloads to zero).
+    
+    Args:
+        domain_name: The domain name to suspend
+    
+    Returns:
+        Updated Domain object
+    """
+    return patch_domain(domain_name, {"suspended": True})
+
+
+def unsuspend_domain(domain_name: str) -> Domain:
+    """
+    Unsuspend a domain (restores workloads).
+    
+    Args:
+        domain_name: The domain name to unsuspend
+    
+    Returns:
+        Updated Domain object
+    """
+    return patch_domain(domain_name, {"suspended": False})
+
+
+def domain_exists(domain_name: str) -> bool:
+    """
+    Check if a domain exists.
+    
+    Args:
+        domain_name: The domain name to check
+    
+    Returns:
+        True if exists, False otherwise
+    """
+    try:
+        get_domain(domain_name)
+        return True
+    except K8sNotFoundError:
+        return False
