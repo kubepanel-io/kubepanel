@@ -5,7 +5,18 @@ from .views import (
     UserProfileListView, UserProfileCreateView, UserProfileUpdateView,
     UserCreateView, DownloadSnapshotView, DownloadSqlDumpView, UploadRestoreFilesView
 )
-
+from dashboard.k8s import (
+    DomainSpec,
+    create_domain as k8s_create_domain,
+    delete_domain as k8s_delete_domain,
+    get_domain as k8s_get_domain,
+    list_domains as k8s_list_domains,
+    suspend_domain as k8s_suspend_domain,
+    unsuspend_domain as k8s_unsuspend_domain,
+    K8sClientError,
+    K8sConflictError,
+    K8sNotFoundError,
+)
 from . import views, views_logging
 
 urlpatterns = [
