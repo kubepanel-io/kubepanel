@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 from django.core.paginator import Paginator
+from django.core.exceptions import ValidationError
 from .models import PhpImage, Package, UserProfile, LogEntry, MailUser, MailAlias, ClusterIP, DNSZone, User, Domain, Volumesnapshot, BlockRule, DNSRecord, CloudflareAPIToken
 from dashboard.forms import UserProfilePackageForm, UserForm, PackageForm, UserProfileForm, MailUserForm, MailAliasForm, DomainForm, DomainAddForm, DomainAliasForm, APITokenForm, ZoneCreationForm, DNSRecordForm
 from django.urls import reverse, reverse_lazy
@@ -1061,10 +1062,9 @@ def add_domain(request):
     """
     Add a new domain.
     
-    Creates:
-    1. Domain CR in Kubernetes (operator handles all resources)
-    2. Domain record in Django DB (for ownership tracking)
-    3. Optionally: DNS records via Cloudflare
+    Uses atomic transaction to ensure consistency:
+    - Django model and K8s CR are created together
+    - If either fails, both are rolled back
     """
     if request.method == 'POST':
         try:
@@ -1087,18 +1087,9 @@ def add_domain(request):
                 messages.error(request, "Invalid PHP version selected.")
                 return redirect('add_domain')
             
-            # Check for duplicate domain
+            # Check for duplicate domain in Django
             if Domain.objects.filter(domain_name=domain_name).exists():
                 messages.error(request, f"Domain '{domain_name}' already exists.")
-                return redirect('add_domain')
-            
-            # Validate package limits
-            try:
-                validate_package_limits(request.user, storage_size, cpu_limit, mem_limit)
-            except ValidationError as e:
-                for field, errors in e.message_dict.items():
-                    for error in errors:
-                        messages.error(request, error)
                 return redirect('add_domain')
             
             # Get optional flags
@@ -1118,70 +1109,79 @@ def add_domain(request):
             domain_spec.wordpress_preinstall = wp_preinstall
             domain_spec.email_enabled = True  # Enable email/DKIM by default
             
-            # Create Domain CR in Kubernetes
-            try:
-                k8s_domain = k8s_create_domain(
-                    spec=domain_spec,
-                    owner=request.user.username,
-                )
-                logger.info(f"Created Domain CR '{k8s_domain.name}' for '{domain_name}'")
-            except K8sConflictError:
-                messages.error(request, f"Domain '{domain_name}' already exists in cluster.")
-                return redirect('add_domain')
-            except K8sClientError as e:
-                logger.error(f"Failed to create Domain CR: {e}")
-                messages.error(request, f"Failed to create domain: {str(e)}")
-                return redirect('add_domain')
+            # Build Django model (don't save yet)
+            domain_model = Domain(
+                owner=request.user,
+                domain_name=domain_name,
+                title=domain_name,
+                php_image=php_image,
+                storage_size=storage_size,
+                cpu_limit=cpu_limit,
+                mem_limit=mem_limit,
+            )
             
-            # Create Django model record (for ownership and package limits)
+            # Validate Django model (package limits, etc.)
             try:
-                domain_model = Domain(
-                    owner=request.user,
-                    domain_name=domain_name,
-                    title=domain_name,
-                    php_image=php_image,
-                    storage_size=storage_size,
-                    cpu_limit=cpu_limit,
-                    mem_limit=mem_limit,
-                )
                 domain_model.full_clean()
-                domain_model.save()
-                
-                # Log the action
-                LogEntry.objects.create(
-                    content_object=domain_model,
-                    actor=f"user:{request.user.username}",
-                    user=request.user,
-                    level="INFO",
-                    message=f"Created domain {domain_name}",
-                    data={"domain_id": domain_model.pk}
-                )
-                
             except ValidationError as e:
-                # Rollback: delete the CR we just created
-                try:
-                    k8s_delete_domain(domain_name)
-                except K8sClientError:
-                    pass  # Best effort cleanup
-                
-                logger.error(f"Validation error creating domain model: {e}")
                 for field, errors in e.message_dict.items():
                     for error in errors:
                         messages.error(request, f"{field}: {error}")
                 return redirect('add_domain')
             
+            # === ATOMIC OPERATION: Create both or neither ===
+            k8s_domain = None
+            try:
+                with transaction.atomic():
+                    # 1. Save Django model (inside transaction)
+                    domain_model.save()
+                    
+                    # 2. Create K8s CR
+                    try:
+                        k8s_domain = k8s_create_domain(
+                            spec=domain_spec,
+                            owner=request.user.username,
+                        )
+                        logger.info(f"Created Domain CR '{k8s_domain.name}' for '{domain_name}'")
+                    except K8sConflictError:
+                        # CR already exists - rollback Django
+                        raise ValueError(f"Domain '{domain_name}' already exists in cluster.")
+                    except K8sClientError as e:
+                        # K8s failed - rollback Django
+                        logger.error(f"Failed to create Domain CR: {e}")
+                        raise ValueError(f"Failed to create domain in cluster: {str(e)}")
+                    
+                    # 3. Log the action (inside transaction)
+                    LogEntry.objects.create(
+                        content_object=domain_model,
+                        actor=f"user:{request.user.username}",
+                        user=request.user,
+                        level="INFO",
+                        message=f"Created domain {domain_name}",
+                        data={"domain_id": domain_model.pk}
+                    )
+                    
+            except ValueError as e:
+                # Transaction rolled back, show error
+                messages.error(request, str(e))
+                return redirect('add_domain')
             except Exception as e:
-                # Rollback: delete the CR we just created
-                try:
-                    k8s_delete_domain(domain_name)
-                except K8sClientError:
-                    pass  # Best effort cleanup
+                # Unexpected error - transaction rolled back
+                # But K8s CR might have been created, so clean it up
+                if k8s_domain:
+                    try:
+                        k8s_delete_domain(domain_name)
+                        logger.info(f"Rolled back Domain CR '{domain_name}'")
+                    except K8sClientError:
+                        logger.error(f"Failed to rollback Domain CR '{domain_name}'")
                 
-                logger.error(f"Error creating domain model: {e}")
+                logger.exception(f"Error creating domain: {e}")
                 messages.error(request, f"Failed to create domain: {str(e)}")
                 return redirect('add_domain')
             
-            # Handle auto DNS if requested
+            # === SUCCESS - Both Django and K8s created ===
+            
+            # Handle auto DNS if requested (outside transaction - optional)
             if auto_dns and api_token:
                 try:
                     user_token = CloudflareAPIToken.objects.get(
@@ -1192,10 +1192,6 @@ def add_domain(request):
                     
                     # Generate DNS records
                     dns_records = generate_email_dns_records(domain_name, cluster_ips)
-                    
-                    # DKIM record will be added once operator creates it
-                    # For now, we'll add a placeholder or skip it
-                    # The operator generates DKIM keys, we can fetch them later
                     
                     # Create zone with records
                     zone_manager = DNSZoneManager(user_token)
@@ -1217,19 +1213,19 @@ def add_domain(request):
                     logger.warning(f"API token not found for DNS setup")
                     messages.warning(
                         request,
-                        "Domain created but DNS setup failed: Invalid API token."
+                        f"Domain '{domain_name}' created, but DNS setup failed: Invalid API token."
                     )
                 except CloudflareAPIException as e:
                     logger.error(f"Cloudflare API error: {e}")
                     messages.warning(
                         request,
-                        f"Domain created but DNS setup failed: {e.message}"
+                        f"Domain '{domain_name}' created, but DNS setup failed: {e.message}"
                     )
                 except Exception as e:
                     logger.error(f"DNS setup error: {e}")
                     messages.warning(
                         request,
-                        f"Domain created but DNS setup failed: {str(e)}"
+                        f"Domain '{domain_name}' created, but DNS setup failed: {str(e)}"
                     )
             else:
                 messages.success(request, f"Domain '{domain_name}' created successfully.")
@@ -1250,7 +1246,6 @@ def add_domain(request):
             "form": form,
             "api_tokens": tokens,
         })
-
 
 @login_required(login_url="/dashboard/")
 def startstop_domain(request, domain, action):
