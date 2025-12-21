@@ -1088,7 +1088,7 @@ def add_domain(request):
                 return redirect('add_domain')
             
             # Check for duplicate domain
-            if DomainModel.objects.filter(domain_name=domain_name).exists():
+            if Domain.objects.filter(domain_name=domain_name).exists():
                 messages.error(request, f"Domain '{domain_name}' already exists.")
                 return redirect('add_domain')
             
@@ -1135,7 +1135,7 @@ def add_domain(request):
             
             # Create Django model record (for ownership and package limits)
             try:
-                domain_model = DomainModel(
+                domain_model = Domain(
                     owner=request.user,
                     domain_name=domain_name,
                     title=domain_name,
@@ -1263,8 +1263,8 @@ def startstop_domain(request, domain, action):
     """
     # Get the domain model
     try:
-        domain_model = DomainModel.objects.get(domain_name=domain)
-    except DomainModel.DoesNotExist:
+        domain_model = Domain.objects.get(domain_name=domain)
+    except Domain.DoesNotExist:
         messages.error(request, f"Domain '{domain}' not found.")
         return redirect('kpmain')
     
@@ -1388,8 +1388,8 @@ def delete_domain(request, domain):
     """
     # Get the domain model
     try:
-        domain_model = DomainModel.objects.get(domain_name=domain)
-    except DomainModel.DoesNotExist:
+        domain_model = Domain.objects.get(domain_name=domain)
+    except Domain.DoesNotExist:
         messages.error(request, f"Domain '{domain}' not found.")
         return redirect('kpmain')
     
@@ -2734,7 +2734,7 @@ def validate_package_limits(user, storage_size: int, cpu_limit: int, mem_limit: 
         return  # No package = no limits
     
     # Get existing domains for this user
-    existing_domains = DomainModel.objects.filter(owner=user)
+    existing_domains = Domain.objects.filter(owner=user)
     
     # Calculate totals
     total_storage = sum(d.storage_size for d in existing_domains) + storage_size
