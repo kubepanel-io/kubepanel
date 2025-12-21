@@ -38,6 +38,19 @@ from .services.dns_service import (
 )
 from .services.logging_service import KubepanelLogger
 
+from dashboard.k8s import (
+    DomainSpec,
+    create_domain as k8s_create_domain,
+    delete_domain as k8s_delete_domain,
+    get_domain as k8s_get_domain,
+    list_domains as k8s_list_domains,
+    suspend_domain as k8s_suspend_domain,
+    unsuspend_domain as k8s_unsuspend_domain,
+    K8sClientError,
+    K8sConflictError,
+    K8sNotFoundError,
+)
+
 GEOIP_DB_PATH = "/kubepanel/GeoLite2-Country.mmdb"
 TEMPLATE_BASE = "/kubepanel/dashboard/templates/"
 EXCLUDED_EXTENSIONS = [".js", ".css", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".map"]
@@ -1045,214 +1058,260 @@ def render_yaml(domain_dirname,input_filename,context,file_name):
 
 @login_required(login_url="/dashboard/")
 def add_domain(request):
+    """
+    Add a new domain.
+    
+    Creates:
+    1. Domain CR in Kubernetes (operator handles all resources)
+    2. Domain record in Django DB (for ownership tracking)
+    3. Optionally: DNS records via Cloudflare
+    """
     if request.method == 'POST':
-        #form = DomainAddForm(request.POST)
         try:
-          new_domain_name = request.POST["domain_name"][:60]
-          mem_limit = request.POST["mem_limit"][:8]
-          cpu_limit = request.POST["cpu_limit"][:5]
-          storage_size = request.POST["storage_size"][:5]
-          php_image = PhpImage.objects.get(pk=request.POST["php_image"][:2])
-        except:
-          return render(request, "main/add_domain.html")
-        try:
-          if request.POST["wordpress_preinstall"] == '1':
-            wp_preinstall = True
-          else:
-            wp_preinstall = False
-        except:
-          wp_preinstall = False
-        try:
-          if request.POST["auto_dns"] == '1':
-            api_token = request.POST["api_token"]
-            auto_dns = True
-          else:
-            auto_dns = False
-        except:
-          auto_dns = False
-        #GENERATE SSH AND DKIM PRIV/PUB KEYS
-        sshkey = rsa.generate_private_key(backend=crypto_default_backend(), public_exponent=65537, key_size=2048)
-        private_key = sshkey.private_bytes(crypto_serialization.Encoding.PEM, crypto_serialization.PrivateFormat.TraditionalOpenSSL, crypto_serialization.NoEncryption()).decode("utf-8")
-        public_key = sshkey.public_key().public_bytes(crypto_serialization.Encoding.OpenSSH, crypto_serialization.PublicFormat.OpenSSH).decode("utf-8")
-        dkimkey = rsa.generate_private_key(backend=crypto_default_backend(), public_exponent=65537, key_size=2048)
-        dkim_privkey = dkimkey.private_bytes(crypto_serialization.Encoding.PEM, crypto_serialization.PrivateFormat.TraditionalOpenSSL, crypto_serialization.NoEncryption()).decode()
-        dkim_pubkey = dkimkey.public_key().public_bytes(crypto_serialization.Encoding.PEM, crypto_serialization.PublicFormat.SubjectPublicKeyInfo).decode().splitlines()
-        dkim_pubkey.pop()
-        dkim_pubkey.pop(0)
-        dkim_txt = ''.join(dkim_pubkey)
-        dkim_txt_record = "v=DKIM1; k=rsa; p="+dkim_txt+";"
-        #END
-
-        scp_port = generate_scp_port()
-        mariadb_pass = random_string(12)
-        sftp_pass = random_string(12)
-        salt = crypt.mksalt(crypt.METHOD_SHA512)
-        sftp_pass_hash = crypt.crypt(sftp_pass, salt)
-        jobid = random_string(5)
-        mariadb_user = new_domain_name.replace(".","_").replace("-","_")
-        status = "Startup in progress"
-        new_domain = Domain(owner=request.user, sftp_pass = sftp_pass, php_image = php_image, mem_limit = mem_limit, cpu_limit = cpu_limit, storage_size = storage_size, domain_name = new_domain_name, title = new_domain_name, scp_privkey = private_key, scp_pubkey = public_key, scp_port = scp_port, dkim_privkey = dkim_privkey, dkim_pubkey = dkim_txt_record, mariadb_pass = mariadb_pass, mariadb_user = mariadb_user, status = status)
-        domain_dirname = '/kubepanel/yaml_templates/'+new_domain_name
-        context = { "sftp_pass_hash" : sftp_pass_hash, "domain_instance" : new_domain, "domains" : Domain.objects.all(), "jobid" : jobid, "domain_name_dash" : new_domain.domain_name.replace(".","-"), "domain_name_underscore" : new_domain.domain_name.replace(".","_"), "domain_name" : new_domain.domain_name, "public_key" : public_key, "scp_port" : scp_port, "dkim_privkey" : dkim_privkey, "wp_preinstall" : wp_preinstall}
-        logger = logging.getLogger(__name__)
-        try:
-          new_domain.full_clean()
-          new_domain.save()
-          LogEntry.objects.create(content_object=new_domain,actor=f"user:{request.user.username}",user=request.user,level="INFO",message=f"Created domain {new_domain.domain_name}",data={"domain_id": new_domain.pk})
+            # Extract form data
+            domain_name = request.POST.get("domain_name", "").strip()[:253]
+            mem_limit = int(request.POST.get("mem_limit", 256))
+            cpu_limit = int(request.POST.get("cpu_limit", 500))
+            storage_size = int(request.POST.get("storage_size", 5))
+            php_image_id = request.POST.get("php_image", "")
+            
+            # Validate required fields
+            if not domain_name:
+                messages.error(request, "Domain name is required.")
+                return redirect('add_domain')
+            
+            # Get PHP image
+            try:
+                php_image = PhpImage.objects.get(pk=int(php_image_id))
+            except (PhpImage.DoesNotExist, ValueError):
+                messages.error(request, "Invalid PHP version selected.")
+                return redirect('add_domain')
+            
+            # Check for duplicate domain
+            if DomainModel.objects.filter(domain_name=domain_name).exists():
+                messages.error(request, f"Domain '{domain_name}' already exists.")
+                return redirect('add_domain')
+            
+            # Validate package limits
+            try:
+                validate_package_limits(request.user, storage_size, cpu_limit, mem_limit)
+            except ValidationError as e:
+                for field, errors in e.message_dict.items():
+                    for error in errors:
+                        messages.error(request, error)
+                return redirect('add_domain')
+            
+            # Get optional flags
+            wp_preinstall = request.POST.get("wordpress_preinstall") == "1"
+            auto_dns = request.POST.get("auto_dns") == "1"
+            api_token = request.POST.get("api_token", "") if auto_dns else None
+            
+            # Build Domain CR spec
+            domain_spec = DomainSpec(
+                domain_name=domain_name,
+                php_version=php_image.version,
+                storage=f"{storage_size}Gi",
+                cpu_limit=f"{cpu_limit}m",
+                memory_limit=f"{mem_limit}Mi",
+            )
+            domain_spec.title = domain_name
+            domain_spec.wordpress_preinstall = wp_preinstall
+            domain_spec.email_enabled = True  # Enable email/DKIM by default
+            
+            # Create Domain CR in Kubernetes
+            try:
+                k8s_domain = k8s_create_domain(
+                    spec=domain_spec,
+                    owner=request.user.username,
+                )
+                logger.info(f"Created Domain CR '{k8s_domain.name}' for '{domain_name}'")
+            except K8sConflictError:
+                messages.error(request, f"Domain '{domain_name}' already exists in cluster.")
+                return redirect('add_domain')
+            except K8sClientError as e:
+                logger.error(f"Failed to create Domain CR: {e}")
+                messages.error(request, f"Failed to create domain: {str(e)}")
+                return redirect('add_domain')
+            
+            # Create Django model record (for ownership and package limits)
+            try:
+                domain_model = DomainModel(
+                    owner=request.user,
+                    domain_name=domain_name,
+                    title=domain_name,
+                    php_image=php_image,
+                    storage_size=storage_size,
+                    cpu_limit=cpu_limit,
+                    mem_limit=mem_limit,
+                )
+                domain_model.full_clean()
+                domain_model.save()
+                
+                # Log the action
+                LogEntry.objects.create(
+                    content_object=domain_model,
+                    actor=f"user:{request.user.username}",
+                    user=request.user,
+                    level="INFO",
+                    message=f"Created domain {domain_name}",
+                    data={"domain_id": domain_model.pk}
+                )
+                
+            except ValidationError as e:
+                # Rollback: delete the CR we just created
+                try:
+                    k8s_delete_domain(domain_name)
+                except K8sClientError:
+                    pass  # Best effort cleanup
+                
+                logger.error(f"Validation error creating domain model: {e}")
+                for field, errors in e.message_dict.items():
+                    for error in errors:
+                        messages.error(request, f"{field}: {error}")
+                return redirect('add_domain')
+            
+            except Exception as e:
+                # Rollback: delete the CR we just created
+                try:
+                    k8s_delete_domain(domain_name)
+                except K8sClientError:
+                    pass  # Best effort cleanup
+                
+                logger.error(f"Error creating domain model: {e}")
+                messages.error(request, f"Failed to create domain: {str(e)}")
+                return redirect('add_domain')
+            
+            # Handle auto DNS if requested
+            if auto_dns and api_token:
+                try:
+                    user_token = CloudflareAPIToken.objects.get(
+                        api_token=api_token,
+                        user=request.user
+                    )
+                    cluster_ips = list(ClusterIP.objects.values_list("ip_address", flat=True))
+                    
+                    # Generate DNS records
+                    dns_records = generate_email_dns_records(domain_name, cluster_ips)
+                    
+                    # DKIM record will be added once operator creates it
+                    # For now, we'll add a placeholder or skip it
+                    # The operator generates DKIM keys, we can fetch them later
+                    
+                    # Create zone with records
+                    zone_manager = DNSZoneManager(user_token)
+                    zone_obj, created_records = zone_manager.create_zone_with_records(
+                        domain_name,
+                        dns_records
+                    )
+                    
+                    logger.info(
+                        f"Created DNS zone for '{domain_name}' with "
+                        f"{len(created_records)} records"
+                    )
+                    messages.success(
+                        request,
+                        f"Domain '{domain_name}' created with {len(created_records)} DNS records."
+                    )
+                    
+                except CloudflareAPIToken.DoesNotExist:
+                    logger.warning(f"API token not found for DNS setup")
+                    messages.warning(
+                        request,
+                        "Domain created but DNS setup failed: Invalid API token."
+                    )
+                except CloudflareAPIException as e:
+                    logger.error(f"Cloudflare API error: {e}")
+                    messages.warning(
+                        request,
+                        f"Domain created but DNS setup failed: {e.message}"
+                    )
+                except Exception as e:
+                    logger.error(f"DNS setup error: {e}")
+                    messages.warning(
+                        request,
+                        f"Domain created but DNS setup failed: {str(e)}"
+                    )
+            else:
+                messages.success(request, f"Domain '{domain_name}' created successfully.")
+            
+            # Redirect to domain logs/status page
+            return redirect('domain_logs', domain=domain_name)
+        
         except Exception as e:
-          logger.error("Error adding domain: %s", e)
-          return render(request, "main/domain_error.html",{ "domain" : new_domain_name, "error" : e,})
-        if auto_dns == True:
-          try:
-              user_token = CloudflareAPIToken.objects.get(api_token=api_token, user=request.user)
-              cluster_ips = list(ClusterIP.objects.values_list("ip_address", flat=True))
-
-              # Generate all DNS records
-              dns_records = generate_email_dns_records(new_domain_name, cluster_ips)
-
-              # Add DKIM record
-              dns_records.append(DNSRecordData(
-                  record_type="TXT",
-                  name="default._domainkey",
-                  content=dkim_txt_record
-              ))
-
-              # Create zone with all records
-              zone_manager = DNSZoneManager(user_token)
-              zone_obj, created_records = zone_manager.create_zone_with_records(new_domain_name, dns_records)
-
-              logger.info(f"Successfully created domain '{new_domain_name}' with {len(created_records)} DNS records")
-              messages.success(request, f"Domain '{new_domain_name}' created with {len(created_records)} DNS records.")
-
-          except CloudflareAPIToken.DoesNotExist:
-              logger.error(f"API token not found for user {request.user}")
-              messages.error(request, "Invalid API token.")
-              raise ValueError("Invalid API token")
-          except CloudflareAPIException as e:
-              logger.error(f"Cloudflare API error: {e}")
-              messages.error(request, f"Failed to create domain: {e.message}")
-              raise
-          except Exception as e:
-              logger.error(f"Failed to create domain with auto DNS: {e}")
-              messages.error(request, f"Failed to create domain: {str(e)}")
-              raise
-#          try:
-#            ips = ClusterIP.objects.all().values_list("ip_address", flat=True)
-#            spf_record = "v=spf1 " + " ".join(f"ip4:{ip}" for ip in ips) + " -all"
-#            user_token = CloudflareAPIToken.objects.get(api_token=api_token, user=request.user)
-#            zone_id = create_cf_zone(new_domain_name, user_token)
-#            zone_obj = DNSZone.objects.create(name=new_domain_name, zone_id=zone_id, token=user_token)
-#            zone_obj.save()
-#            dkim_record_obj = DNSRecord(zone=zone_obj,record_type="TXT",name="default._domainkey",content=dkim_txt_record)
-#            response = create_dns_record_in_cloudflare(dkim_record_obj)
-#            dkim_record_obj.cf_record_id = response.id
-#            dkim_record_obj.save()
-#            dmarc_record_obj = DNSRecord(zone=zone_obj,record_type="TXT",name="_dmarc",content="v=DMARC1; p=none;")
-#            response = create_dns_record_in_cloudflare(dmarc_record_obj)
-#            dmarc_record_obj.cf_record_id = response.id
-#            dmarc_record_obj.save()
-#            spf_record_obj = DNSRecord(zone=zone_obj,record_type="TXT",name="@",content=spf_record)
-#            response = create_dns_record_in_cloudflare(spf_record_obj)
-#            spf_record_obj.cf_record_id = response.id
-#            spf_record_obj.save()
-#            counter = 0
-#            for ip in ips:
-#              a_record_obj = DNSRecord(zone=zone_obj,record_type="A",name="@",content=ip)
-#              response = create_dns_record_in_cloudflare(a_record_obj)
-#              a_record_obj.cf_record_id = response.id
-#              a_record_obj.save()
-#              a_record_obj = DNSRecord(zone=zone_obj,record_type="A",name="www",content=ip)
-#              response = create_dns_record_in_cloudflare(a_record_obj)
-#              a_record_obj.cf_record_id = response.id
-#              a_record_obj.save()
-#              a_record_obj = DNSRecord(zone=zone_obj,record_type="A",name="mx"+str(counter),content=ip)
-#              response = create_dns_record_in_cloudflare(a_record_obj)
-#              a_record_obj.cf_record_id = response.id
-#              a_record_obj.save()
-#              mx_record_obj = DNSRecord(zone=zone_obj,record_type="MX",name="@",content="mx"+str(counter)+"."+new_domain_name,priority=counter)
-#              response = create_dns_record_in_cloudflare(mx_record_obj)
-#              mx_record_obj.cf_record_id = response.id
-#              mx_record_obj.save()
-#              counter = counter + 1
-#          except Exception as e:
-#            logging.warning(f"Can't create DNS zone. Please check debug logs if you think this is an error: {e}")
-        try:
-          os.mkdir(domain_dirname)
-          os.mkdir('/dkim-privkeys/'+new_domain_name)
-        except:
-          print("Can't create directories. Please check debug logs if you think this is an error.")
-        template_dir = "yaml_templates/"
-        iterate_input_templates(template_dir,domain_dirname,context)
-
-	#RENDER DKIM PRIVATE KEYS
-        dkim_privkeys_dir = '/dkim-privkeys/'+new_domain_name
-        static_file = open(dkim_privkeys_dir+'/'+new_domain_name+'.key', 'w')
-        static_file.write(dkim_privkey)
-        static_file.close()
-        #END
-        return redirect(domain_logs, domain=new_domain.domain_name)
+            logger.exception(f"Unexpected error in add_domain: {e}")
+            messages.error(request, f"An unexpected error occurred: {str(e)}")
+            return redirect('add_domain')
+    
     else:
+        # GET request - show form
         tokens = CloudflareAPIToken.objects.filter(user=request.user)
         form = DomainAddForm()
-        return render(request, "main/add_domain.html", { "form" : form, "api_tokens" : tokens })
+        return render(request, "main/add_domain.html", {
+            "form": form,
+            "api_tokens": tokens,
+        })
+
 
 @login_required(login_url="/dashboard/")
-def startstop_domain(request,domain,action):
-    if request.method == 'POST':
-      if request.POST["imsure"] == domain:
-        try:
-          domain_obj = Domain.objects.get(domain_name = domain)
-          if request.user.is_superuser or domain_obj.owner == request.user:
-            permission_valid = True
-          else:
-            permission_valie = False
-            return HttpResponse("Permission denied.")
-        except:
-          return HttpResponse("Permission denied.")
-        if permission_valid:
-          host = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
-          port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
-          namespace = domain.replace(".","-")
-          token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-          ca_cert_path = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-          with open(token_path, 'r') as f:
-            token = f.read().strip()
-          headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": f"application/strategic-merge-patch+json"
-          }
-          if action == "start":
-            replicas = 1
-          if action == "stop":
-            replicas = 0
-          payload = {
- 	   "spec": {
-             "replicas": replicas
-            }
-          }
-          urls = []
-          urls.append(f"https://{host}:{port}/apis/apps/v1/namespaces/{namespace}/deployments/nginx")
-          urls.append(f"https://{host}:{port}/apis/apps/v1/namespaces/{namespace}/deployments/php")
-          if action == "start":
-              LogEntry.objects.create(content_object=domain_obj,actor=f"user:{request.user.username}",user=request.user,level="INFO",message=f"Started domain {domain_obj.domain_name}",data={"domain_id": domain_obj.pk})
-          if action == "stop":
-              LogEntry.objects.create(content_object=domain_obj,actor=f"user:{request.user.username}",user=request.user,level="INFO",message=f"Paused domain {domain_obj.domain_name}",data={"domain_id": domain_obj.pk})
-          for url in urls:
-            try:
-                response = requests.patch(url, headers=headers, data=json.dumps(payload), verify=False)  # Disable SSL verification for simplicity
-                if response.status_code == 200:
-                    print(f"Deployment nginx successfully scaled to {replicas} replicas.")
-                else:
-                    print(f"Failed to scale deployment. Status Code: {response.status_code}")
-                    print(f"Response: {response.text}")
-            except requests.exceptions.RequestException as e:
-                print(f"Error while scaling deployment: {e}")
-      else:
-        error = "Domain name didn't match"
-        return render(request, "main/pause_domain.html", { "action" : action, "domain" : domain, "error" : error})
-    else:
-      return render(request, "main/pause_domain.html", { "action" : action, "domain" : domain})
-    return redirect(domain_logs, domain=domain_obj.domain_name)
+def startstop_domain_view(request, domain, action):
+    """
+    Start or stop (suspend/unsuspend) a domain.
+    
+    Actions:
+    - stop: Suspends the domain (scales workloads to 0)
+    - start: Unsuspends the domain (restores workloads)
+    """
+    # Get the domain model
+    try:
+        domain_model = DomainModel.objects.get(domain_name=domain)
+    except DomainModel.DoesNotExist:
+        messages.error(request, f"Domain '{domain}' not found.")
+        return redirect('kpmain')
+    
+    # Check ownership
+    if domain_model.owner != request.user and not request.user.is_superuser:
+        messages.error(request, "You don't have permission to modify this domain.")
+        return redirect('kpmain')
+    
+    try:
+        if action == 'stop':
+            k8s_suspend_domain(domain)
+            domain_model.status = "Suspended"
+            domain_model.save()
+            messages.success(request, f"Domain '{domain}' suspended.")
+            
+            LogEntry.objects.create(
+                content_object=domain_model,
+                actor=f"user:{request.user.username}",
+                user=request.user,
+                level="INFO",
+                message=f"Suspended domain {domain}",
+            )
+            
+        elif action == 'start':
+            k8s_unsuspend_domain(domain)
+            domain_model.status = "Starting"
+            domain_model.save()
+            messages.success(request, f"Domain '{domain}' started.")
+            
+            LogEntry.objects.create(
+                content_object=domain_model,
+                actor=f"user:{request.user.username}",
+                user=request.user,
+                level="INFO",
+                message=f"Started domain {domain}",
+            )
+            
+        else:
+            messages.error(request, f"Invalid action: {action}")
+            
+    except K8sNotFoundError:
+        messages.error(request, f"Domain '{domain}' not found in cluster.")
+    except K8sClientError as e:
+        logger.error(f"Failed to {action} domain: {e}")
+        messages.error(request, f"Failed to {action} domain: {str(e)}")
+    
+    return redirect('view_domain', domain=domain)
 
 @login_required(login_url="/dashboard/")
 def restore_volumesnapshot(request,volumesnapshot,domain):
@@ -1319,36 +1378,64 @@ def start_backup(request, domain):
     return render(request, "main/start_backup.html", {"domain": domain})
 
 @login_required(login_url="/dashboard/")
-def delete_domain(request,domain):
+def delete_domain_view(request, domain):
+    """
+    Delete a domain.
+    
+    Deletes:
+    1. Domain CR in Kubernetes (operator handles resource cleanup)
+    2. Domain record in Django DB
+    """
+    # Get the domain model
+    try:
+        domain_model = DomainModel.objects.get(domain_name=domain)
+    except DomainModel.DoesNotExist:
+        messages.error(request, f"Domain '{domain}' not found.")
+        return redirect('kpmain')
+    
+    # Check ownership
+    if domain_model.owner != request.user and not request.user.is_superuser:
+        messages.error(request, "You don't have permission to delete this domain.")
+        return redirect('kpmain')
+    
     if request.method == 'POST':
-      if request.POST["imsure"] == domain:
         try:
-            domain_obj = Domain.objects.get(domain_name = domain)
-            if domain_obj.owner == request.user or request.user.is_superuser:
-                permission_valid = True
-            else:
-                permission_valid = False
-                return HttpResponse("Permission denied.")
-        except:
-            return HttpResponse("Permission denied.")
-        if permission_valid:
-            domain_dirname = '/kubepanel/yaml_templates/'+domain
+            # Delete Domain CR from Kubernetes
             try:
-              os.mkdir(domain_dirname)
-              os.mkdir('/dkim-privkeys/'+domain)
-            except:
-              print("Can't create directories. Please check debug logs if you think this is an error.")
-            jobid = random_string(5)
-            context = { "domain_name" : domain, "jobid" : jobid, "domain_name_dash" : domain.replace(".","-"), "domain_name_underscore" : domain.replace(".","_"), "mariadb_user" : domain.replace(".","_").replace("-","_")}
-            template_dir = "delete_templates/"
-            iterate_input_templates(template_dir,domain_dirname,context)
-            domain_obj.delete()
-      else:
-        error = "Domain name didn't match"
-        return render(request, "main/delete_domain.html", { "domain" : domain, "error" : error})
-    else:
-      return render(request, "main/delete_domain.html", { "domain" : domain,})
-    return redirect(kpmain)
+                k8s_delete_domain(domain)
+                logger.info(f"Deleted Domain CR for '{domain}'")
+            except K8sNotFoundError:
+                logger.warning(f"Domain CR for '{domain}' not found in cluster (may be already deleted)")
+            except K8sClientError as e:
+                logger.error(f"Failed to delete Domain CR: {e}")
+                messages.error(request, f"Failed to delete domain from cluster: {str(e)}")
+                return redirect('view_domain', domain=domain)
+            
+            # Log the deletion
+            LogEntry.objects.create(
+                content_object=domain_model,
+                actor=f"user:{request.user.username}",
+                user=request.user,
+                level="INFO",
+                message=f"Deleted domain {domain}",
+                data={"domain_name": domain}
+            )
+            
+            # Delete the Django model
+            domain_model.delete()
+            
+            messages.success(request, f"Domain '{domain}' deleted successfully.")
+            return redirect('kpmain')
+            
+        except Exception as e:
+            logger.exception(f"Error deleting domain: {e}")
+            messages.error(request, f"Failed to delete domain: {str(e)}")
+            return redirect('view_domain', domain=domain)
+    
+    # GET request - show confirmation page
+    return render(request, "main/delete_domain_confirm.html", {
+        "domain": domain_model,
+    })
 
 @login_required(login_url="/dashboard/")
 def view_domain(request,domain):
@@ -2628,3 +2715,51 @@ def change_password(request, domain, password_type):
         "domain": domain_obj,
         "password_type": password_type
     })
+
+def validate_package_limits(user, storage_size: int, cpu_limit: int, mem_limit: int):
+    """
+    Validate that user's package allows the requested resources.
+    
+    Args:
+        user: Django user
+        storage_size: Storage in GB
+        cpu_limit: CPU in millicores
+        mem_limit: Memory in MB
+    
+    Raises:
+        ValidationError: If limits exceeded
+    """
+    pkg = user.profile.package
+    if pkg is None:
+        return  # No package = no limits
+    
+    # Get existing domains for this user
+    existing_domains = DomainModel.objects.filter(owner=user)
+    
+    # Calculate totals
+    total_storage = sum(d.storage_size for d in existing_domains) + storage_size
+    total_cpu = sum(d.cpu_limit for d in existing_domains) + cpu_limit
+    total_mem = sum(d.mem_limit for d in existing_domains) + mem_limit
+    
+    errors = {}
+    
+    if total_storage > pkg.max_storage_size:
+        errors['storage_size'] = (
+            f"Total storage ({total_storage} GB) exceeds "
+            f"package limit ({pkg.max_storage_size} GB)."
+        )
+    
+    if total_cpu > pkg.max_cpu:
+        errors['cpu_limit'] = (
+            f"Total CPU ({total_cpu}m) exceeds "
+            f"package limit ({pkg.max_cpu}m)."
+        )
+    
+    if total_mem > pkg.max_memory:
+        errors['mem_limit'] = (
+            f"Total memory ({total_mem} MB) exceeds "
+            f"package limit ({pkg.max_memory} MB)."
+        )
+    
+    if errors:
+        raise ValidationError(errors)

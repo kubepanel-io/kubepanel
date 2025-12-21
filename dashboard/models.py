@@ -8,6 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+import re
 
 def validate_not_empty(value):
     if isinstance(value, str) and value.strip() == "":
@@ -45,76 +46,168 @@ class PhpImage(models.Model):
     def __str__(self):
         return self.repository_url
 
+
 class Domain(models.Model):
-    title = models.CharField(max_length=255)
+    """
+    Domain model - business logic and ownership tracking.
+    
+    Infrastructure details (secrets, ports, status) are managed by the 
+    KubePanel operator and stored in Kubernetes (Domain CR + Secrets).
+    
+    This model handles:
+    - Ownership (which user owns this domain)
+    - Package limit enforcement (storage, CPU, memory quotas)
+    - Relationships to other Django models (MailUser, DomainAlias, etc.)
+    """
+    
+    # === Core Identity ===
+    domain_name = models.CharField(
+        max_length=253, 
+        unique=True, 
+        validators=[validate_not_empty],
+        help_text="Primary domain name (e.g., example.com)"
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text="Human-readable display name"
+    )
+    
+    # === Ownership ===
+    owner = models.ForeignKey(
+        User, 
+        on_delete=models.PROTECT,
+        help_text="User who owns this domain"
+    )
+    
+    # === Resource Allocation (for package limit enforcement) ===
+    storage_size = models.IntegerField(
+        default=5, 
+        validators=[MinValueValidator(1), MaxValueValidator(10000)],
+        help_text="Storage size in GB"
+    )
+    cpu_limit = models.IntegerField(
+        default=500, 
+        validators=[MinValueValidator(100), MaxValueValidator(4000)],
+        help_text="CPU limit in millicores"
+    )
+    mem_limit = models.IntegerField(
+        default=256, 
+        validators=[MinValueValidator(32), MaxValueValidator(4096)],
+        help_text="Memory limit in MB"
+    )
+    
+    # === PHP Configuration ===
+    php_image = models.ForeignKey(
+        PhpImage, 
+        on_delete=models.PROTECT,
+        related_name='domains',
+        help_text="PHP version for this domain"
+    )
+    
+    # === Timestamps ===
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['domain_name']
+
     def __str__(self):
-        return self.title
-    domain_name = models.CharField(max_length=255, unique=True, validators=[validate_not_empty])
-    owner = models.ForeignKey(User, on_delete=models.PROTECT)
-    scp_privkey = models.TextField(db_default="")
-    scp_pubkey = models.TextField(db_default="")
-    scp_port = models.IntegerField(db_default=30000, validators=[MinValueValidator(30000), MaxValueValidator(32767)])
-    dkim_privkey = models.TextField(db_default="")
-    dkim_pubkey = models.TextField(db_default="")
-    mariadb_user = models.CharField(max_length=255, unique=True)
-    mariadb_pass = models.CharField(max_length=255)
-    sftp_pass = models.CharField(max_length=255)
-    status = models.CharField(max_length=255)
-    storage_size = models.IntegerField(db_default=1, validators=[MinValueValidator(1), MaxValueValidator(10000)])
-    cpu_limit = models.IntegerField(db_default=500, validators=[MinValueValidator(100), MaxValueValidator(4000)])
-    mem_limit = models.IntegerField(db_default=256, validators=[MinValueValidator(32), MaxValueValidator(4096)])
-    nginx_config = models.TextField(default=NGINX_DEFAULT_CONFIG)
-    php_image = models.ForeignKey(PhpImage, db_default=1, on_delete=models.PROTECT,related_name='domains')
+        return self.domain_name
 
     def clean(self):
+        """Validate package limits."""
         super().clean()
         pkg = self.owner.profile.package
         if pkg is None:
             return
+        
+        # Get other domains for this user
         domains = Domain.objects.filter(owner=self.owner)
         if self.pk:
             domains = domains.exclude(pk=self.pk)
+        
+        # Check storage limit
         total_storage = sum(d.storage_size for d in domains) + self.storage_size
         if total_storage > pkg.max_storage_size:
-            raise ValidationError({'storage_size': f"Total storage ({total_storage}) exceeds package limit ({pkg.max_storage_size})."})
+            raise ValidationError({
+                'storage_size': f"Total storage ({total_storage} GB) exceeds package limit ({pkg.max_storage_size} GB)."
+            })
+        
+        # Check CPU limit
         total_cpu = sum(d.cpu_limit for d in domains) + self.cpu_limit
         if total_cpu > pkg.max_cpu:
-            raise ValidationError({'cpu_limit': f"Total CPU ({total_cpu}) exceeds package limit ({pkg.max_cpu})."})
+            raise ValidationError({
+                'cpu_limit': f"Total CPU ({total_cpu}m) exceeds package limit ({pkg.max_cpu}m)."
+            })
+        
+        # Check memory limit
         total_mem = sum(d.mem_limit for d in domains) + self.mem_limit
         if total_mem > pkg.max_memory:
-            raise ValidationError({'mem_limit': f"Total memory ({total_mem}) exceeds package limit ({pkg.max_memory})."})
+            raise ValidationError({
+                'mem_limit': f"Total memory ({total_mem} MB) exceeds package limit ({pkg.max_memory} MB)."
+            })
+        
+        # Check PHP image
         if self.php_image_id is None:
-            raise ValidationError({'php_image': 'At least one PHP image must be selected.'})
+            raise ValidationError({
+                'php_image': 'A PHP version must be selected.'
+            })
+        
+        # Check domain aliases limit
         if pkg.max_domain_aliases is not None:
             existing_aliases = sum(d.aliases.count() for d in domains)
-            # only count self.aliases on updates
             new_aliases = self.aliases.count() if self.pk else 0
             total_aliases = existing_aliases + new_aliases
             if total_aliases > pkg.max_domain_aliases:
                 raise ValidationError({
-                    'aliases': (
-                        f"Total domain aliases ({total_aliases}) exceed "
-                        f"package limit ({pkg.max_domain_aliases})."
-                    )
+                    'aliases': f"Total domain aliases ({total_aliases}) exceed package limit ({pkg.max_domain_aliases})."
                 })
+        
+        # Check mail users limit
         if pkg.max_mail_users is not None:
             from .models import MailUser
             total_mail_users = MailUser.objects.filter(domain__owner=self.owner).count()
             if total_mail_users > pkg.max_mail_users:
-                raise ValidationError({'mail_users': f"Total mail users ({total_mail_users}) exceed package limit ({pkg.max_mail_users})."})
+                raise ValidationError({
+                    'mail_users': f"Total mail users ({total_mail_users}) exceed package limit ({pkg.max_mail_users})."
+                })
+
+    @property
+    def cr_name(self) -> str:
+        """
+        Get the Kubernetes CR name for this domain.
+        
+        e.g., 'example.com' -> 'example-com'
+        """
+        sanitized = re.sub(r'[^a-z0-9-]', '-', self.domain_name.lower())
+        sanitized = re.sub(r'-+', '-', sanitized)
+        return sanitized.strip('-')
+
+    @property
+    def namespace(self) -> str:
+        """
+        Get the Kubernetes namespace for this domain.
+        
+        e.g., 'example.com' -> 'dom-example-com'
+        """
+        return f"dom-{self.cr_name}"
 
     @property
     def all_hostnames(self):
+        """Get all hostnames (domain + aliases)."""
         names = [self.domain_name]
         names += [alias.alias_name for alias in self.aliases.all()]
         return names
 
     @property
     def server_name_directive(self):
+        """Get nginx server_name directive value."""
         return " ".join(self.all_hostnames)
 
-# alias for migrations compatibility
+
+# Alias for migrations compatibility
 Domain.validate_not_empty = validate_not_empty
+
 
 class DomainAlias(models.Model):
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, related_name='aliases')
@@ -129,6 +222,7 @@ class DomainAlias(models.Model):
     def __str__(self):
         return f"{self.alias_name} → {self.domain.domain_name}"
 
+
 class Volumesnapshot(models.Model):
     def __str__(self):
         return self.snapshotname
@@ -138,19 +232,21 @@ class Volumesnapshot(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     log = models.TextField(db_default="")
 
+
 class BlockRule(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     ip_address = models.CharField(max_length=45, blank=True, null=True)
     vhost = models.CharField(max_length=255, blank=True, null=True)
     path = models.CharField(max_length=2000, blank=True, null=True)
-    
+
     block_ip = models.BooleanField(default=False)
     block_vhost = models.BooleanField(default=False)
     block_path = models.BooleanField(default=False)
 
     def __str__(self):
         return f"BlockRule {self.pk} [IP={self.ip_address}, vhost={self.vhost}, path={self.path}]"
+
 
 class CloudflareAPIToken(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -160,6 +256,7 @@ class CloudflareAPIToken(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.name}"
 
+
 class DNSZone(models.Model):
     name = models.CharField(max_length=253)
     zone_id = models.CharField(max_length=64)
@@ -168,6 +265,7 @@ class DNSZone(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.zone_id})"
+
 
 class DNSRecord(models.Model):
     RECORD_TYPES = [
@@ -192,12 +290,14 @@ class DNSRecord(models.Model):
     def __str__(self):
         return f"{self.record_type} {self.name} -> {self.content}"
 
+
 class ClusterIP(models.Model):
     ip_address = models.GenericIPAddressField(unique=True)
     description = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return f"{self.ip_address} ({self.description or 'No Description'})"
+
 
 class MailUser(models.Model):
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, related_name='mail_users')
@@ -220,11 +320,13 @@ class MailUser(models.Model):
     def __str__(self):
         return self.email
 
+
 class MailAlias(models.Model):
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, related_name='mail_aliases')
     source = models.CharField(max_length=255)      # e.g. "alias@example.com"
     destination = models.CharField(max_length=255) # e.g. "real@example.com"
     active = models.BooleanField(default=True)
+
 
 class LogEntry(models.Model):
     LEVEL_CHOICES = [
@@ -269,4 +371,3 @@ class LogEntry(models.Model):
             f"[{self.level}] {self.timestamp:%Y-%m-%d %H:%M:%S} "
             f"— {self.actor} → {self.content_object}: {self.message}"
         )
-
