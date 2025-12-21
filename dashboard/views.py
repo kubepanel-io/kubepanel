@@ -1253,7 +1253,7 @@ def add_domain(request):
 
 
 @login_required(login_url="/dashboard/")
-def startstop_domain_view(request, domain, action):
+def startstop_domain(request, domain, action):
     """
     Start or stop (suspend/unsuspend) a domain.
     
