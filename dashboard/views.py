@@ -1378,7 +1378,7 @@ def start_backup(request, domain):
     return render(request, "main/start_backup.html", {"domain": domain})
 
 @login_required(login_url="/dashboard/")
-def delete_domain_view(request, domain):
+def delete_domain(request, domain):
     """
     Delete a domain.
     
