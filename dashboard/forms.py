@@ -22,7 +22,7 @@ class DomainForm(forms.ModelForm):
 
   class Meta:
     model = Domain
-    fields = ["cpu_limit","mem_limit","nginx_config", "php_image"]
+    fields = ["cpu_limit","mem_limit", "php_image"]
     widgets = {
                 'cpu_limit': forms.NumberInput(attrs={
                     'class': 'form-control',
@@ -35,9 +35,6 @@ class DomainForm(forms.ModelForm):
                     'min': 32,
                     'max': 4096,
                     'placeholder': 'Memory Limit in MiB'
-                }),
-                'nginx_config': forms.Textarea(attrs={
-                    'class': 'form-control',
                 }),
     }
 
