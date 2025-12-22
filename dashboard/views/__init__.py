@@ -28,6 +28,9 @@ from .domains import (
     get_mariadb_root_password,
     update_mariadb_user_password,
     user_can_change_password,
+    alias_list,
+    alias_add,
+    alias_delete,
 )
 
 # Mail views
@@ -36,9 +39,6 @@ from .mail import (
     create_mail_user,
     edit_mail_user,
     delete_mail_user,
-    alias_list,
-    alias_add,
-    alias_delete,
     mail_alias_list,
     mail_alias_create,
     mail_alias_edit,
@@ -111,8 +111,6 @@ from .monitoring import (
 from .utils import (
     SuperuserRequiredMixin,
     random_string,
-    iterate_input_templates,
-    render_yaml,
     get_country_info,
     is_static_file,
     get_client_ip,
@@ -142,15 +140,15 @@ __all__ = [
     'get_mariadb_root_password',
     'update_mariadb_user_password',
     'user_can_change_password',
+    'alias_list',
+    'alias_add',
+    'alias_delete',
 
     # Mail
     'list_mail_users',
     'create_mail_user',
     'edit_mail_user',
     'delete_mail_user',
-    'alias_list',
-    'alias_add',
-    'alias_delete',
     'mail_alias_list',
     'mail_alias_create',
     'mail_alias_edit',
@@ -211,8 +209,6 @@ __all__ = [
     # Utils
     'SuperuserRequiredMixin',
     'random_string',
-    'iterate_input_templates',
-    'render_yaml',
     'get_country_info',
     'is_static_file',
     'get_client_ip',

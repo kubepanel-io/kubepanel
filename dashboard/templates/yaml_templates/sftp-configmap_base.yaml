@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sftp
-  namespace: {{ domain_name_dash }}
-data:
-  authorized_keys: |
-    {{ domain_instance.scp_pubkey }}

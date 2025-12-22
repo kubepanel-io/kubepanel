@@ -46,6 +46,11 @@ from .backup import (
     delete_backup,
 )
 
+from .firewall import (
+    sync_modsecurity_rules,
+    get_current_modsecurity_rules,
+)
+
 __all__ = [
     # Exceptions
     'K8sClientError',
@@ -86,4 +91,8 @@ __all__ = [
     'get_backup',
     'create_backup',
     'delete_backup',
+
+    # Firewall operations
+    'sync_modsecurity_rules',
+    'get_current_modsecurity_rules',
 ]

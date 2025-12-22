@@ -4,11 +4,8 @@ Mail user and alias management views
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 
-import os
-
-from dashboard.models import Domain, MailUser, MailAlias, DomainAlias
-from dashboard.forms import MailUserForm, MailAliasForm, DomainAliasForm
-from .utils import iterate_input_templates
+from dashboard.models import Domain, MailUser, MailAlias
+from dashboard.forms import MailUserForm, MailAliasForm
 
 
 @login_required
@@ -68,47 +65,6 @@ def delete_mail_user(request, user_id):
         mail_user.delete()
         return redirect("list_mail_users")
     return render(request, "main/delete_mail_user.html", {"mail_user": mail_user})
-
-
-@login_required
-def alias_list(request, pk):
-    domain = get_object_or_404(Domain, pk=pk)
-    aliases = domain.aliases.order_by('created_at')
-    return render(request, 'main/list_aliases.html', {'domain': domain, 'aliases': aliases})
-
-
-@login_required
-def alias_add(request, pk):
-    domain = get_object_or_404(Domain, pk=pk)
-    if request.method == 'POST':
-        form = DomainAliasForm(request.POST)
-        if form.is_valid():
-            alias = form.save(commit=False)
-            alias.domain = domain
-            alias.save()
-            domain_dirname = '/kubepanel/yaml_templates/' + alias.alias_name
-            context = {"domain": domain, "domain_name_dash": domain.domain_name.replace(".", "-")}
-            template_dir = "alias_templates/"
-            try:
-                os.mkdir(domain_dirname)
-                os.mkdir('/dkim-privkeys/' + alias.alias_name)
-            except:
-                print("Can't create directories. Please check debug logs if you think this is an error.")
-            iterate_input_templates(template_dir, domain_dirname, context)
-            return redirect('view_domain', pk=domain.pk)
-    else:
-        form = DomainAliasForm()
-    return render(request, 'main/add_alias.html', {'domain': domain, 'form': form})
-
-
-@login_required
-def alias_delete(request, pk):
-    alias = get_object_or_404(DomainAlias, pk=pk)
-    domain = alias.domain
-    if request.method == 'POST':
-        alias.delete()
-        return redirect('alias_list', pk=domain.pk)
-    return render(request, 'main/delete_alias.html', {'alias': alias})
 
 
 @login_required

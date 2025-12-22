@@ -1,5 +1,0 @@
-{% extends "yaml_templates/dkim-configmap_base.yaml" %}
-{% block content %}KeyTable: |
-{% for domain in domains.all %}    default._domainkey.{{ domain.domain_name }} {{ domain.domain_name }}:default:/etc/opendkim/keys/{{ domain.domain_name }}/default
-{% endfor %}
-{% endblock %}

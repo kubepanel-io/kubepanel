@@ -16,8 +16,8 @@ import logging
 import base64
 import pymysql
 
-from dashboard.models import Domain, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry
-from dashboard.forms import DomainForm, DomainAddForm
+from dashboard.models import Domain, DomainAlias, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry
+from dashboard.forms import DomainForm, DomainAddForm, DomainAliasForm
 from dashboard.services.dns_service import DNSZoneManager, CloudflareAPIException, generate_email_dns_records
 from dashboard.k8s import (
     DomainSpec,
@@ -39,7 +39,6 @@ from dashboard.k8s import (
     create_backup as k8s_create_backup,
     get_backup,
 )
-from .utils import random_string, iterate_input_templates
 
 logger = logging.getLogger("django")
 
@@ -528,45 +527,17 @@ def volumesnapshots(request, domain):
 
 @login_required(login_url="/dashboard/")
 def restore_volumesnapshot(request, volumesnapshot, domain):
-    if request.method == 'POST':
-        if request.POST["imsure"] == domain:
-            try:
-                domain_obj = Domain.objects.get(owner=request.user, domain_name=domain)
-            except:
-                return HttpResponse("Permission denied.")
-            if domain_obj:
-                storage_size = domain_obj.storage_size
-                template_dir = "restore_templates/"
-                domain_dirname = '/kubepanel/yaml_templates/' + domain
-                try:
-                    os.mkdir(domain_dirname)
-                    os.mkdir('/dkim-privkeys/' + domain)
-                except:
-                    print("Can't create directories. Please check debug logs if you think this is an error.")
-                jobid = random_string(5)
-                context = {
-                    "storage_size": storage_size,
-                    "jobid": jobid,
-                    "domain_name_underscore": domain.replace(".", "_"),
-                    "domain_name_dash": domain.replace(".", "-"),
-                    "volumesnapshot": volumesnapshot,
-                    "domain": domain
-                }
-                iterate_input_templates(template_dir, domain_dirname, context)
-                LogEntry.objects.create(
-                    content_object=domain_obj,
-                    actor=f"user:{request.user.username}",
-                    user=request.user,
-                    level="INFO",
-                    message=f"Restore started for {domain_obj.domain_name}",
-                    data={"domain_id": domain_obj.pk}
-                )
-        else:
-            error = "Domain name didn't match"
-            return render(request, "main/restore_snapshot.html", {"volumesnapshot": volumesnapshot, "domain": domain, "error": error})
-    else:
-        return render(request, "main/restore_snapshot.html", {"volumesnapshot": volumesnapshot, "domain": domain})
-    return redirect('domain_logs', domain=domain_obj.domain_name)
+    """
+    Restore from a backup.
+
+    TODO: Implement restore via operator. This should:
+    1. Create a Restore CR that triggers the operator to:
+       - Restore the VolumeSnapshot to the domain's PVC
+       - Restore the database from the mariabackup archive
+    """
+    # For now, show not implemented message
+    messages.error(request, "Restore functionality is not yet implemented in the new architecture. Please contact support.")
+    return redirect('volumesnapshots', domain=domain)
 
 
 @login_required(login_url="/dashboard/")
@@ -884,3 +855,81 @@ def validate_package_limits(user, storage_size: int, cpu_limit: int, mem_limit: 
 
     if errors:
         raise ValidationError(errors)
+
+
+def _sync_domain_aliases(domain: Domain) -> None:
+    """
+    Sync domain aliases to K8s Domain CR.
+
+    Reads all DomainAlias records for the domain and patches the CR
+    so the operator updates nginx config and Ingress.
+    """
+    aliases = list(domain.aliases.values_list('alias_name', flat=True))
+    try:
+        k8s_patch_domain(domain.domain_name, {"aliases": aliases})
+        logger.info(f"Synced {len(aliases)} aliases to Domain CR for {domain.domain_name}")
+    except K8sNotFoundError:
+        logger.warning(f"Domain CR not found for {domain.domain_name}, skipping alias sync")
+    except K8sClientError as e:
+        logger.error(f"Failed to sync aliases to Domain CR for {domain.domain_name}: {e}")
+        raise
+
+
+@login_required
+def alias_list(request, pk):
+    """List all aliases for a domain."""
+    domain = get_object_or_404(Domain, pk=pk)
+    if domain.owner != request.user and not request.user.is_superuser:
+        return render(request, "main/error.html", {"error": "Permission denied."})
+
+    aliases = domain.aliases.order_by('created_at')
+    return render(request, 'main/list_aliases.html', {'domain': domain, 'aliases': aliases})
+
+
+@login_required
+def alias_add(request, pk):
+    """Add a domain alias and sync to K8s."""
+    domain = get_object_or_404(Domain, pk=pk)
+    if domain.owner != request.user and not request.user.is_superuser:
+        return render(request, "main/error.html", {"error": "Permission denied."})
+
+    if request.method == 'POST':
+        form = DomainAliasForm(request.POST)
+        if form.is_valid():
+            alias = form.save(commit=False)
+            alias.domain = domain
+            alias.save()
+
+            try:
+                _sync_domain_aliases(domain)
+                messages.success(request, f"Alias '{alias.alias_name}' added successfully.")
+            except K8sClientError as e:
+                messages.warning(request, f"Alias saved but failed to sync to Kubernetes: {e}")
+
+            return redirect('view_domain', pk=domain.pk)
+    else:
+        form = DomainAliasForm()
+    return render(request, 'main/add_alias.html', {'domain': domain, 'form': form})
+
+
+@login_required
+def alias_delete(request, pk):
+    """Delete a domain alias and sync to K8s."""
+    alias = get_object_or_404(DomainAlias, pk=pk)
+    domain = alias.domain
+
+    if domain.owner != request.user and not request.user.is_superuser:
+        return render(request, "main/error.html", {"error": "Permission denied."})
+
+    if request.method == 'POST':
+        alias_name = alias.alias_name
+        alias.delete()
+
+        try:
+            _sync_domain_aliases(domain)
+            messages.success(request, f"Alias '{alias_name}' deleted successfully.")
+        except K8sClientError as e:
+            messages.warning(request, f"Alias deleted but failed to sync to Kubernetes: {e}")
+
+        return redirect('alias_list', pk=domain.pk)
+    return render(request, 'main/delete_alias.html', {'alias': alias})

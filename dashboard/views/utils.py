@@ -1,7 +1,6 @@
 """
 Utility functions and base classes for views
 """
-from django.template.loader import render_to_string
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 
 import os
@@ -10,7 +9,6 @@ import string
 import geoip2.database
 
 GEOIP_DB_PATH = "/kubepanel/GeoLite2-Country.mmdb"
-TEMPLATE_BASE = "/kubepanel/dashboard/templates/"
 EXCLUDED_EXTENSIONS = [".js", ".css", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".map"]
 
 
@@ -23,19 +21,6 @@ def random_string(num):
     char_set = string.ascii_lowercase + string.digits
     rndstring = ''.join(random.sample(char_set*6, num))
     return rndstring
-
-
-def iterate_input_templates(template_dirname, domain_dirname, context):
-    for root, _, files in os.walk(TEMPLATE_BASE + template_dirname):
-        for file_name in files:
-            if file_name.endswith(".yaml"):
-                render_yaml(domain_dirname, template_dirname + file_name, context, file_name)
-
-
-def render_yaml(domain_dirname, input_filename, context, file_name):
-    render_to_file = render_to_string(input_filename, context)
-    with open(domain_dirname + '/' + file_name, 'w') as static_file:
-        static_file.write(render_to_file)
 
 
 def get_country_info(ip_address):

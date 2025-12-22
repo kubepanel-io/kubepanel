@@ -1,15 +1,17 @@
 """
 Security, firewall, and IP management views
 """
+import logging
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 
-import os
-
 from dashboard.models import ClusterIP, BlockRule
-from .utils import random_string, iterate_input_templates
+from dashboard.k8s import sync_modsecurity_rules, K8sClientError, K8sNotFoundError
+
+logger = logging.getLogger("django")
 
 
 def manage_ips(request):
@@ -45,6 +47,11 @@ def delete_ip(request, ip_id):
 
 @login_required(login_url="/dashboard/")
 def blocked_objects(request):
+    """
+    View and manage blocked objects (IPs, vhosts, paths).
+
+    Rules are synced to the ingress-nginx ConfigMap as ModSecurity rules.
+    """
     all_blocks = BlockRule.objects.all().order_by('-created_at')
 
     paginator = Paginator(all_blocks, 100)
@@ -52,16 +59,15 @@ def blocked_objects(request):
     page_obj = paginator.get_page(page_number)
 
     if request.method == 'POST' and 'generate_rules' in request.POST:
-        rules = render_modsec_rules()
-        template_dir = "fw_templates/"
-        jobid = random_string(5)
-        context = {"rules": rules, "jobid": jobid}
-        domain_dirname = '/kubepanel/yaml_templates/fwrules'
         try:
-            os.mkdir(domain_dirname)
-        except:
-            print("Can't create directories. Please check debug logs if you think this is an error.")
-        iterate_input_templates(template_dir, domain_dirname, context)
+            _sync_firewall_rules()
+            rule_count = BlockRule.objects.count()
+            messages.success(request, f"Successfully deployed {rule_count} firewall rules to ingress-nginx.")
+        except K8sNotFoundError:
+            messages.error(request, "Ingress-nginx ConfigMap not found. Is the ingress controller installed?")
+        except K8sClientError as e:
+            logger.error(f"Failed to sync firewall rules: {e}")
+            messages.error(request, f"Failed to deploy rules: {e}")
         return redirect("blocked_objects")
 
     return render(request, 'main/blocked_objects.html', {'page_obj': page_obj})
@@ -69,12 +75,13 @@ def blocked_objects(request):
 
 @login_required(login_url="/dashboard/")
 def block_entry(request, vhost, x_forwarded_for, path):
+    """Create a new block rule and sync to ingress-nginx."""
     if request.method == 'POST':
         block_ip = bool(request.POST.get('block_ip'))
         block_vhost = bool(request.POST.get('block_vhost'))
         block_path = bool(request.POST.get('block_path'))
 
-        BlockRule.objects.create(
+        rule = BlockRule.objects.create(
             ip_address=x_forwarded_for if block_ip else None,
             vhost=vhost if block_vhost else None,
             path=path if block_path else None,
@@ -82,6 +89,14 @@ def block_entry(request, vhost, x_forwarded_for, path):
             block_vhost=block_vhost,
             block_path=block_path
         )
+
+        try:
+            _sync_firewall_rules()
+            messages.success(request, f"Block rule #{rule.pk} created and deployed.")
+        except K8sClientError as e:
+            logger.error(f"Failed to sync firewall rules after creating rule #{rule.pk}: {e}")
+            messages.warning(request, f"Rule created but failed to deploy: {e}")
+
         return redirect("blocked_objects")
     else:
         context = {
@@ -139,7 +154,8 @@ def generate_modsec_rule(br: BlockRule) -> str:
     return "\n".join(rule_lines)
 
 
-def render_modsec_rules() -> str:
+def render_modsec_rules() -> list[str]:
+    """Generate ModSecurity rules from all BlockRules."""
     block_rules = BlockRule.objects.all()
     rules_output = []
 
@@ -151,11 +167,35 @@ def render_modsec_rules() -> str:
     return rules_output
 
 
+def _sync_firewall_rules() -> None:
+    """
+    Sync all firewall rules to the ingress-nginx ConfigMap.
+
+    Generates ModSecurity rules from all BlockRules and updates
+    the ingress-nginx ConfigMap's modsecurity-snippet.
+
+    Raises:
+        K8sClientError: If sync fails
+    """
+    rules = render_modsec_rules()
+    rules_content = "\n\n".join(rules)
+    sync_modsecurity_rules(rules_content)
+    logger.info(f"Synced {len(rules)} firewall rules to ingress-nginx")
+
+
 @login_required
 def firewall_rule_delete(request, pk):
+    """Delete a block rule and sync to ingress-nginx."""
     block = get_object_or_404(BlockRule, pk=pk)
 
     if request.method == 'POST':
         block.delete()
-        messages.success(request, f"Deleted rule #{pk}.")
+
+        try:
+            _sync_firewall_rules()
+            messages.success(request, f"Rule #{pk} deleted and changes deployed.")
+        except K8sClientError as e:
+            logger.error(f"Failed to sync firewall rules after deleting rule #{pk}: {e}")
+            messages.warning(request, f"Rule deleted but failed to deploy changes: {e}")
+
     return redirect('blocked_objects')

@@ -1,6 +1,0 @@
-{% extends "yaml_templates/dkim-configmap_base.yaml" %}
-{% block name %}dkim-signingtable{% endblock %}
-{% block content %}SigningTable: |
-{% for domain in domains.all %}    *@{{ domain.domain_name }} default._domainkey.{{ domain.domain_name }}
-{% endfor %}
-{% endblock %}
