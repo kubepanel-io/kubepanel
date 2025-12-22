@@ -12,7 +12,7 @@ from .client import (
     K8sValidationError,
 )
 
-from .domains import (
+from .domain import (
     DomainSpec,
     DomainStatus,
     Domain,
