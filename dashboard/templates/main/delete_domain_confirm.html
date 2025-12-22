@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Delete Domain | KubePanel{% endblock %}
+
+{% block page_title %}Delete Domain{% endblock %}
+{% block page_subtitle %}Confirm deletion of domain{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'view_domain' domain.domain_name %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Domain</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <!-- Header with warning background -->
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-red-50 to-pink-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Confirm Domain Deletion</h3>
+                    <p class="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <!-- Domain Details -->
+            <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+                <h4 class="text-sm font-medium text-gray-700 mb-3">Domain Information</h4>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Domain Name:</span>
+                        <span class="text-sm font-medium text-gray-900">{{ domain.domain_name }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Owner:</span>
+                        <span class="text-sm font-medium text-gray-900">{{ domain.owner.username }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Created:</span>
+                        <span class="text-sm font-medium text-gray-900">{{ domain.created_at|date:"M d, Y H:i" }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Storage:</span>
+                        <span class="text-sm font-medium text-gray-900">{{ domain.storage_size }} GB</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Warning Message -->
+            <div class="mb-6 p-4 bg-red-50 rounded-lg border border-red-200">
+                <div class="flex">
+                    <svg class="w-5 h-5 text-red-400 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                    <div>
+                        <h3 class="text-sm font-medium text-red-800">Are you absolutely sure?</h3>
+                        <p class="mt-1 text-sm text-red-700">
+                            This will permanently delete the domain <strong>{{ domain.domain_name }}</strong> including:
+                        </p>
+                        <ul class="mt-2 text-sm text-red-700 list-disc list-inside space-y-1">
+                            <li>All website files and data</li>
+                            <li>Database and database user</li>
+                            <li>SFTP/SSH access credentials</li>
+                            <li>SSL certificates</li>
+                            <li>All associated Kubernetes resources</li>
+                        </ul>
+                        <p class="mt-2 text-sm text-red-700 font-medium">
+                            This action CANNOT be undone.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Confirmation Form -->
+            <form method="post" id="delete-domain-form">
+                {% csrf_token %}
+                <div class="flex items-center justify-end space-x-3">
+                    <a href="{% url 'view_domain' domain.domain_name %}"
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit"
+                            class="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        <span>Delete Domain</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Additional Information -->
+    <div class="mt-6 bg-blue-50 rounded-xl p-4 border border-blue-200">
+        <div class="flex">
+            <svg class="w-5 h-5 text-blue-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div class="text-sm text-blue-700">
+                <p class="font-medium">Before deleting this domain:</p>
+                <ul class="mt-1 list-disc list-inside space-y-1">
+                    <li>Download any important files via SFTP</li>
+                    <li>Export your database if needed</li>
+                    <li>Update DNS records if the domain will be hosted elsewhere</li>
+                    <li>Consider creating a backup snapshot first</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('delete-domain-form');
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    // Add confirmation on submit
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const domainName = '{{ domain.domain_name|escapejs }}';
+
+        // Multi-step confirmation for domain deletion
+        if (confirm(`Are you sure you want to delete the domain "${domainName}"?`)) {
+            if (confirm(`This is your FINAL WARNING!\n\nDeleting "${domainName}" will:\n- Remove all files and data\n- Delete the database\n- Remove all Kubernetes resources\n- This CANNOT be undone\n\nAre you absolutely certain?`)) {
+                // Show loading state
+                submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Deleting Domain...';
+                submitButton.disabled = true;
+
+                // Submit the form
+                form.submit();
+            }
+        }
+    });
+
+    // Add visual emphasis on hover
+    submitButton.addEventListener('mouseenter', function() {
+        this.classList.add('ring-2', 'ring-red-500', 'ring-offset-2');
+    });
+
+    submitButton.addEventListener('mouseleave', function() {
+        this.classList.remove('ring-2', 'ring-red-500', 'ring-offset-2');
+    });
+});
+</script>
+{% endblock %}
+{% endblock %}
