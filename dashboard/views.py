@@ -45,8 +45,14 @@ from dashboard.k8s import (
     delete_domain as k8s_delete_domain,
     get_domain as k8s_get_domain,
     list_domains as k8s_list_domains,
+    patch_domain as k8s_patch_domain,
     suspend_domain as k8s_suspend_domain,
     unsuspend_domain as k8s_unsuspend_domain,
+    get_sftp_password,
+    get_database_password,
+    get_secret_value,
+    update_sftp_password as k8s_update_sftp_password,
+    update_database_password as k8s_update_database_password,
     K8sClientError,
     K8sConflictError,
     K8sNotFoundError,
@@ -1433,44 +1439,180 @@ def delete_domain(request, domain):
     })
 
 @login_required(login_url="/dashboard/")
-def view_domain(request,domain):
-  try:
-    if request.user.is_superuser:
-      domain = Domain.objects.get(domain_name = domain)
-    else:
-      domain = Domain.objects.get(owner=request.user, domain_name = domain)
-    form = DomainForm(instance=domain)
-  except:
-    return HttpResponse("Permission denied.")
-  return render(request, "main/view_domain.html", { "domain" : domain, "form" : form})
+def view_domain(request, domain):
+    """
+    View domain details with credentials fetched from Kubernetes.
+
+    Django model: ownership and package limits
+    K8s Domain CR: infrastructure status and credential references
+    K8s Secrets: actual credential values
+    """
+    try:
+        # Get Django model (for ownership check and FK relationships)
+        if request.user.is_superuser:
+            domain_model = Domain.objects.get(domain_name=domain)
+        else:
+            domain_model = Domain.objects.get(owner=request.user, domain_name=domain)
+        form = DomainForm(instance=domain_model)
+    except Domain.DoesNotExist:
+        return HttpResponse("Permission denied.")
+
+    # Initialize credential context with defaults
+    k8s_credentials = {
+        'sftp_port': None,
+        'sftp_username': 'webuser',
+        'sftp_password': None,
+        'sftp_privkey': None,
+        'database_name': None,
+        'database_username': None,
+        'database_password': None,
+        'dkim_pubkey': None,
+        'dkim_dns_record': None,
+        'phase': 'Unknown',
+        'error': None,
+    }
+
+    # Fetch K8s Domain CR and credentials
+    try:
+        k8s_domain = k8s_get_domain(domain)
+        if k8s_domain:
+            status = k8s_domain.status
+            k8s_credentials['phase'] = status.phase or 'Unknown'
+
+            # SFTP credentials
+            k8s_credentials['sftp_port'] = status.sftp_port
+            k8s_credentials['sftp_username'] = status.sftp_username or 'webuser'
+
+            # Fetch SFTP password from K8s secret
+            try:
+                k8s_credentials['sftp_password'] = get_sftp_password(status)
+            except Exception as e:
+                logger.warning(f"Failed to get SFTP password for {domain}: {e}")
+
+            # Fetch SFTP private key from K8s secret (if available)
+            try:
+                k8s_credentials['sftp_privkey'] = get_secret_value(
+                    name='sftp-credentials',
+                    namespace=domain_model.namespace,
+                    key='ssh-private-key'
+                )
+            except Exception as e:
+                logger.warning(f"Failed to get SFTP private key for {domain}: {e}")
+
+            # Database credentials
+            k8s_credentials['database_name'] = status.database_name
+            k8s_credentials['database_username'] = status.database_username
+
+            # Fetch DB password from K8s secret
+            try:
+                k8s_credentials['database_password'] = get_database_password(status)
+            except Exception as e:
+                logger.warning(f"Failed to get database password for {domain}: {e}")
+
+            # DKIM
+            k8s_credentials['dkim_pubkey'] = status.dkim_public_key
+            k8s_credentials['dkim_dns_record'] = status.dkim_dns_record
+
+    except K8sNotFoundError:
+        k8s_credentials['error'] = 'Domain not found in Kubernetes cluster'
+        k8s_credentials['phase'] = 'NotFound'
+    except K8sClientError as e:
+        k8s_credentials['error'] = f'Failed to fetch domain from Kubernetes: {e}'
+        k8s_credentials['phase'] = 'Error'
+    except Exception as e:
+        logger.exception(f"Unexpected error fetching K8s domain {domain}: {e}")
+        k8s_credentials['error'] = 'Unexpected error fetching domain status'
+        k8s_credentials['phase'] = 'Error'
+
+    return render(request, "main/view_domain.html", {
+        "domain": domain_model,
+        "form": form,
+        "k8s": k8s_credentials,
+    })
 
 @login_required(login_url="/dashboard/")
-def save_domain(request,domain):
-  domain_instance = Domain.objects.get(domain_name = domain)
-  if domain_instance.owner == request.user or request.user.is_superuser:
-    if request.method == 'POST':
-        form = DomainForm(request.POST, instance=domain_instance)
-        if form.is_valid():
-            form.save()
-            LogEntry.objects.create(content_object=domain_instance,actor=f"user:{request.user.username}",user=request.user,level="INFO",message=f"New settings saved for {domain_instance.domain_name}",data={"domain_id": domain_instance.pk})
-            template_dir = "yaml_templates/"
-            domain_dirname = '/kubepanel/yaml_templates/'+domain_instance.domain_name
-            try:
-              os.mkdir(domain_dirname)
-              os.mkdir('/dkim-privkeys/'+domain)
-            except:
-              print("Can't create directories. Please check debug logs if you think this is an error.")
-            jobid = random_string(5)
-            sftp_pass = domain_instance.sftp_pass
-            salt = crypt.mksalt(crypt.METHOD_SHA512)
-            sftp_pass_hash = crypt.crypt(sftp_pass, salt)
-            context = { "domains" : Domain.objects.all(), "domain_instance" : domain_instance, "sftp_pass_hash" : sftp_pass_hash, "domain_name" : domain, "jobid" : jobid, "domain_name_underscore" : domain.replace(".","_"), "domain_name_dash" : domain.replace(".","-") }
-            iterate_input_templates(template_dir,domain_dirname,context)
-        else:
-          return render(request, "main/view_domain.html", { "domain" : domain_instance, "form" : form})
-  else:
-    return HttpResponse("Permission denied.")
-  return redirect(domain_logs, domain=domain_instance.domain_name)
+def save_domain(request, domain):
+    """
+    Save domain settings.
+
+    Updates both Django model and K8s Domain CR.
+    """
+    try:
+        domain_instance = Domain.objects.get(domain_name=domain)
+    except Domain.DoesNotExist:
+        return HttpResponse("Domain not found", status=404)
+
+    if domain_instance.owner != request.user and not request.user.is_superuser:
+        return HttpResponse("Permission denied.")
+
+    if request.method != 'POST':
+        return redirect('view_domain', domain=domain_instance.domain_name)
+
+    form = DomainForm(request.POST, instance=domain_instance)
+    if not form.is_valid():
+        # Re-render with errors - need to fetch K8s data for the template
+        k8s_credentials = {'phase': 'Unknown', 'error': None}
+        try:
+            k8s_domain = k8s_get_domain(domain)
+            if k8s_domain:
+                status = k8s_domain.status
+                k8s_credentials['phase'] = status.phase or 'Unknown'
+                k8s_credentials['sftp_port'] = status.sftp_port
+                k8s_credentials['sftp_username'] = status.sftp_username or 'webuser'
+                k8s_credentials['sftp_password'] = get_sftp_password(status)
+                k8s_credentials['database_name'] = status.database_name
+                k8s_credentials['database_username'] = status.database_username
+                k8s_credentials['database_password'] = get_database_password(status)
+                k8s_credentials['dkim_pubkey'] = status.dkim_public_key
+        except Exception:
+            pass
+        return render(request, "main/view_domain.html", {
+            "domain": domain_instance,
+            "form": form,
+            "k8s": k8s_credentials,
+        })
+
+    # Save to Django model
+    form.save()
+
+    # Patch K8s Domain CR with updated settings
+    try:
+        patch = {
+            "resources": {
+                "limits": {
+                    "cpu": f"{domain_instance.cpu_limit}m",
+                    "memory": f"{domain_instance.mem_limit}Mi",
+                }
+            },
+            "php": {
+                "version": domain_instance.php_image.version,
+            },
+        }
+        k8s_patch_domain(domain_instance.domain_name, patch)
+        logger.info(f"Patched Domain CR for {domain_instance.domain_name}")
+    except K8sNotFoundError:
+        messages.warning(request, "Domain not found in Kubernetes. Settings saved locally only.")
+    except K8sClientError as e:
+        logger.error(f"Failed to patch Domain CR for {domain}: {e}")
+        messages.warning(request, f"Settings saved locally, but failed to update Kubernetes: {e}")
+
+    # Log the action
+    LogEntry.objects.create(
+        content_object=domain_instance,
+        actor=f"user:{request.user.username}",
+        user=request.user,
+        level="INFO",
+        message=f"Settings saved for {domain_instance.domain_name}",
+        data={
+            "domain_id": domain_instance.pk,
+            "cpu_limit": domain_instance.cpu_limit,
+            "mem_limit": domain_instance.mem_limit,
+            "php_version": domain_instance.php_image.version,
+        }
+    )
+
+    messages.success(request, "Domain settings saved successfully.")
+    return redirect('view_domain', domain=domain_instance.domain_name)
 
 @login_required
 def list_mail_users(request):
@@ -2578,40 +2720,54 @@ def user_can_change_password(user, domain_obj, password_type):
 
 def change_password(request, domain, password_type):
     """
-    Handle password changes for database or SFTP passwords
+    Handle password changes for database or SFTP passwords.
+
+    Passwords are stored in Kubernetes Secrets and managed by the operator.
+    This view updates the K8s secrets directly.
     """
     # First, get the domain object
     try:
         domain_obj = Domain.objects.get(domain_name=domain)
     except Domain.DoesNotExist:
         return HttpResponse("Domain not found", status=404)
-    
+
     # Check user permissions
     can_change, error_message = user_can_change_password(request.user, domain_obj, password_type)
     if not can_change:
         return HttpResponse(f"Permission denied: {error_message}", status=403)
-    
+
     if password_type not in ['mariadb', 'sftp']:
         return HttpResponse("Invalid password type")
-    
+
+    # Get the K8s Domain CR for status info
+    k8s_domain = None
+    try:
+        k8s_domain = k8s_get_domain(domain)
+    except K8sNotFoundError:
+        messages.error(request, "Domain not found in Kubernetes cluster. Cannot change password.")
+        return redirect('view_domain', domain=domain_obj.domain_name)
+    except K8sClientError as e:
+        messages.error(request, f"Failed to fetch domain from Kubernetes: {e}")
+        return redirect('view_domain', domain=domain_obj.domain_name)
+
     if request.method == 'POST':
         new_password = request.POST.get('new_password')
         confirm_password = request.POST.get('confirm_password')
-        
+
         if not new_password or not confirm_password:
             messages.error(request, "Both password fields are required.")
             return render(request, "main/change_password.html", {
                 "domain": domain_obj,
                 "password_type": password_type
             })
-        
+
         if new_password != confirm_password:
             messages.error(request, "Passwords do not match.")
             return render(request, "main/change_password.html", {
                 "domain": domain_obj,
                 "password_type": password_type
             })
-        
+
         # Validate password length
         if len(new_password) < 8:
             messages.error(request, "Password must be at least 8 characters long.")
@@ -2619,48 +2775,66 @@ def change_password(request, domain, password_type):
                 "domain": domain_obj,
                 "password_type": password_type
             })
-        
-        # Additional security: Double-check permissions before any database operations
+
+        # Update the password in K8s secrets
+        namespace = domain_obj.namespace
+        db_username = None
+
         if password_type == 'mariadb':
-            can_change_db, db_error = user_can_change_password(request.user, domain_obj, password_type)
-            if not can_change_db:
-                messages.error(request, f"Database password change failed: {db_error}")
+            password_label = "Database"
+
+            # Get database username from K8s Domain CR status
+            if k8s_domain and k8s_domain.status:
+                db_username = k8s_domain.status.database_username
+
+            if not db_username:
+                messages.error(request, "No database username found for this domain. Is the domain fully provisioned?")
                 return render(request, "main/change_password.html", {
                     "domain": domain_obj,
                     "password_type": password_type
                 })
-        
-        # Update the password
-        if password_type == 'mariadb':
-            # Update password in kubepanel database
-            domain_obj.mariadb_pass = new_password
-            password_label = "Database"
-            
-            # Update password in MariaDB infrastructure
+
             try:
-                # Use the mariadb_user field from the domain model
-                db_username = domain_obj.mariadb_user
-                if not db_username:
-                    raise Exception("No MariaDB username configured for this domain")
-                
+                # 1. Update MariaDB user password in the actual database
                 update_mariadb_user_password(db_username, new_password)
-                
-                messages.success(request, f"{password_label} password updated in both kubepanel and MariaDB server.")
-                
+
+                # 2. Update the K8s secret
+                k8s_update_database_password(namespace, new_password)
+
+                messages.success(request, f"{password_label} password updated successfully.")
+
+            except K8sClientError as e:
+                logger.error(f"Failed to update database password K8s secret for {domain}: {e}")
+                messages.error(request, f"Failed to update password in Kubernetes: {e}")
+                return render(request, "main/change_password.html", {
+                    "domain": domain_obj,
+                    "password_type": password_type
+                })
             except Exception as e:
-                # Log the error but don't fail completely
-                print(f"Error updating MariaDB password for user {db_username}: {e}")
-                messages.warning(request, 
-                    f"{password_label} password updated in kubepanel, but there was an issue updating the MariaDB server. "
-                    f"Please check the logs and contact administrator if needed.")
-                
+                logger.error(f"Error updating MariaDB password for user {db_username}: {e}")
+                messages.error(request, f"Failed to update MariaDB password: {e}")
+                return render(request, "main/change_password.html", {
+                    "domain": domain_obj,
+                    "password_type": password_type
+                })
+
         else:  # sftp
-            domain_obj.sftp_pass = new_password
             password_label = "SFTP"
-            
-        domain_obj.save()
-        
-        # Enhanced logging with security information
+
+            try:
+                # Update the K8s secret (includes password and shadow hash)
+                k8s_update_sftp_password(namespace, new_password)
+                messages.success(request, f"{password_label} password updated successfully.")
+
+            except K8sClientError as e:
+                logger.error(f"Failed to update SFTP password K8s secret for {domain}: {e}")
+                messages.error(request, f"Failed to update password in Kubernetes: {e}")
+                return render(request, "main/change_password.html", {
+                    "domain": domain_obj,
+                    "password_type": password_type
+                })
+
+        # Log the action
         LogEntry.objects.create(
             content_object=domain_obj,
             actor=f"user:{request.user.username}",
@@ -2668,44 +2842,17 @@ def change_password(request, domain, password_type):
             level="INFO",
             message=f"{password_label} password changed for {domain_obj.domain_name}",
             data={
-                "domain_id": domain_obj.pk, 
+                "domain_id": domain_obj.pk,
                 "password_type": password_type,
                 "user_id": request.user.id,
                 "domain_owner_id": domain_obj.owner.id,
                 "is_superuser": request.user.is_superuser,
-                "mariadb_user": domain_obj.mariadb_user if password_type == 'mariadb' else None
+                "db_username": db_username if password_type == 'mariadb' else None
             }
         )
-        
-        # Trigger YAML template regeneration to update the infrastructure
-#        template_dir = "yaml_templates/"
-#        domain_dirname = '/kubepanel/yaml_templates/' + domain_obj.domain_name
-#        try:
-#            os.mkdir(domain_dirname)
-#            os.mkdir('/dkim-privkeys/' + domain)
-#        except:
-#            print("Can't create directories. Please check debug logs if you think this is an error.")
-#        
-#        jobid = random_string(5)
-#        sftp_pass = domain_obj.sftp_pass
-#        salt = crypt.mksalt(crypt.METHOD_SHA512)
-#        sftp_pass_hash = crypt.crypt(sftp_pass, salt)
-#        
-#        context = {
-#            "domain_instance": domain_obj,
-#            "sftp_pass_hash": sftp_pass_hash,
-#            "domain_name": domain,
-#            "jobid": jobid,
-#            "domain_name_underscore": domain.replace(".", "_"),
-#            "domain_name_dash": domain.replace(".", "-")
-#        }
-#        iterate_input_templates(template_dir, domain_dirname, context)
-        
-        if password_type == 'sftp':
-            messages.success(request, f"{password_label} password has been changed successfully.")
-            
+
         return redirect('view_domain', domain=domain_obj.domain_name)
-    
+
     return render(request, "main/change_password.html", {
         "domain": domain_obj,
         "password_type": password_type

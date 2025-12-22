@@ -113,13 +113,15 @@
                                 </div>
                             </div>
                             <div class="flex items-center justify-between">
-                                <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ domain.mariadb_user }}</code>
-                                <button type="button" onclick="copyToClipboard('{{ domain.mariadb_user|escapejs }}')"
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ k8s.database_name|default:"Provisioning..." }}</code>
+                                {% if k8s.database_name %}
+                                <button type="button" onclick="copyToClipboard('{{ k8s.database_name|escapejs }}')"
                                         class="ml-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                                     </svg>
                                 </button>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="flex items-start justify-between py-3 border-b border-gray-100 last:border-b-0">
@@ -134,7 +136,7 @@
                                     <p class="text-xs text-gray-500">Database access username</p>
                                 </div>
                             </div>
-                            <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ domain.mariadb_user }}</code>
+                            <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ k8s.database_username|default:"Provisioning..." }}</code>
                         </div>
                         <div class="flex items-start justify-between py-3 border-b border-gray-100 last:border-b-0">
                             <div class="flex items-center">
@@ -149,9 +151,10 @@
                                 </div>
                             </div>
                             <div class="flex items-center justify-between">
-                                <code class="text-sm bg-gray-100 px-2 py-1 rounded font-mono">{{ domain.mariadb_pass }}</code>
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded font-mono">{{ k8s.database_password|default:"Provisioning..." }}</code>
                                 <div class="flex items-center ml-2 space-x-1">
-                                    <button type="button" onclick="copyToClipboard('{{ domain.mariadb_pass|escapejs }}')"
+                                    {% if k8s.database_password %}
+                                    <button type="button" onclick="copyToClipboard('{{ k8s.database_password|escapejs }}')"
                                             class="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
@@ -164,6 +167,7 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                         </svg>
                                     </a>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -191,13 +195,15 @@
                                 </div>
                             </div>
                             <div class="flex items-center justify-between">
-                                <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ domain.scp_port }}</code>
-                                <button type="button" onclick="copyToClipboard('{{ domain.scp_port|escapejs }}')"
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ k8s.sftp_port|default:"Provisioning..." }}</code>
+                                {% if k8s.sftp_port %}
+                                <button type="button" onclick="copyToClipboard('{{ k8s.sftp_port }}')"
                                         class="ml-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                                     </svg>
                                 </button>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="flex items-start justify-between py-3 border-b border-gray-100 last:border-b-0">
@@ -213,8 +219,8 @@
                                 </div>
                             </div>
                             <div class="flex items-center justify-between">
-                                <code class="text-sm bg-gray-100 px-2 py-1 rounded">webuser</code>
-                                <button type="button" onclick="copyToClipboard('webuser')"
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ k8s.sftp_username }}</code>
+                                <button type="button" onclick="copyToClipboard('{{ k8s.sftp_username }}')"
                                         class="ml-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
@@ -235,9 +241,10 @@
                                 </div>
                             </div>
                             <div class="flex items-center justify-between">
-                                <code class="text-sm bg-gray-100 px-2 py-1 rounded font-mono">{{ domain.sftp_pass }}</code>
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded font-mono">{{ k8s.sftp_password|default:"Provisioning..." }}</code>
                                 <div class="flex items-center ml-2 space-x-1">
-                                    <button type="button" onclick="copyToClipboard('{{ domain.sftp_pass|escapejs }}')"
+                                    {% if k8s.sftp_password %}
+                                    <button type="button" onclick="copyToClipboard('{{ k8s.sftp_password|escapejs }}')"
                                             class="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
@@ -250,6 +257,7 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                         </svg>
                                     </a>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -266,13 +274,15 @@
                                 </div>
                             </div>
                             <div class="relative">
-                                <pre class="text-xs bg-gray-50 p-3 pr-12 rounded-lg border overflow-x-auto font-mono">{{ domain.scp_privkey }}</pre>
-                                <button type="button" onclick="copyToClipboard('{{ domain.scp_privkey|escapejs }}')"
+                                <pre class="text-xs bg-gray-50 p-3 pr-12 rounded-lg border overflow-x-auto font-mono">{{ k8s.sftp_privkey|default:"Provisioning..." }}</pre>
+                                {% if k8s.sftp_privkey %}
+                                <button type="button" onclick="copyToClipboard('{{ k8s.sftp_privkey|escapejs }}')"
                                         class="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                                     </svg>
                                 </button>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -298,13 +308,15 @@
                             <p class="text-sm font-medium text-gray-900 mb-1">DKIM Public Key</p>
                             <p class="text-xs text-gray-500 mb-3">Email authentication public key</p>
                             <div class="relative">
-                                <pre class="text-xs bg-gray-50 p-3 rounded-lg border overflow-x-auto font-mono break-all whitespace-pre-wrap">{{ domain.dkim_pubkey }}</pre>
-                                <button type="button" onclick="copyToClipboard('{{ domain.dkim_pubkey|escapejs }}')"
+                                <pre class="text-xs bg-gray-50 p-3 rounded-lg border overflow-x-auto font-mono break-all whitespace-pre-wrap">{{ k8s.dkim_pubkey|default:"Provisioning..." }}</pre>
+                                {% if k8s.dkim_pubkey %}
+                                <button type="button" onclick="copyToClipboard('{{ k8s.dkim_pubkey|escapejs }}')"
                                         class="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                                     </svg>
                                 </button>
+                                {% endif %}
                             </div>
                         </div>
                     </div>

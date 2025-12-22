@@ -33,6 +33,8 @@ from .secrets import (
     get_secret_from_ref,
     get_sftp_password,
     get_database_password,
+    update_sftp_password,
+    update_database_password,
 )
 
 __all__ = [
@@ -65,4 +67,6 @@ __all__ = [
     'get_secret_from_ref',
     'get_sftp_password',
     'get_database_password',
+    'update_sftp_password',
+    'update_database_password',
 ]
