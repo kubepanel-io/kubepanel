@@ -37,6 +37,15 @@ from .secrets import (
     update_database_password,
 )
 
+from .backup import (
+    Backup,
+    BackupStatus,
+    list_backups,
+    get_backup,
+    create_backup,
+    delete_backup,
+)
+
 __all__ = [
     # Exceptions
     'K8sClientError',
@@ -69,4 +78,12 @@ __all__ = [
     'get_database_password',
     'update_sftp_password',
     'update_database_password',
+
+    # Backup operations
+    'Backup',
+    'BackupStatus',
+    'list_backups',
+    'get_backup',
+    'create_backup',
+    'delete_backup',
 ]

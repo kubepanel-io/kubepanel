@@ -16,8 +16,9 @@ import os
 import time
 import subprocess
 
-from dashboard.models import Package, UserProfile, Domain, Volumesnapshot
+from dashboard.models import Package, UserProfile, Domain
 from dashboard.forms import UserProfilePackageForm, UserForm, PackageForm, UserProfileForm
+from dashboard.k8s import get_backup, K8sNotFoundError
 from .utils import SuperuserRequiredMixin
 
 UPLOAD_BASE_DIR = os.getenv('WATCHDOG_UPLOAD_ROOT', '/kubepanel/watchdog/uploads')
@@ -99,9 +100,33 @@ class UserProfilePackageUpdateView(SuperuserRequiredMixin, UpdateView):
 
 class DownloadSnapshotView(View):
     def get(self, request, snapshot_name):
-        vs = get_object_or_404(Volumesnapshot, snapshotname=snapshot_name)
-        if not request.user.is_superuser and vs.domain.owner != request.user:
+        # Parse backup name to extract domain (format: domain-name-TIMESTAMP)
+        # e.g., example-com-20240115-020000 -> example-com
+        parts = snapshot_name.rsplit('-', 2)
+        if len(parts) < 3:
+            return HttpResponseNotFound("Invalid backup name format")
+
+        domain_slug = parts[0]  # e.g., example-com
+        namespace = f"dom-{domain_slug}"
+
+        # Get backup from Kubernetes
+        backup = get_backup(namespace, snapshot_name)
+        if not backup:
+            return HttpResponseNotFound(f"Backup {snapshot_name} not found")
+
+        # Check permissions
+        domain_name = backup.domain_name
+        try:
+            domain = Domain.objects.get(domain_name=domain_name)
+            if not request.user.is_superuser and domain.owner != request.user:
+                raise PermissionDenied
+        except Domain.DoesNotExist:
             raise PermissionDenied
+
+        # Check if backup has a volume snapshot
+        volume_snapshot_name = backup.status.volume_snapshot_name
+        if not volume_snapshot_name:
+            return HttpResponseNotFound("Backup does not have a volume snapshot")
 
         try:
             config.load_incluster_config()
@@ -110,23 +135,23 @@ class DownloadSnapshotView(View):
 
         pod_name = None
         lv_name = None
-        namespace = "piraeus-datastore"
+        piraeus_namespace = "piraeus-datastore"
         container = "linstor-satellite"
-        snap_namespace = vs.domain.domain_name.replace(".", "-")
+        snap_namespace = domain_slug
 
         co_api = client.CustomObjectsApi()
         obj = co_api.get_namespaced_custom_object(
             group="snapshot.storage.k8s.io",
             version="v1",
-            namespace=snap_namespace,
+            namespace=namespace,  # Domain namespace (dom-example-com)
             plural="volumesnapshots",
-            name=snapshot_name,
+            name=volume_snapshot_name,
         )
         content_name = obj["status"]["boundVolumeSnapshotContentName"]
         snap_id = content_name.split('-', 1)[1]
         v1 = client.CoreV1Api()
         pods = v1.list_namespaced_pod(
-            namespace,
+            piraeus_namespace,
             label_selector="app.kubernetes.io/component=linstor-satellite"
         ).items
 
@@ -140,7 +165,7 @@ class DownloadSnapshotView(View):
                 out = stream(
                     v1.connect_get_namespaced_pod_exec,
                     name=name,
-                    namespace=namespace,
+                    namespace=piraeus_namespace,
                     container=container,
                     command=cmd_check,
                     stderr=False, stdin=False, stdout=True, tty=False,
@@ -153,11 +178,11 @@ class DownloadSnapshotView(View):
                 break
 
         if not pod_name or not lv_name:
-            return HttpResponseNotFound(f"Snapshot {snapshot_name} not found")
+            return HttpResponseNotFound(f"Volume snapshot {volume_snapshot_name} not found in storage")
 
         cmd = [
             "kubectl", "exec", "-i",
-            "-n", namespace,
+            "-n", piraeus_namespace,
             pod_name, "-c", container,
             "--", "sh", "-c",
             f"thin_send linstorvg/{lv_name} | zstd -3 -c"
@@ -179,24 +204,48 @@ class DownloadSnapshotView(View):
 
 class DownloadSqlDumpView(View):
     def get(self, request, dump_name):
-        vs = get_object_or_404(Volumesnapshot, snapshotname=dump_name)
-        if not request.user.is_superuser and vs.domain.owner != request.user:
+        # Parse backup name to extract domain (format: domain-name-TIMESTAMP)
+        parts = dump_name.rsplit('-', 2)
+        if len(parts) < 3:
+            return HttpResponseNotFound("Invalid backup name format")
+
+        domain_slug = parts[0]
+        namespace = f"dom-{domain_slug}"
+
+        # Get backup from Kubernetes
+        backup = get_backup(namespace, dump_name)
+        if not backup:
+            return HttpResponseNotFound(f"Backup {dump_name} not found")
+
+        # Check permissions
+        domain_name = backup.domain_name
+        try:
+            domain = Domain.objects.get(domain_name=domain_name)
+            if not request.user.is_superuser and domain.owner != request.user:
+                raise PermissionDenied
+        except Domain.DoesNotExist:
             raise PermissionDenied
+
+        # Check if backup has a database backup path
+        db_backup_path = backup.status.database_backup_path
+        if not db_backup_path:
+            return HttpResponseNotFound("Backup does not have a database backup")
 
         try:
             config.load_incluster_config()
         except config.ConfigException:
             config.load_kube_config()
 
-        namespace = "kubepanel"
-        domain_name_dash = vs.domain.domain_name.replace(".", "-")
-        pvc_name = f"{domain_name_dash}-backup-pvc"
-        file_path = f"/mnt/{dump_name}.sql"
+        # The backup PVC is in the domain namespace with name "backup"
+        pvc_name = "backup"
+        file_path = db_backup_path  # e.g., /backup/20240115-020000/database.mariabackup.zst
 
+        # The file_path is relative to /backup mount point, e.g., /backup/20240115/database.mariabackup.zst
+        # We need to mount the backup PVC and cat the file
         job_body = {
             "apiVersion": "batch/v1",
             "kind": "Job",
-            "metadata": {"generateName": f"backup-downloader-{domain_name_dash}-"},
+            "metadata": {"generateName": f"backup-downloader-{domain_slug}-"},
             "spec": {
                 "ttlSecondsAfterFinished": 60,
                 "template": {
@@ -210,7 +259,7 @@ class DownloadSqlDumpView(View):
                             "name": "downloader",
                             "image": "alpine:latest",
                             "command": ["sh", "-c", "sleep 3600"],
-                            "volumeMounts": [{"mountPath": "/mnt", "name": "backup-pvc"}]
+                            "volumeMounts": [{"mountPath": "/backup", "name": "backup-pvc"}]
                         }]
                     }
                 }
@@ -270,8 +319,10 @@ class DownloadSqlDumpView(View):
                     body=client.V1DeleteOptions(propagation_policy='Foreground')
                 )
 
-        response = StreamingHttpResponse(generator(), content_type="application/sql")
-        response["Content-Disposition"] = f'attachment; filename="{dump_name}.sql"'
+        # Extract filename from the backup path for download
+        download_filename = f"{dump_name}.mariabackup.zst"
+        response = StreamingHttpResponse(generator(), content_type="application/octet-stream")
+        response["Content-Disposition"] = f'attachment; filename="{download_filename}"'
         return response
 
 

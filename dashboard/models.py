@@ -223,16 +223,6 @@ class DomainAlias(models.Model):
         return f"{self.alias_name} → {self.domain.domain_name}"
 
 
-class Volumesnapshot(models.Model):
-    def __str__(self):
-        return self.snapshotname
-
-    domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
-    snapshotname = models.CharField(max_length=255, unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    log = models.TextField(db_default="")
-
-
 class BlockRule(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 

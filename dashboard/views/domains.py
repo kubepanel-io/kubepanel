@@ -16,7 +16,7 @@ import logging
 import base64
 import pymysql
 
-from dashboard.models import Domain, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry, Volumesnapshot
+from dashboard.models import Domain, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry
 from dashboard.forms import DomainForm, DomainAddForm
 from dashboard.services.dns_service import DNSZoneManager, CloudflareAPIException, generate_email_dns_records
 from dashboard.k8s import (
@@ -35,6 +35,9 @@ from dashboard.k8s import (
     K8sClientError,
     K8sConflictError,
     K8sNotFoundError,
+    list_backups,
+    create_backup as k8s_create_backup,
+    get_backup,
 )
 from .utils import random_string, iterate_input_templates
 
@@ -496,14 +499,30 @@ def startstop_domain(request, domain, action):
 
 @login_required(login_url="/dashboard/")
 def volumesnapshots(request, domain):
+    """List backups for a domain from Kubernetes Backup CRs."""
     try:
         if request.user.is_superuser:
             domain_obj = Domain.objects.get(domain_name=domain)
         else:
             domain_obj = Domain.objects.get(owner=request.user, domain_name=domain)
-    except:
+    except Domain.DoesNotExist:
         return HttpResponse("Permission denied")
-    context = {"volumesnapshots": Volumesnapshot.objects.filter(domain=domain_obj), "domain": domain}
+
+    # Get namespace from domain name
+    namespace = f"dom-{domain.replace('.', '-')}"
+
+    # Fetch backups from Kubernetes
+    try:
+        backups = list_backups(namespace)
+    except K8sClientError as e:
+        logger.error(f"Failed to list backups for {domain}: {e}")
+        backups = []
+        messages.error(request, f"Failed to fetch backups: {e}")
+
+    context = {
+        "backups": backups,
+        "domain": domain,
+    }
     return render(request, "main/volumesnapshot.html", context)
 
 
@@ -552,36 +571,52 @@ def restore_volumesnapshot(request, volumesnapshot, domain):
 
 @login_required(login_url="/dashboard/")
 def start_backup(request, domain):
+    """Start a manual backup by creating a Backup CR."""
     if request.method == 'POST':
         if request.POST.get("imsure") != domain:
             error = "Domain name didn't match"
             return render(request, "main/start_backup.html", {"domain": domain, "error": error})
 
+        # Check permissions
         if not request.user.is_superuser:
             try:
-                Domain.objects.get(owner=request.user, domain_name=domain)
+                domain_obj = Domain.objects.get(owner=request.user, domain_name=domain)
             except Domain.DoesNotExist:
                 return HttpResponse("Permission denied.")
+        else:
+            try:
+                domain_obj = Domain.objects.get(domain_name=domain)
+            except Domain.DoesNotExist:
+                return HttpResponse("Domain not found.")
 
-        template_dir = "backup_templates/"
-        domain_dirname = f'/kubepanel/yaml_templates/{domain}'
+        # Get namespace from domain name
+        namespace = f"dom-{domain.replace('.', '-')}"
 
+        # Create Backup CR
         try:
-            os.makedirs(domain_dirname, exist_ok=True)
-            os.makedirs(f'/dkim-privkeys/{domain}', exist_ok=True)
-        except Exception as e:
-            print(f"Directory creation failed: {e}")
+            backup = k8s_create_backup(
+                namespace=namespace,
+                domain_name=domain,
+                backup_type='manual',
+            )
+            messages.success(request, f"Backup started: {backup.name}")
 
-        jobid = random_string(5)
-        context = {
-            "domain_name": domain,
-            "jobid": jobid,
-            "domain_name_underscore": domain.replace(".", "_").replace(".", "_"),
-            "domain_name_dash": domain.replace(".", "-")
-        }
+            # Log the backup
+            LogEntry.objects.create(
+                content_object=domain_obj,
+                actor=f"user:{request.user.username}",
+                user=request.user,
+                level="INFO",
+                message=f"Manual backup started for {domain}",
+                data={"backup_name": backup.name}
+            )
 
-        iterate_input_templates(template_dir, domain_dirname, context)
-        return redirect('backup_logs', domain=domain, jobid=jobid)
+            return redirect('volumesnapshots', domain=domain)
+
+        except K8sClientError as e:
+            logger.error(f"Failed to create backup for {domain}: {e}")
+            messages.error(request, f"Failed to start backup: {e}")
+            return render(request, "main/start_backup.html", {"domain": domain, "error": str(e)})
 
     return render(request, "main/start_backup.html", {"domain": domain})
 

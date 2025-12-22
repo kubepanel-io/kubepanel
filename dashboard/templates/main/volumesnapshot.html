@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Filesystem Backups | KubePanel{% endblock %}
+{% block title %}Backups | KubePanel{% endblock %}
 
-{% block page_title %}Filesystem Backups{% endblock %}
+{% block page_title %}Backups{% endblock %}
 {% block page_subtitle %}{{ domain }} - Manage and restore your domain backups{% endblock %}
 
 {% block header_search %}
@@ -46,7 +46,7 @@
                 </div>
                 <div class="ml-4">
                     <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Total Backups</p>
-                    <p class="text-2xl font-semibold text-gray-900">{{ volumesnapshots.count }}</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ backups|length }}</p>
                 </div>
             </div>
         </div>
@@ -63,7 +63,7 @@
                 </div>
                 <div class="ml-4">
                     <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Latest Backup</p>
-                    <p class="text-2xl font-semibold text-gray-900">{% if volumesnapshots.first %}{{ volumesnapshots.first.created_at|date:"M d, Y" }}{% else %}None{% endif %}</p>
+                    <p class="text-lg font-semibold text-gray-900">{% if backups %}{{ backups.0.created_at|slice:":10" }}{% else %}None{% endif %}</p>
                 </div>
             </div>
         </div>
@@ -85,7 +85,7 @@
             </div>
         </div>
 
-        <!-- Backup Status -->
+        <!-- Retention -->
         <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
             <div class="flex items-center">
                 <div class="flex-shrink-0">
@@ -96,8 +96,8 @@
                     </div>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Status</p>
-                    <p class="text-2xl font-semibold text-gray-900">Active</p>
+                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Retention</p>
+                    <p class="text-2xl font-semibold text-gray-900">7 Days</p>
                 </div>
             </div>
         </div>
@@ -110,11 +110,12 @@
                 <h3 class="text-lg font-medium text-gray-900">Backup History</h3>
                 <div class="flex items-center space-x-3">
                     <select class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                            id="date-filter">
-                        <option value="all">All Dates</option>
-                        <option value="today">Today</option>
-                        <option value="week">This Week</option>
-                        <option value="month">This Month</option>
+                            id="status-filter">
+                        <option value="all">All Status</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Running">Running</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Failed">Failed</option>
                     </select>
                 </div>
             </div>
@@ -123,22 +124,17 @@
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <button class="group flex items-center space-x-1 hover:text-gray-900">
-                            <span>Backup Name</span>
-                            <svg class="w-4 h-4 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
-                            </svg>
-                        </button>
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Backup Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Logs</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
-                {% for vs in volumesnapshots.all %}
-                <tr class="hover:bg-gray-50 transition-colors" data-backup-id="{{ forloop.counter }}">
+                {% for backup in backups %}
+                <tr class="hover:bg-gray-50 transition-colors" data-backup-id="{{ forloop.counter }}" data-status="{{ backup.status.phase }}">
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="flex items-center">
                             <div class="flex-shrink-0 w-10 h-10">
@@ -149,76 +145,117 @@
                                 </div>
                             </div>
                             <div class="ml-4">
-                                <div class="text-sm font-medium text-gray-900 font-mono">{{ vs.snapshotname }}</div>
-                                <div class="text-sm text-gray-500">Filesystem Snapshot</div>
+                                <div class="text-sm font-medium text-gray-900 font-mono">{{ backup.name }}</div>
+                                <div class="text-sm text-gray-500">{% if backup.status.volume_snapshot_name %}Snapshot: {{ backup.status.volume_snapshot_name }}{% else %}Filesystem + Database{% endif %}</div>
                             </div>
                         </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="text-sm text-gray-900">{{ vs.created_at|date:"M d, Y" }}</div>
-                        <div class="text-sm text-gray-500">{{ vs.created_at|date:"H:i:s" }}</div>
+                        {% if backup.backup_type == 'scheduled' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Scheduled
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            Manual
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if backup.status.phase == 'Completed' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Completed
+                        </span>
+                        {% elif backup.status.phase == 'Running' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <svg class="animate-spin w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            Running
+                        </span>
+                        {% elif backup.status.phase == 'Pending' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path>
+                            </svg>
+                            Pending
+                        </span>
+                        {% elif backup.status.phase == 'Failed' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title="{{ backup.status.message }}">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            </svg>
+                            Failed
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            {{ backup.status.phase }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {{ backup.size_display }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-900">{{ backup.created_at|slice:":10" }}</div>
+                        <div class="text-sm text-gray-500">{{ backup.created_at|slice:"11:19" }}</div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div class="flex items-center space-x-2">
-                            <a href="{% url 'restore_volumesnapshot' domain vs.snapshotname %}"
+                            {% if backup.status.phase == 'Completed' %}
+                            <a href="{% url 'restore_volumesnapshot' domain backup.name %}"
                                class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                 Restore
                             </a>
-                            <div class="relative dropdown">
-                                <button class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center space-x-1">
-                                    <span>Download</span>
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                    </svg>
-                                </button>
-                                <div class="dropdown-menu absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                                    <a href="{% url 'download_snapshot' vs.snapshotname %}"
-                                       class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
-                                        </svg>
-                                        <span>LVM Snapshot</span>
-                                    </a>
-                                    <a href="{% url 'download_sql_dump' vs.snapshotname %}"
-                                       class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
-                                        </svg>
-                                        <span>SQL Dump</span>
-                                    </a>
-                                </div>
-                            </div>
+                            {% endif %}
+                            <button class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                    onclick="toggleDetails({{ forloop.counter }})">
+                                Details
+                            </button>
                         </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                                onclick="toggleLogs({{ forloop.counter }})">
-                            Show Logs
-                        </button>
-                    </td>
                 </tr>
-                <!-- Log Row -->
-                <tr id="logs-{{ forloop.counter }}" style="display:none;">
-                    <td colspan="4" class="px-6 py-4 bg-gray-50">
-                        <div class="bg-gray-900 rounded-lg p-4">
-                            <div class="flex items-center justify-between mb-2">
-                                <h4 class="text-white font-medium text-sm">
-                                    Backup Logs - {{ vs.snapshotname }}
-                                </h4>
-                                <button onclick="toggleLogs({{ forloop.counter }})"
-                                        class="text-gray-400 hover:text-white">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                    </svg>
-                                </button>
+                <!-- Details Row -->
+                <tr id="details-{{ forloop.counter }}" style="display:none;">
+                    <td colspan="6" class="px-6 py-4 bg-gray-50">
+                        <div class="bg-white rounded-lg p-4 border border-gray-200">
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Backup Details</h4>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <span class="text-gray-500">Volume Snapshot:</span>
+                                    <span class="ml-2 font-mono">{{ backup.status.volume_snapshot_name|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Database Backup:</span>
+                                    <span class="ml-2 font-mono">{{ backup.status.database_backup_path|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Started:</span>
+                                    <span class="ml-2">{{ backup.status.started_at|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Completed:</span>
+                                    <span class="ml-2">{{ backup.status.completed_at|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Expires:</span>
+                                    <span class="ml-2">{{ backup.status.retention_expires_at|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Message:</span>
+                                    <span class="ml-2">{{ backup.status.message|default:"-" }}</span>
+                                </div>
                             </div>
-                            <pre class="text-green-400 text-xs overflow-auto max-h-64 bg-black rounded p-3">{{ vs.log|default:"No logs available."|escape }}</pre>
                         </div>
                     </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="4" class="px-6 py-12 text-center">
+                    <td colspan="6" class="px-6 py-12 text-center">
                         <div class="flex flex-col items-center">
                             <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
@@ -245,30 +282,28 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Search functionality
     const searchInput = document.getElementById('backup-search');
-    const dateFilter = document.getElementById('date-filter');
+    const statusFilter = document.getElementById('status-filter');
     const tableRows = document.querySelectorAll('tbody tr[data-backup-id]');
 
     function filterBackups() {
         const searchTerm = searchInput.value.toLowerCase();
-        const selectedDate = dateFilter.value;
+        const selectedStatus = statusFilter.value;
 
         tableRows.forEach(row => {
             const backupName = row.querySelector('.font-mono')?.textContent?.toLowerCase() || '';
-            const matchesSearch = backupName.includes(searchTerm);
+            const rowStatus = row.dataset.status;
 
-            if (matchesSearch) {
+            const matchesSearch = backupName.includes(searchTerm);
+            const matchesStatus = selectedStatus === 'all' || rowStatus === selectedStatus;
+
+            if (matchesSearch && matchesStatus) {
                 row.style.display = '';
-                // Also show/hide the corresponding log row if it exists
-                const logRow = document.getElementById(`logs-${row.dataset.backupId}`);
-                if (logRow && logRow.style.display === 'table-row') {
-                    logRow.style.display = 'table-row';
-                }
             } else {
                 row.style.display = 'none';
-                // Hide corresponding log row
-                const logRow = document.getElementById(`logs-${row.dataset.backupId}`);
-                if (logRow) {
-                    logRow.style.display = 'none';
+                // Hide corresponding details row
+                const detailsRow = document.getElementById(`details-${row.dataset.backupId}`);
+                if (detailsRow) {
+                    detailsRow.style.display = 'none';
                 }
             }
         });
@@ -278,119 +313,14 @@ document.addEventListener('DOMContentLoaded', function() {
         searchInput.addEventListener('input', filterBackups);
     }
 
-    if (dateFilter) {
-        dateFilter.addEventListener('change', filterBackups);
+    if (statusFilter) {
+        statusFilter.addEventListener('change', filterBackups);
     }
-
-    // Dropdown functionality
-    const dropdowns = document.querySelectorAll('.dropdown');
-    dropdowns.forEach(dropdown => {
-        const button = dropdown.querySelector('button');
-        const menu = dropdown.querySelector('.dropdown-menu');
-
-        if (button && menu) {
-            // Set initial state
-            menu.style.transform = 'translateY(-5px)';
-            menu.style.opacity = '0';
-            menu.style.visibility = 'hidden';
-            menu.style.transition = 'all 0.2s ease-in-out';
-
-            let isClickOpen = false;
-            let hoverTimeout;
-
-            // Show dropdown function
-            function showDropdown() {
-                dropdowns.forEach(otherDropdown => {
-                    if (otherDropdown !== dropdown) {
-                        const otherMenu = otherDropdown.querySelector('.dropdown-menu');
-                        if (otherMenu) {
-                            otherMenu.style.transform = 'translateY(-5px)';
-                            otherMenu.style.opacity = '0';
-                            otherMenu.style.visibility = 'hidden';
-                            otherDropdown.isClickOpen = false;
-                        }
-                    }
-                });
-
-                menu.style.transform = 'translateY(0)';
-                menu.style.opacity = '1';
-                menu.style.visibility = 'visible';
-            }
-
-            // Hide dropdown function
-            function hideDropdown() {
-                if (!isClickOpen) {
-                    menu.style.transform = 'translateY(-5px)';
-                    menu.style.opacity = '0';
-                    menu.style.visibility = 'hidden';
-                }
-            }
-
-            // Click handler
-            button.addEventListener('click', function(e) {
-                e.stopPropagation();
-
-                if (isClickOpen) {
-                    menu.style.transform = 'translateY(-5px)';
-                    menu.style.opacity = '0';
-                    menu.style.visibility = 'hidden';
-                    isClickOpen = false;
-                } else {
-                    showDropdown();
-                    isClickOpen = true;
-                }
-
-                dropdown.isClickOpen = isClickOpen;
-            });
-
-            // Hover handlers
-            dropdown.addEventListener('mouseenter', function() {
-                clearTimeout(hoverTimeout);
-                showDropdown();
-            });
-
-            dropdown.addEventListener('mouseleave', function() {
-                hoverTimeout = setTimeout(() => {
-                    hideDropdown();
-                }, 100);
-            });
-
-            dropdown.isClickOpen = isClickOpen;
-        }
-    });
-
-    // Close dropdowns when clicking outside
-    document.addEventListener('click', function() {
-        dropdowns.forEach(dropdown => {
-            const menu = dropdown.querySelector('.dropdown-menu');
-            if (menu) {
-                menu.style.transform = 'translateY(-5px)';
-                menu.style.opacity = '0';
-                menu.style.visibility = 'hidden';
-                dropdown.isClickOpen = false;
-            }
-        });
-    });
-
-    // Add loading states for action buttons
-    const actionButtons = document.querySelectorAll('a[href*="restore"], a[href*="download"]');
-    actionButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const originalText = this.innerHTML;
-            this.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Processing...';
-            this.style.pointerEvents = 'none';
-            
-            setTimeout(() => {
-                this.innerHTML = originalText;
-                this.style.pointerEvents = '';
-            }, 3000);
-        });
-    });
 });
 
-// Log toggle function
-function toggleLogs(id) {
-    var row = document.getElementById('logs-' + id);
+// Details toggle function
+function toggleDetails(id) {
+    var row = document.getElementById('details-' + id);
     row.style.display = (row.style.display === 'none') ? 'table-row' : 'none';
 }
 </script>
