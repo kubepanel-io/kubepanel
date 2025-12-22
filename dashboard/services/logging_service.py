@@ -173,40 +173,36 @@ class KubepanelLogger:
         )
     
     @staticmethod
-    def log_system_event(message: str, level: str = 'INFO', actor: str = 'system', data: Dict = None) -> LogEntry:
+    def log_system_event(message: str, level: str = 'INFO', actor: str = 'system', user: User = None, data: Dict = None) -> Optional[LogEntry]:
         """
-        Log system-wide events that don't relate to a specific model instance.
-        Creates a log entry related to the LogEntry model itself as a fallback.
-        
+        Log system-wide events. Uses the User as the content_object since
+        system events typically relate to user actions (login, logout, etc.).
+
         Args:
             message: Log message
             level: Log level
             actor: Actor identifier
+            user: User associated with the event (used as content_object)
             data: Additional data
         """
-        # Use a dummy LogEntry instance as the content_object for system events
-        # This is a bit of a hack, but allows us to use the same logging structure
         try:
-            # Get the first LogEntry to use as a reference, or create a dummy one
-            dummy_log = LogEntry.objects.first()
-            if not dummy_log:
-                # Create a minimal log entry to reference
-                dummy_log = LogEntry.objects.create(
-                    content_object=LogEntry.objects.model(),
-                    actor='system',
-                    message='System initialization',
-                    level='INFO'
+            if user:
+                # Use the user as the content_object
+                return KubepanelLogger.log(
+                    content_object=user,
+                    message=message,
+                    level=level,
+                    actor=actor,
+                    user=user,
+                    data=data
                 )
-            
-            return KubepanelLogger.log(
-                content_object=dummy_log,
-                message=message,
-                level=level,
-                actor=actor,
-                data=data
-            )
-        except:
+            else:
+                # No user provided - just use standard logging
+                logger.log(getattr(logging, level, logging.INFO), f"{actor}: {message}")
+                return None
+        except Exception as e:
             # Fallback to standard logging
+            logger.error(f"Failed to create system log entry: {e}")
             logger.log(getattr(logging, level, logging.INFO), f"{actor}: {message}")
             raise
 

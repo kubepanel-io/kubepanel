@@ -717,6 +717,7 @@ def kplogin(request):
                     message=f"Successful login for user {username}",
                     level="INFO",
                     actor=f"user:{username}",
+                    user=user,
                     data={
                         "ip_address": client_ip,
                         "user_agent": user_agent,
@@ -844,6 +845,7 @@ def logout_view(request):
             message=f"User {username} logged out",
             level="INFO",
             actor=f"user:{username}",
+            user=request.user,
             data={
                 "ip_address": client_ip,
                 "user_agent": user_agent,
