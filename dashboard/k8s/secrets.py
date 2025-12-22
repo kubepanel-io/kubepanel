@@ -9,7 +9,7 @@ passwords when users request password changes.
 from kubernetes.client.rest import ApiException
 import base64
 import logging
-import crypt
+import legacycrypt as crypt
 from typing import Optional
 
 from .client import get_core_api, handle_api_exception
