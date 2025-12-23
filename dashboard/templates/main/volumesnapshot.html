@@ -276,20 +276,173 @@
             </tbody>
         </table>
     </div>
+
+    <!-- Restores Table -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900">Restore History</h3>
+                <div class="flex items-center space-x-3">
+                    <select class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            id="restore-status-filter">
+                        <option value="all">All Status</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Running">Running</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Failed">Failed</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Restore Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">From Backup</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Started</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completed</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for restore in restores %}
+                <tr class="hover:bg-gray-50 transition-colors" data-restore-id="{{ forloop.counter }}" data-restore-status="{{ restore.status.phase }}">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 w-10 h-10">
+                                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <div class="text-sm font-medium text-gray-900 font-mono">{{ restore.name }}</div>
+                                <div class="text-sm text-gray-500">{{ restore.domain_name }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-mono text-gray-900">{{ restore.backup_name }}</div>
+                        <div class="text-sm text-gray-500">{{ restore.volume_snapshot_name }}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if restore.status.phase == 'Completed' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Completed
+                        </span>
+                        {% elif restore.status.phase == 'Running' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <svg class="animate-spin w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            Running
+                        </span>
+                        {% elif restore.status.phase == 'Pending' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path>
+                            </svg>
+                            Pending
+                        </span>
+                        {% elif restore.status.phase == 'Failed' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title="{{ restore.status.message }}">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            </svg>
+                            Failed
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            {{ restore.status.phase }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if restore.status.started_at %}
+                        <div class="text-sm text-gray-900">{{ restore.status.started_at|slice:":10" }}</div>
+                        <div class="text-sm text-gray-500">{{ restore.status.started_at|slice:"11:19" }}</div>
+                        {% else %}
+                        <span class="text-sm text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if restore.status.completed_at %}
+                        <div class="text-sm text-gray-900">{{ restore.status.completed_at|slice:":10" }}</div>
+                        <div class="text-sm text-gray-500">{{ restore.status.completed_at|slice:"11:19" }}</div>
+                        {% else %}
+                        <span class="text-sm text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                onclick="toggleRestoreDetails({{ forloop.counter }})">
+                            Details
+                        </button>
+                    </td>
+                </tr>
+                <!-- Details Row -->
+                <tr id="restore-details-{{ forloop.counter }}" style="display:none;">
+                    <td colspan="6" class="px-6 py-4 bg-gray-50">
+                        <div class="bg-white rounded-lg p-4 border border-gray-200">
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Restore Details</h4>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <span class="text-gray-500">Volume Snapshot:</span>
+                                    <span class="ml-2 font-mono">{{ restore.volume_snapshot_name|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Database Backup:</span>
+                                    <span class="ml-2 font-mono">{{ restore.database_backup_path|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Message:</span>
+                                    <span class="ml-2">{{ restore.status.message|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Created:</span>
+                                    <span class="ml-2">{{ restore.created_at|default:"-" }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="px-6 py-12 text-center">
+                        <div class="flex flex-col items-center">
+                            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">No restores yet</h3>
+                            <p class="text-gray-500">Restore history will appear here when you restore from a backup</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Search functionality
+    // Backup search functionality
     const searchInput = document.getElementById('backup-search');
     const statusFilter = document.getElementById('status-filter');
-    const tableRows = document.querySelectorAll('tbody tr[data-backup-id]');
+    const backupRows = document.querySelectorAll('tbody tr[data-backup-id]');
 
     function filterBackups() {
         const searchTerm = searchInput.value.toLowerCase();
         const selectedStatus = statusFilter.value;
 
-        tableRows.forEach(row => {
+        backupRows.forEach(row => {
             const backupName = row.querySelector('.font-mono')?.textContent?.toLowerCase() || '';
             const rowStatus = row.dataset.status;
 
@@ -316,11 +469,45 @@ document.addEventListener('DOMContentLoaded', function() {
     if (statusFilter) {
         statusFilter.addEventListener('change', filterBackups);
     }
+
+    // Restore filter functionality
+    const restoreStatusFilter = document.getElementById('restore-status-filter');
+    const restoreRows = document.querySelectorAll('tbody tr[data-restore-id]');
+
+    function filterRestores() {
+        const selectedStatus = restoreStatusFilter.value;
+
+        restoreRows.forEach(row => {
+            const rowStatus = row.dataset.restoreStatus;
+            const matchesStatus = selectedStatus === 'all' || rowStatus === selectedStatus;
+
+            if (matchesStatus) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+                // Hide corresponding details row
+                const detailsRow = document.getElementById(`restore-details-${row.dataset.restoreId}`);
+                if (detailsRow) {
+                    detailsRow.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    if (restoreStatusFilter) {
+        restoreStatusFilter.addEventListener('change', filterRestores);
+    }
 });
 
-// Details toggle function
+// Details toggle function for backups
 function toggleDetails(id) {
     var row = document.getElementById('details-' + id);
+    row.style.display = (row.style.display === 'none') ? 'table-row' : 'none';
+}
+
+// Details toggle function for restores
+function toggleRestoreDetails(id) {
+    var row = document.getElementById('restore-details-' + id);
     row.style.display = (row.style.display === 'none') ? 'table-row' : 'none';
 }
 </script>

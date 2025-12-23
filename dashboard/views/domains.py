@@ -39,6 +39,7 @@ from dashboard.k8s import (
     create_backup as k8s_create_backup,
     get_backup,
     create_restore,
+    list_restores,
 )
 
 logger = logging.getLogger("django")
@@ -497,8 +498,6 @@ def startstop_domain(request, domain, action):
     try:
         if action == 'stop':
             k8s_suspend_domain(domain)
-            domain_model.status = "Suspended"
-            domain_model.save()
             messages.success(request, f"Domain '{domain}' suspended.")
 
             LogEntry.objects.create(
@@ -511,8 +510,6 @@ def startstop_domain(request, domain, action):
 
         elif action == 'start':
             k8s_unsuspend_domain(domain)
-            domain_model.status = "Starting"
-            domain_model.save()
             messages.success(request, f"Domain '{domain}' started.")
 
             LogEntry.objects.create(
@@ -537,7 +534,7 @@ def startstop_domain(request, domain, action):
 
 @login_required(login_url="/dashboard/")
 def volumesnapshots(request, domain):
-    """List backups for a domain from Kubernetes Backup CRs."""
+    """List backups and restores for a domain from Kubernetes CRs."""
     try:
         if request.user.is_superuser:
             domain_obj = Domain.objects.get(domain_name=domain)
@@ -557,8 +554,17 @@ def volumesnapshots(request, domain):
         backups = []
         messages.error(request, f"Failed to fetch backups: {e}")
 
+    # Fetch restores from Kubernetes
+    try:
+        restores = list_restores(namespace)
+    except K8sClientError as e:
+        logger.error(f"Failed to list restores for {domain}: {e}")
+        restores = []
+        messages.error(request, f"Failed to fetch restores: {e}")
+
     context = {
         "backups": backups,
+        "restores": restores,
         "domain": domain,
     }
     return render(request, "main/volumesnapshot.html", context)
