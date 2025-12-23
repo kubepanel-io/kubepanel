@@ -22,20 +22,71 @@ class DomainForm(forms.ModelForm):
 
   class Meta:
     model = Domain
-    fields = ["cpu_limit","mem_limit", "php_image"]
+    fields = [
+        # Resource limits
+        "cpu_limit", "mem_limit", "php_image",
+        # PHP settings
+        "php_memory_limit", "php_max_execution_time",
+        "php_upload_max_filesize", "php_post_max_size",
+        "custom_php_config",
+        # Webserver settings
+        "document_root", "client_max_body_size",
+        "ssl_redirect", "www_redirect",
+        "custom_nginx_config",
+    ]
     widgets = {
-                'cpu_limit': forms.NumberInput(attrs={
-                    'class': 'form-control',
-                    'placeholder': 'CPU Limit in milliCPU',
-                    'min': 100,
-                    'max': 4000,
-                }),
-                'mem_limit': forms.NumberInput(attrs={
-                    'class': 'form-control',
-                    'min': 32,
-                    'max': 4096,
-                    'placeholder': 'Memory Limit in MiB'
-                }),
+        'cpu_limit': forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'CPU Limit in milliCPU',
+            'min': 100,
+            'max': 4000,
+        }),
+        'mem_limit': forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': 32,
+            'max': 4096,
+            'placeholder': 'Memory Limit in MiB'
+        }),
+        # PHP settings
+        'php_memory_limit': forms.Select(attrs={'class': 'form-select'}),
+        'php_max_execution_time': forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': 1,
+            'max': 300,
+            'placeholder': 'Seconds (1-300)'
+        }),
+        'php_upload_max_filesize': forms.Select(attrs={'class': 'form-select'}),
+        'php_post_max_size': forms.Select(attrs={'class': 'form-select'}),
+        'custom_php_config': forms.Textarea(attrs={
+            'class': 'form-control font-mono',
+            'rows': 4,
+            'placeholder': '; Custom php.ini directives\n; display_errors = Off'
+        }),
+        # Webserver settings
+        'document_root': forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '/public_html'
+        }),
+        'client_max_body_size': forms.Select(attrs={'class': 'form-select'}),
+        'ssl_redirect': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        'www_redirect': forms.Select(attrs={'class': 'form-select'}),
+        'custom_nginx_config': forms.Textarea(attrs={
+            'class': 'form-control font-mono',
+            'rows': 4,
+            'placeholder': '# Custom nginx location directives\n# location /api { proxy_pass http://...; }'
+        }),
+    }
+    labels = {
+        'php_memory_limit': 'PHP Memory Limit',
+        'php_max_execution_time': 'Max Execution Time',
+        'php_upload_max_filesize': 'Upload Max Filesize',
+        'php_post_max_size': 'Post Max Size',
+        'custom_php_config': 'Custom PHP Config',
+        'document_root': 'Document Root',
+        'client_max_body_size': 'Client Max Body Size',
+        'ssl_redirect': 'Redirect HTTP to HTTPS',
+        'www_redirect': 'WWW Redirect',
+        'custom_nginx_config': 'Custom Nginx Config',
     }
 
 class DomainAddForm(forms.ModelForm):

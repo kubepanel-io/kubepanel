@@ -98,12 +98,100 @@ class Domain(models.Model):
     
     # === PHP Configuration ===
     php_image = models.ForeignKey(
-        PhpImage, 
+        PhpImage,
         on_delete=models.PROTECT,
         related_name='domains',
         help_text="PHP version for this domain"
     )
-    
+
+    # PHP Settings
+    PHP_MEMORY_CHOICES = [
+        ('128M', '128 MB'),
+        ('256M', '256 MB'),
+        ('512M', '512 MB'),
+        ('1G', '1 GB'),
+    ]
+    php_memory_limit = models.CharField(
+        max_length=10,
+        choices=PHP_MEMORY_CHOICES,
+        default='256M',
+        help_text="PHP memory_limit"
+    )
+    php_max_execution_time = models.IntegerField(
+        default=30,
+        validators=[MinValueValidator(1), MaxValueValidator(300)],
+        help_text="PHP max_execution_time in seconds"
+    )
+
+    PHP_SIZE_CHOICES = [
+        ('2M', '2 MB'),
+        ('8M', '8 MB'),
+        ('32M', '32 MB'),
+        ('64M', '64 MB'),
+        ('128M', '128 MB'),
+        ('256M', '256 MB'),
+    ]
+    php_upload_max_filesize = models.CharField(
+        max_length=10,
+        choices=PHP_SIZE_CHOICES,
+        default='64M',
+        help_text="PHP upload_max_filesize"
+    )
+    php_post_max_size = models.CharField(
+        max_length=10,
+        choices=PHP_SIZE_CHOICES,
+        default='64M',
+        help_text="PHP post_max_size"
+    )
+    custom_php_config = models.TextField(
+        blank=True,
+        default='',
+        help_text="Custom php.ini directives"
+    )
+
+    # === Webserver (Nginx) Configuration ===
+    document_root = models.CharField(
+        max_length=255,
+        default='/public_html',
+        help_text="Document root path relative to domain root"
+    )
+
+    NGINX_BODY_SIZE_CHOICES = [
+        ('1m', '1 MB'),
+        ('8m', '8 MB'),
+        ('32m', '32 MB'),
+        ('64m', '64 MB'),
+        ('128m', '128 MB'),
+        ('256m', '256 MB'),
+    ]
+    client_max_body_size = models.CharField(
+        max_length=10,
+        choices=NGINX_BODY_SIZE_CHOICES,
+        default='64m',
+        help_text="Nginx client_max_body_size"
+    )
+    ssl_redirect = models.BooleanField(
+        default=True,
+        help_text="Redirect HTTP to HTTPS"
+    )
+
+    WWW_REDIRECT_CHOICES = [
+        ('none', 'No redirect'),
+        ('www-to-root', 'Redirect www to root'),
+        ('root-to-www', 'Redirect root to www'),
+    ]
+    www_redirect = models.CharField(
+        max_length=20,
+        choices=WWW_REDIRECT_CHOICES,
+        default='none',
+        help_text="WWW redirect behavior"
+    )
+    custom_nginx_config = models.TextField(
+        blank=True,
+        default='',
+        help_text="Custom nginx location directives"
+    )
+
     # === Timestamps ===
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

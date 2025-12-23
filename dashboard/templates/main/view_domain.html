@@ -326,32 +326,109 @@
             <!-- Resource Limits -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-200">
                 <div class="px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-medium text-gray-900">Resource Limits & Configuration</h3>
+                    <h3 class="text-lg font-medium text-gray-900">Resource Limits</h3>
                 </div>
                 <div class="p-6">
                     <div class="space-y-6">
                         <!-- CPU and Memory -->
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">CPU Limit</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">CPU Limit (mCPU)</label>
                                 {{ form.cpu_limit }}
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Memory Limit</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Memory Limit (MB)</label>
                                 {{ form.mem_limit }}
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
 
+            <!-- PHP Configuration -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">PHP Configuration</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-6">
                         <!-- PHP Version -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">PHP Version</label>
                             {{ form.php_image }}
                         </div>
 
-                        <!-- Nginx Config -->
+                        <!-- PHP Memory and Execution Time -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Memory Limit</label>
+                                {{ form.php_memory_limit }}
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Max Execution Time (sec)</label>
+                                {{ form.php_max_execution_time }}
+                            </div>
+                        </div>
+
+                        <!-- Upload and Post Size -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Upload Max Filesize</label>
+                                {{ form.php_upload_max_filesize }}
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Post Max Size</label>
+                                {{ form.php_post_max_size }}
+                            </div>
+                        </div>
+
+                        <!-- Custom PHP Config -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Nginx Configuration</label>
-                            {{ form.nginx_config }}
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Custom php.ini Directives</label>
+                            {{ form.custom_php_config }}
+                            <p class="mt-1 text-xs text-gray-500">Add custom PHP configuration (one directive per line)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Webserver Configuration -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Webserver Configuration</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-6">
+                        <!-- Document Root and Max Body Size -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Document Root</label>
+                                {{ form.document_root }}
+                                <p class="mt-1 text-xs text-gray-500">Path relative to domain root</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Client Max Body Size</label>
+                                {{ form.client_max_body_size }}
+                            </div>
+                        </div>
+
+                        <!-- Redirects -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="flex items-center">
+                                {{ form.ssl_redirect }}
+                                <label class="ml-2 text-sm font-medium text-gray-700">Redirect HTTP to HTTPS</label>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">WWW Redirect</label>
+                                {{ form.www_redirect }}
+                            </div>
+                        </div>
+
+                        <!-- Custom Nginx Config -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Custom Nginx Config</label>
+                            {{ form.custom_nginx_config }}
+                            <p class="mt-1 text-xs text-gray-500">Add custom nginx location directives</p>
                         </div>
                     </div>
                 </div>

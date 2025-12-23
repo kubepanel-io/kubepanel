@@ -46,6 +46,15 @@ from .backup import (
     delete_backup,
 )
 
+from .restore import (
+    Restore,
+    RestoreStatus,
+    list_restores,
+    get_restore,
+    create_restore,
+    delete_restore,
+)
+
 from .firewall import (
     sync_modsecurity_rules,
     get_current_modsecurity_rules,
@@ -91,6 +100,14 @@ __all__ = [
     'get_backup',
     'create_backup',
     'delete_backup',
+
+    # Restore operations
+    'Restore',
+    'RestoreStatus',
+    'list_restores',
+    'get_restore',
+    'create_restore',
+    'delete_restore',
 
     # Firewall operations
     'sync_modsecurity_rules',

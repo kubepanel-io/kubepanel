@@ -38,6 +38,7 @@ from dashboard.k8s import (
     list_backups,
     create_backup as k8s_create_backup,
     get_backup,
+    create_restore,
 )
 
 logger = logging.getLogger("django")
@@ -366,8 +367,26 @@ def save_domain(request, domain):
             },
             "php": {
                 "version": domain_instance.php_image.version,
+                "settings": {
+                    "memoryLimit": domain_instance.php_memory_limit,
+                    "maxExecutionTime": domain_instance.php_max_execution_time,
+                    "uploadMaxFilesize": domain_instance.php_upload_max_filesize,
+                    "postMaxSize": domain_instance.php_post_max_size,
+                },
+            },
+            "webserver": {
+                "documentRoot": domain_instance.document_root,
+                "clientMaxBodySize": domain_instance.client_max_body_size,
+                "sslRedirect": domain_instance.ssl_redirect,
+                "wwwRedirect": domain_instance.www_redirect,
             },
         }
+        # Add custom configs only if they have content
+        if domain_instance.custom_php_config:
+            patch["php"]["customConfig"] = domain_instance.custom_php_config
+        if domain_instance.custom_nginx_config:
+            patch["webserver"]["customConfig"] = domain_instance.custom_nginx_config
+
         k8s_patch_domain(domain_instance.domain_name, patch)
         logger.info(f"Patched Domain CR for {domain_instance.domain_name}")
     except K8sNotFoundError:
@@ -387,6 +406,8 @@ def save_domain(request, domain):
             "cpu_limit": domain_instance.cpu_limit,
             "mem_limit": domain_instance.mem_limit,
             "php_version": domain_instance.php_image.version,
+            "php_memory_limit": domain_instance.php_memory_limit,
+            "document_root": domain_instance.document_root,
         }
     )
 
@@ -530,14 +551,85 @@ def restore_volumesnapshot(request, volumesnapshot, domain):
     """
     Restore from a backup.
 
-    TODO: Implement restore via operator. This should:
-    1. Create a Restore CR that triggers the operator to:
-       - Restore the VolumeSnapshot to the domain's PVC
-       - Restore the database from the mariabackup archive
+    Creates a Restore CR that triggers the operator to:
+    1. Scale down the domain deployment
+    2. Restore the VolumeSnapshot to the domain's PVC
+    3. Restore the database from the dump file
+    4. Scale up the domain deployment
     """
-    # For now, show not implemented message
-    messages.error(request, "Restore functionality is not yet implemented in the new architecture. Please contact support.")
-    return redirect('volumesnapshots', domain=domain)
+    # Check permissions
+    try:
+        if request.user.is_superuser:
+            domain_obj = Domain.objects.get(domain_name=domain)
+        else:
+            domain_obj = Domain.objects.get(owner=request.user, domain_name=domain)
+    except Domain.DoesNotExist:
+        return HttpResponse("Permission denied")
+
+    namespace = f"dom-{domain.replace('.', '-')}"
+
+    # Find the backup that has this volumesnapshot
+    try:
+        backups = list_backups(namespace)
+    except K8sClientError as e:
+        logger.error(f"Failed to list backups for {domain}: {e}")
+        messages.error(request, f"Failed to fetch backups: {e}")
+        return redirect('volumesnapshots', domain=domain)
+
+    # Find the backup with matching volumeSnapshotName
+    backup = None
+    for b in backups:
+        if b.status.volume_snapshot_name == volumesnapshot:
+            backup = b
+            break
+
+    if not backup:
+        messages.error(request, f"Backup with VolumeSnapshot '{volumesnapshot}' not found.")
+        return redirect('volumesnapshots', domain=domain)
+
+    # Check that backup is complete
+    if backup.status.phase != 'Completed':
+        messages.error(request, f"Cannot restore from backup in '{backup.status.phase}' state. Only completed backups can be restored.")
+        return redirect('volumesnapshots', domain=domain)
+
+    # Check that we have the required data
+    if not backup.status.volume_snapshot_name or not backup.status.database_backup_path:
+        messages.error(request, "Backup is missing required data (VolumeSnapshot or database path).")
+        return redirect('volumesnapshots', domain=domain)
+
+    if request.method == 'POST':
+        # Validate confirmation
+        if request.POST.get("imsure") != domain:
+            error = "Domain name didn't match"
+            return render(request, "main/restore_snapshot.html", {
+                "domain": domain,
+                "volumesnapshot": volumesnapshot,
+                "error": error,
+            })
+
+        # Create Restore CR
+        try:
+            restore = create_restore(
+                namespace=namespace,
+                domain_name=domain,
+                backup_name=backup.name,
+                volume_snapshot_name=backup.status.volume_snapshot_name,
+                database_backup_path=backup.status.database_backup_path,
+            )
+            messages.success(request, f"Restore started. The domain will be temporarily unavailable while restoring from backup '{backup.name}'.")
+            logger.info(f"Created Restore CR {restore.name} for {domain} from backup {backup.name}")
+        except K8sClientError as e:
+            logger.error(f"Failed to create restore for {domain}: {e}")
+            messages.error(request, f"Failed to start restore: {e}")
+
+        return redirect('volumesnapshots', domain=domain)
+
+    # GET request - show confirmation form
+    return render(request, "main/restore_snapshot.html", {
+        "domain": domain,
+        "volumesnapshot": volumesnapshot,
+        "backup": backup,
+    })
 
 
 @login_required(login_url="/dashboard/")
