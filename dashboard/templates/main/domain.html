@@ -239,20 +239,30 @@
                     </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                    {% if domain.status == 'Not running' and domain.id != 1 %}
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
-                        Stopped
-                    </span>
-                    {% elif 'Running' in domain.status or domain.id == 1 %}
+                    {% if domain.k8s_status == 'Ready' %}
                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                         <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
-                        Running
+                        Ready
+                    </span>
+                    {% elif domain.k8s_status == 'Failed' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                        Failed
+                    </span>
+                    {% elif domain.k8s_status == 'Provisioning' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5 animate-pulse"></span>
+                        Provisioning
+                    </span>
+                    {% elif domain.k8s_status == 'NotFound' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                        Not in K8s
                     </span>
                     {% else %}
                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                         <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
-                        {{ domain.status|safe }}
+                        {{ domain.k8s_status }}
                     </span>
                     {% endif %}
                 </td>

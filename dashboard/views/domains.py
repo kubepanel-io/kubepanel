@@ -48,12 +48,30 @@ logger = logging.getLogger("django")
 def kpmain(request):
     """Main dashboard view"""
     if request.user.is_superuser:
-        domains = Domain.objects.all()
+        domains = list(Domain.objects.all())
     else:
-        domains = Domain.objects.filter(owner=request.user)
+        domains = list(Domain.objects.filter(owner=request.user))
+
+    # Fetch all K8s Domain CRs in one API call and build lookup by domain name
+    try:
+        from dashboard.k8s import list_domains as k8s_list_domains
+        k8s_domains = {d.domain_name: d for d in k8s_list_domains()}
+    except Exception as e:
+        logger.warning(f"Failed to fetch K8s domains: {e}")
+        k8s_domains = {}
+
+    # Annotate each Django domain with K8s status
+    for domain in domains:
+        k8s_domain = k8s_domains.get(domain.domain_name)
+        if k8s_domain and k8s_domain.status:
+            domain.k8s_status = k8s_domain.status.phase or 'Unknown'
+        else:
+            domain.k8s_status = 'NotFound'
 
     pkg = getattr(request.user.profile, 'package', None)
-    totals = domains.aggregate(
+    totals = Domain.objects.filter(
+        pk__in=[d.pk for d in domains]
+    ).aggregate(
         total_storage=Sum('storage_size'),
         total_cpu=Sum('cpu_limit'),
         total_mem=Sum('mem_limit'),
