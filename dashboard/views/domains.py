@@ -547,7 +547,7 @@ def volumesnapshots(request, domain):
 
 
 @login_required(login_url="/dashboard/")
-def restore_volumesnapshot(request, volumesnapshot, domain):
+def restore_volumesnapshot(request, domain, volumesnapshot):
     """
     Restore from a backup.
 
