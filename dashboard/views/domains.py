@@ -547,7 +547,7 @@ def volumesnapshots(request, domain):
 
 
 @login_required(login_url="/dashboard/")
-def restore_volumesnapshot(request, domain, volumesnapshot):
+def restore_backup(request, domain, backup_name):
     """
     Restore from a backup.
 
@@ -576,15 +576,15 @@ def restore_volumesnapshot(request, domain, volumesnapshot):
         messages.error(request, f"Failed to fetch backups: {e}")
         return redirect('volumesnapshots', domain=domain)
 
-    # Find the backup with matching volumeSnapshotName
+    # Find the backup by name
     backup = None
     for b in backups:
-        if b.status.volume_snapshot_name == volumesnapshot:
+        if b.name == backup_name:
             backup = b
             break
 
     if not backup:
-        messages.error(request, f"Backup with VolumeSnapshot '{volumesnapshot}' not found.")
+        messages.error(request, f"Backup '{backup_name}' not found.")
         return redirect('volumesnapshots', domain=domain)
 
     # Check that backup is complete
@@ -603,7 +603,7 @@ def restore_volumesnapshot(request, domain, volumesnapshot):
             error = "Domain name didn't match"
             return render(request, "main/restore_snapshot.html", {
                 "domain": domain,
-                "volumesnapshot": volumesnapshot,
+                "backup_name": backup_name,
                 "error": error,
             })
 
@@ -627,7 +627,7 @@ def restore_volumesnapshot(request, domain, volumesnapshot):
     # GET request - show confirmation form
     return render(request, "main/restore_snapshot.html", {
         "domain": domain,
-        "volumesnapshot": volumesnapshot,
+        "backup_name": backup_name,
         "backup": backup,
     })
 
