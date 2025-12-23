@@ -95,6 +95,7 @@ class DomainSpec:
         self.email_enabled: Optional[bool] = None
         self.dkim_selector: Optional[str] = None
         self.sftp_enabled: Optional[bool] = None
+        self.wordpress_preinstall: Optional[bool] = None
     
     def to_dict(self) -> dict:
         """Convert to Domain CR spec dict."""
@@ -173,7 +174,10 @@ class DomainSpec:
         
         if self.sftp_enabled is not None:
             spec["sftp"] = {"enabled": self.sftp_enabled}
-        
+
+        if self.wordpress_preinstall is not None:
+            spec["wordpress"] = {"preinstall": self.wordpress_preinstall}
+
         return spec
 
 
