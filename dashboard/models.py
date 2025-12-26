@@ -105,43 +105,25 @@ class Domain(models.Model):
     )
 
     # PHP Settings
-    PHP_MEMORY_CHOICES = [
-        ('128M', '128 MB'),
-        ('256M', '256 MB'),
-        ('512M', '512 MB'),
-        ('1G', '1 GB'),
-    ]
     php_memory_limit = models.CharField(
         max_length=10,
-        choices=PHP_MEMORY_CHOICES,
         default='256M',
-        help_text="PHP memory_limit"
+        help_text="PHP memory_limit (e.g. 256M, 512M, 1G)"
     )
     php_max_execution_time = models.IntegerField(
         default=30,
         validators=[MinValueValidator(1), MaxValueValidator(300)],
         help_text="PHP max_execution_time in seconds"
     )
-
-    PHP_SIZE_CHOICES = [
-        ('2M', '2 MB'),
-        ('8M', '8 MB'),
-        ('32M', '32 MB'),
-        ('64M', '64 MB'),
-        ('128M', '128 MB'),
-        ('256M', '256 MB'),
-    ]
     php_upload_max_filesize = models.CharField(
         max_length=10,
-        choices=PHP_SIZE_CHOICES,
         default='64M',
-        help_text="PHP upload_max_filesize"
+        help_text="PHP upload_max_filesize (e.g. 64M, 128M)"
     )
     php_post_max_size = models.CharField(
         max_length=10,
-        choices=PHP_SIZE_CHOICES,
         default='64M',
-        help_text="PHP post_max_size"
+        help_text="PHP post_max_size (e.g. 64M, 128M)"
     )
     custom_php_config = models.TextField(
         blank=True,
@@ -156,19 +138,10 @@ class Domain(models.Model):
         help_text="Document root path relative to domain root"
     )
 
-    NGINX_BODY_SIZE_CHOICES = [
-        ('1m', '1 MB'),
-        ('8m', '8 MB'),
-        ('32m', '32 MB'),
-        ('64m', '64 MB'),
-        ('128m', '128 MB'),
-        ('256m', '256 MB'),
-    ]
     client_max_body_size = models.CharField(
         max_length=10,
-        choices=NGINX_BODY_SIZE_CHOICES,
         default='64m',
-        help_text="Nginx client_max_body_size"
+        help_text="Nginx client_max_body_size (e.g. 64m, 128m)"
     )
     ssl_redirect = models.BooleanField(
         default=True,
