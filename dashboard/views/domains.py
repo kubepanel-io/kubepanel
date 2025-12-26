@@ -303,7 +303,7 @@ def view_domain(request, domain):
                 k8s_credentials['sftp_privkey'] = get_secret_value(
                     name='sftp-credentials',
                     namespace=domain_model.namespace,
-                    key='ssh-private-key'
+                    key='ssh-privatekey'
                 )
             except Exception as e:
                 logger.warning(f"Failed to get SFTP private key for {domain}: {e}")

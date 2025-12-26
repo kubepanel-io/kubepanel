@@ -48,15 +48,24 @@ class DomainForm(forms.ModelForm):
             'placeholder': 'Memory Limit in MiB'
         }),
         # PHP settings
-        'php_memory_limit': forms.Select(attrs={'class': 'form-select'}),
+        'php_memory_limit': forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'e.g. 256M'
+        }),
         'php_max_execution_time': forms.NumberInput(attrs={
             'class': 'form-control',
             'min': 1,
             'max': 300,
             'placeholder': 'Seconds (1-300)'
         }),
-        'php_upload_max_filesize': forms.Select(attrs={'class': 'form-select'}),
-        'php_post_max_size': forms.Select(attrs={'class': 'form-select'}),
+        'php_upload_max_filesize': forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'e.g. 64M'
+        }),
+        'php_post_max_size': forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'e.g. 64M'
+        }),
         'custom_php_config': forms.Textarea(attrs={
             'class': 'form-control font-mono',
             'rows': 4,
@@ -67,7 +76,10 @@ class DomainForm(forms.ModelForm):
             'class': 'form-control',
             'placeholder': '/public_html'
         }),
-        'client_max_body_size': forms.Select(attrs={'class': 'form-select'}),
+        'client_max_body_size': forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'e.g. 64m'
+        }),
         'ssl_redirect': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         'www_redirect': forms.Select(attrs={'class': 'form-select'}),
         'custom_nginx_config': forms.Textarea(attrs={
