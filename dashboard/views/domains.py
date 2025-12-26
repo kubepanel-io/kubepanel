@@ -1022,7 +1022,7 @@ def alias_add(request, pk):
             except K8sClientError as e:
                 messages.warning(request, f"Alias saved but failed to sync to Kubernetes: {e}")
 
-            return redirect('view_domain', pk=domain.pk)
+            return redirect('view_domain', domain=domain.domain_name)
     else:
         form = DomainAliasForm()
     return render(request, 'main/add_alias.html', {'domain': domain, 'form': form})
