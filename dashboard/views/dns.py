@@ -604,13 +604,25 @@ def edit_domain_dns_record(request, domain, record_index):
     try:
         k8s_domain = k8s_get_domain(domain)
         dns_spec = k8s_domain.spec.get('dns', {})
+        dns_status = k8s_domain.status.get('dns', {}) if k8s_domain.status else {}
         records = dns_spec.get('records', [])
+        status_records = dns_status.get('records', [])
 
         if record_index < 0 or record_index >= len(records):
             messages.error(request, "Record not found.")
             return redirect('domain_dns_records', domain=domain)
 
         record = records[record_index]
+
+        # Find the corresponding status record to get the recordId
+        # Match by (type, name, content) since that's what the operator uses
+        record_id = None
+        for sr in status_records:
+            if (sr.get('type') == record.get('type') and
+                sr.get('name') == record.get('name') and
+                sr.get('content') == record.get('content')):
+                record_id = sr.get('recordId')
+                break
 
     except K8sNotFoundError:
         messages.error(request, f"Domain CR not found for {domain}")
@@ -636,6 +648,11 @@ def edit_domain_dns_record(request, domain, record_index):
         }
         if priority and record_type in ['MX', 'SRV']:
             updated_record['priority'] = int(priority)
+
+        # Include the recordId if we have it - this tells the operator
+        # which Cloudflare record to update instead of creating a new one
+        if record_id:
+            updated_record['recordId'] = record_id
 
         try:
             k8s_update_dns_record(domain, record_index, updated_record)
