@@ -509,32 +509,34 @@ def domain_dns_records(request, domain):
         dns_spec = k8s_domain.spec.get('dns', {})
         dns_status = k8s_domain.status._raw.get('dns', {}) if k8s_domain.status else {}
 
-        # Get records from spec (what we want) and status (what CF has)
+        # Get records from status (what's actually in Cloudflare)
+        # Status records are the source of truth - they reflect what the operator has created
         spec_records = dns_spec.get('records', [])
         status_records = dns_status.get('records', [])
 
-        # Merge status info with spec records (for display)
+        # Show records from status (what's actually in Cloudflare)
         records = []
-        for i, record in enumerate(spec_records):
+        for i, status_rec in enumerate(status_records):
             record_display = {
                 'index': i,
-                'type': record.get('type', ''),
-                'name': record.get('name', ''),
-                'content': record.get('content', ''),
-                'ttl': record.get('ttl', 1),
-                'proxied': record.get('proxied', False),
-                'priority': record.get('priority'),
+                'type': status_rec.get('type', ''),
+                'name': status_rec.get('name', ''),
+                'content': status_rec.get('content', ''),
+                'ttl': status_rec.get('ttl', 1),
+                'proxied': status_rec.get('proxied', False),
+                'priority': status_rec.get('priority'),
+                'cf_record_id': status_rec.get('recordId'),
+                'status': status_rec.get('status', 'Ready'),
             }
-            # Try to find matching status record for CF ID and status
-            for status_rec in status_records:
-                if (status_rec.get('type') == record.get('type') and
-                    status_rec.get('name') == record.get('name') and
-                    status_rec.get('content') == record.get('content')):
-                    record_display['cf_record_id'] = status_rec.get('recordId')
-                    record_display['status'] = status_rec.get('status', 'Unknown')
+            # Check if this record is managed (exists in spec)
+            record_display['managed'] = False
+            for j, spec_rec in enumerate(spec_records):
+                if (spec_rec.get('type') == status_rec.get('type') and
+                    spec_rec.get('name') == status_rec.get('name') and
+                    spec_rec.get('content') == status_rec.get('content')):
+                    record_display['managed'] = True
+                    record_display['spec_index'] = j
                     break
-            else:
-                record_display['status'] = 'Pending'
             records.append(record_display)
 
         zone = dns_status.get('zone', {})
