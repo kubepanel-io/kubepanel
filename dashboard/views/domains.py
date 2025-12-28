@@ -227,6 +227,7 @@ def add_domain(request):
                     if cf_token and domain_spec.dns_enabled:
                         try:
                             from kubernetes.client import V1Secret, V1ObjectMeta
+                            from kubernetes.client.rest import ApiException as K8sApiException
                             from dashboard.k8s.client import get_core_api
 
                             core_api = get_core_api()
@@ -250,7 +251,7 @@ def add_domain(request):
                                 core_api.create_namespaced_secret(namespace="kubepanel", body=cf_secret)
                                 cf_secret_created = True
                                 logger.info(f"Created Cloudflare credential secret '{cf_credential_secret_name}'")
-                            except client.rest.ApiException as e:
+                            except K8sApiException as e:
                                 if e.status == 409:
                                     # Secret already exists, update it
                                     core_api.replace_namespaced_secret(
@@ -261,14 +262,23 @@ def add_domain(request):
                                     cf_secret_created = True
                                     logger.info(f"Updated Cloudflare credential secret '{cf_credential_secret_name}'")
                                 else:
+                                    logger.error(f"K8s API error creating CF credential secret: {e}")
                                     raise
                         except Exception as e:
-                            logger.warning(f"Failed to create CF credential secret: {e}")
-                            # Don't fail the domain creation, just disable DNS
-                            domain_spec.dns_enabled = False
+                            logger.error(f"Failed to create CF credential secret: {e}")
+                            # Don't fail the domain creation, just disable DNS entirely
+                            domain_spec.dns_enabled = None
+                            domain_spec.dns_credential_secret_ref = None
+                            domain_spec.dns_zone_name = None
+                            domain_spec.dns_zone_create = None
+                            domain_spec.dns_auto_create_records = None
 
                     # 3. Save Django model
                     domain_model.save()
+
+                    # Log the spec being created for debugging
+                    spec_dict = domain_spec.to_dict()
+                    logger.info(f"Creating Domain CR for '{domain_name}' with spec: dns={spec_dict.get('dns')}, email={spec_dict.get('email')}")
 
                     # 4. Create Domain CR
                     try:
