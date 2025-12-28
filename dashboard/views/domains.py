@@ -381,6 +381,7 @@ def view_domain(request, domain):
         'dns_phase': None,
         'dns_zone': {},
         'dns_records': [],
+        'dns_record_count': 0,
         'dns_message': '',
     }
 
@@ -430,10 +431,12 @@ def view_domain(request, domain):
 
             # Get DNS status
             dns_status = k8s_domain.status._raw.get('dns', {})
+            dns_records = dns_status.get('records', [])
             k8s_credentials['dns_enabled'] = k8s_domain.spec.get('dns', {}).get('enabled', False)
             k8s_credentials['dns_phase'] = dns_status.get('phase')
             k8s_credentials['dns_zone'] = dns_status.get('zone', {})
-            k8s_credentials['dns_records'] = dns_status.get('records', [])
+            k8s_credentials['dns_records'] = dns_records
+            k8s_credentials['dns_record_count'] = len(dns_records)
             k8s_credentials['dns_message'] = dns_status.get('message', '')
 
     except K8sNotFoundError:

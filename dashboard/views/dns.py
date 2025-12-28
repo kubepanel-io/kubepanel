@@ -604,7 +604,9 @@ def edit_domain_dns_record(request, domain, record_index):
     try:
         k8s_domain = k8s_get_domain(domain)
         dns_spec = k8s_domain.spec.get('dns', {})
-        dns_status = k8s_domain.status.get('dns', {}) if k8s_domain.status else {}
+        # Access raw dict from DomainStatus object
+        status_raw = k8s_domain.status._raw if k8s_domain.status else {}
+        dns_status = status_raw.get('dns', {})
         records = dns_spec.get('records', [])
         status_records = dns_status.get('records', [])
 
