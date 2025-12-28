@@ -529,14 +529,27 @@ def domain_dns_records(request, domain):
                 'status': status_rec.get('status', 'Ready'),
             }
             # Check if this record is managed (exists in spec)
+            # Match by recordId first (for edited records), then by (type, name, content)
             record_display['managed'] = False
+            status_record_id = status_rec.get('recordId')
+
             for j, spec_rec in enumerate(spec_records):
+                # Match by recordId (handles edits where content differs)
+                if status_record_id and spec_rec.get('recordId') == status_record_id:
+                    record_display['managed'] = True
+                    record_display['spec_index'] = j
+                    # Check if content differs (pending update)
+                    if spec_rec.get('content') != status_rec.get('content'):
+                        record_display['pending_update'] = True
+                    break
+                # Match by (type, name, content) for new records without recordId
                 if (spec_rec.get('type') == status_rec.get('type') and
                     spec_rec.get('name') == status_rec.get('name') and
                     spec_rec.get('content') == status_rec.get('content')):
                     record_display['managed'] = True
                     record_display['spec_index'] = j
                     break
+
             records.append(record_display)
 
         zone = dns_status.get('zone', {})
