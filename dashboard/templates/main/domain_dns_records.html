@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}DNS Records - {{ domain_name }} | KubePanel{% endblock %}
+
+{% block page_title %}DNS Records{% endblock %}
+{% block page_subtitle %}{{ domain_name }}{% endblock %}
+
+{% block header_search %}
+<div class="relative">
+    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+    </div>
+    <input type="text"
+           class="pl-12 pr-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl w-96 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 text-white placeholder-white/60 text-sm"
+           placeholder="Search records..."
+           id="record-search">
+</div>
+{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <a href="{% url 'view_domain' domain=domain_name %}"
+       class="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        <span>Back to Domain</span>
+    </a>
+    {% if dns_enabled %}
+    <a href="{% url 'add_domain_dns_record' domain=domain_name %}"
+       class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        <span>Add DNS Record</span>
+    </a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+
+    <!-- DNS Status Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-12 h-12 {% if dns_phase == 'Ready' %}bg-green-100{% elif dns_phase == 'Failed' %}bg-red-100{% else %}bg-yellow-100{% endif %} rounded-xl flex items-center justify-center">
+                    <svg class="w-6 h-6 {% if dns_phase == 'Ready' %}text-green-600{% elif dns_phase == 'Failed' %}text-red-600{% else %}text-yellow-600{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900">DNS Status: {{ dns_phase|default:"Not configured" }}</h3>
+                    <p class="text-sm text-gray-500">
+                        {% if zone.id %}Zone ID: <code class="bg-gray-100 px-2 py-0.5 rounded text-xs">{{ zone.id }}</code>{% endif %}
+                        {% if zone.name %}| Zone: {{ zone.name }}{% endif %}
+                    </p>
+                </div>
+            </div>
+            {% if dns_phase == 'Ready' %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                <span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                Active
+            </span>
+            {% elif dns_phase == 'Failed' %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                <span class="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                Failed
+            </span>
+            {% elif dns_phase %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+                <span class="w-2 h-2 bg-yellow-500 rounded-full mr-2 animate-pulse"></span>
+                {{ dns_phase }}
+            </span>
+            {% endif %}
+        </div>
+        {% if not dns_enabled %}
+        <div class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p class="text-sm text-yellow-800">
+                <strong>DNS management is not enabled for this domain.</strong>
+                To enable DNS management, configure a Cloudflare API token in the domain settings.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- DNS Records Table -->
+    <div class="relative overflow-hidden">
+      <div class="absolute inset-0 bg-gradient-to-br from-gray-50 to-white rounded-3xl"></div>
+      <div class="absolute inset-0 bg-white/90 backdrop-blur-sm rounded-3xl border border-gray-100 shadow-2xl"></div>
+      <div class="relative">
+
+        <!-- Table Header -->
+        <div class="px-8 py-6 border-b border-gray-100/80">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-2xl font-bold text-gray-900">Records</h3>
+              <p class="text-sm text-gray-500 mt-1">{{ records|length }} record{% if records|length != 1 %}s{% endif %}</p>
+            </div>
+            <div class="flex items-center space-x-4">
+              <select class="px-4 py-2.5 bg-white/80 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all shadow-sm"
+                      id="type-filter">
+                <option value="all">All Types</option>
+                <option value="A">A Records</option>
+                <option value="AAAA">AAAA Records</option>
+                <option value="CNAME">CNAME Records</option>
+                <option value="MX">MX Records</option>
+                <option value="TXT">TXT Records</option>
+                <option value="SRV">SRV Records</option>
+                <option value="CAA">CAA Records</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table Content -->
+        <div class="overflow-hidden">
+          <table class="min-w-full">
+            <thead>
+              <tr class="bg-gradient-to-r from-gray-50/80 to-gray-100/50">
+                <th class="px-8 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Type</th>
+                <th class="px-8 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Name</th>
+                <th class="px-8 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Content</th>
+                <th class="px-8 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Status</th>
+                <th class="px-8 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100/50">
+              {% for record in records %}
+              <tr class="group hover:bg-gradient-to-r hover:from-indigo-50/30 hover:to-purple-50/30 transition-all duration-300" data-type="{{ record.type }}">
+                <td class="px-8 py-6">
+                  <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs
+                              {% if record.type == 'A' %}bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800
+                              {% elif record.type == 'AAAA' %}bg-gradient-to-br from-indigo-100 to-indigo-200 text-indigo-800
+                              {% elif record.type == 'CNAME' %}bg-gradient-to-br from-green-100 to-green-200 text-green-800
+                              {% elif record.type == 'MX' %}bg-gradient-to-br from-purple-100 to-purple-200 text-purple-800
+                              {% elif record.type == 'TXT' %}bg-gradient-to-br from-orange-100 to-orange-200 text-orange-800
+                              {% elif record.type == 'SRV' %}bg-gradient-to-br from-pink-100 to-pink-200 text-pink-800
+                              {% elif record.type == 'CAA' %}bg-gradient-to-br from-cyan-100 to-cyan-200 text-cyan-800
+                              {% else %}bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800{% endif %}">
+                      {{ record.type }}
+                    </div>
+                    <div class="flex flex-col">
+                      <span class="text-sm font-bold text-gray-900">{{ record.type }}</span>
+                      {% if record.priority %}<span class="text-xs text-gray-500">Priority: {{ record.priority }}</span>{% endif %}
+                    </div>
+                  </div>
+                </td>
+                <td class="px-8 py-6">
+                  <div class="space-y-1">
+                    <div class="text-sm font-bold text-gray-900 font-mono bg-gray-50 px-3 py-1.5 rounded-lg">{{ record.name }}</div>
+                    <div class="text-xs text-gray-500">TTL: {% if record.ttl == 1 %}Auto{% else %}{{ record.ttl }}s{% endif %}</div>
+                  </div>
+                </td>
+                <td class="px-8 py-6">
+                  <div class="space-y-1">
+                    <div class="text-sm text-gray-900 font-mono bg-gray-50 px-3 py-1.5 rounded-lg max-w-md truncate" title="{{ record.content }}">{{ record.content }}</div>
+                    {% if record.proxied %}<span class="text-xs text-orange-600">Proxied</span>{% endif %}
+                  </div>
+                </td>
+                <td class="px-8 py-6">
+                  {% if record.status == 'Ready' %}
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                    Synced
+                  </span>
+                  {% elif record.status == 'Pending' %}
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5 animate-pulse"></span>
+                    Pending
+                  </span>
+                  {% elif record.status == 'Failed' %}
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                    Failed
+                  </span>
+                  {% else %}
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    {{ record.status|default:"Unknown" }}
+                  </span>
+                  {% endif %}
+                </td>
+                <td class="px-8 py-6">
+                  <div class="flex items-center space-x-3">
+                    <a href="{% url 'edit_domain_dns_record' domain=domain_name record_index=record.index %}" class="px-4 py-2 bg-gradient-to-r from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 text-blue-700 rounded-xl font-medium transition-all duration-300 flex items-center space-x-2 border border-blue-200/50 shadow-sm hover:shadow-md text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                        <span>Edit</span>
+                    </a>
+                    <a href="{% url 'delete_domain_dns_record' domain=domain_name record_index=record.index %}"
+                       class="px-4 py-2 bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 text-red-700 rounded-xl font-medium transition-all duration-300 flex items-center space-x-2 border border-red-200/50 shadow-sm hover:shadow-md text-sm">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                      </svg>
+                      <span>Delete</span>
+                    </a>
+                  </div>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="5" class="px-8 py-16">
+                  <div class="flex flex-col items-center justify-center space-y-4">
+                    <div class="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center">
+                      <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                      </svg>
+                    </div>
+                    <div class="text-center space-y-2">
+                      <h3 class="text-xl font-bold text-gray-900">No DNS Records Found</h3>
+                      <p class="text-gray-500 max-w-md">
+                        {% if dns_enabled %}
+                        Get started by creating your first DNS record for this domain. You can add A, AAAA, CNAME, MX, TXT, and other record types.
+                        {% else %}
+                        DNS management is not enabled for this domain. Configure a Cloudflare API token in the domain settings to enable DNS management.
+                        {% endif %}
+                      </p>
+                    </div>
+                    {% if dns_enabled %}
+                    <a href="{% url 'add_domain_dns_record' domain=domain_name %}"
+                       class="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 flex items-center space-x-2">
+                      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                      </svg>
+                      <span>Add First DNS Record</span>
+                    </a>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Search functionality
+    const searchInput = document.getElementById('record-search');
+    const typeFilter = document.getElementById('type-filter');
+    const tableRows = document.querySelectorAll('tbody tr[data-type]');
+
+    function filterRecords() {
+        const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+        const selectedType = typeFilter.value;
+
+        tableRows.forEach(row => {
+            const recordType = row.getAttribute('data-type');
+            const recordName = row.querySelector('td:nth-child(2) .font-mono')?.textContent?.toLowerCase() || '';
+            const recordContent = row.querySelector('td:nth-child(3) .font-mono')?.textContent?.toLowerCase() || '';
+
+            const matchesSearch = !searchInput || recordName.includes(searchTerm) || recordContent.includes(searchTerm) || recordType.toLowerCase().includes(searchTerm);
+            const matchesType = selectedType === 'all' || recordType === selectedType;
+
+            if (matchesSearch && matchesType) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', filterRecords);
+    }
+
+    if (typeFilter) {
+        typeFilter.addEventListener('change', filterRecords);
+    }
+
+    // Add smooth animations for table rows
+    tableRows.forEach((row, index) => {
+        row.style.opacity = '0';
+        row.style.transform = 'translateY(20px)';
+
+        setTimeout(() => {
+            row.style.transition = 'all 0.3s ease';
+            row.style.opacity = '1';
+            row.style.transform = 'translateY(0)';
+        }, index * 50);
+    });
+});
+</script>
+{% endblock %}

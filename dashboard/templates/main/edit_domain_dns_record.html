@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Edit DNS Record - {{ domain_name }} | KubePanel{% endblock %}
+
+{% block page_title %}Edit DNS Record{% endblock %}
+{% block page_subtitle %}{{ domain_name }}{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'domain_dns_records' domain=domain_name %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Records</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-cyan-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Edit DNS Record</h3>
+                    <p class="text-sm text-gray-600">Update the {{ record.type }} record for {{ domain_name }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="POST" novalidate id="edit-dns-record-form">
+                {% csrf_token %}
+
+                <!-- Record Type Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                        </svg>
+                        Record Type
+                    </h4>
+
+                    <div class="grid grid-cols-1 gap-6">
+                        <div>
+                            <label for="id_record_type" class="block text-sm font-medium text-gray-700 mb-2">
+                                DNS Record Type <span class="text-red-500">*</span>
+                            </label>
+                            <select name="record_type"
+                                    id="id_record_type"
+                                    class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                                    required>
+                                {% for rtype in record_types %}
+                                <option value="{{ rtype }}" {% if rtype == record.type %}selected{% endif %}>{{ rtype }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Record Details Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Record Details
+                    </h4>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Record Name -->
+                        <div>
+                            <label for="id_name" class="block text-sm font-medium text-gray-700 mb-2">
+                                Record Name <span class="text-red-500">*</span>
+                            </label>
+                            <input type="text"
+                                   name="name"
+                                   id="id_name"
+                                   value="{{ record.name }}"
+                                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm font-mono"
+                                   placeholder="subdomain or @ for root"
+                                   required>
+                            <p class="mt-1 text-xs text-gray-500">The subdomain name or @ for the root domain</p>
+                        </div>
+
+                        <!-- TTL -->
+                        <div>
+                            <label for="id_ttl" class="block text-sm font-medium text-gray-700 mb-2">
+                                TTL (Time to Live)
+                            </label>
+                            <select name="ttl"
+                                    id="id_ttl"
+                                    class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm">
+                                <option value="1" {% if record.ttl == 1 %}selected{% endif %}>Auto (Recommended)</option>
+                                <option value="60" {% if record.ttl == 60 %}selected{% endif %}>1 minute</option>
+                                <option value="300" {% if record.ttl == 300 %}selected{% endif %}>5 minutes</option>
+                                <option value="600" {% if record.ttl == 600 %}selected{% endif %}>10 minutes</option>
+                                <option value="900" {% if record.ttl == 900 %}selected{% endif %}>15 minutes</option>
+                                <option value="1800" {% if record.ttl == 1800 %}selected{% endif %}>30 minutes</option>
+                                <option value="3600" {% if record.ttl == 3600 %}selected{% endif %}>1 hour</option>
+                                <option value="7200" {% if record.ttl == 7200 %}selected{% endif %}>2 hours</option>
+                                <option value="14400" {% if record.ttl == 14400 %}selected{% endif %}>4 hours</option>
+                                <option value="86400" {% if record.ttl == 86400 %}selected{% endif %}>1 day</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Record Content Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Record Content
+                    </h4>
+
+                    <div class="grid grid-cols-1 gap-6">
+                        <!-- Content Field -->
+                        <div>
+                            <label for="id_content" class="block text-sm font-medium text-gray-700 mb-2">
+                                Target Value <span class="text-red-500">*</span>
+                            </label>
+                            <textarea name="content"
+                                      id="id_content"
+                                      rows="3"
+                                      class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm font-mono resize-none"
+                                      placeholder="Enter the target value for this record"
+                                      required>{{ record.content }}</textarea>
+                        </div>
+
+                        <!-- Priority Field (for MX/SRV records) -->
+                        <div id="priority-field" {% if record.type not in 'MX,SRV' %}class="hidden"{% endif %}>
+                            <label for="id_priority" class="block text-sm font-medium text-gray-700 mb-2">
+                                Priority
+                            </label>
+                            <input type="number"
+                                   name="priority"
+                                   id="id_priority"
+                                   value="{{ record.priority|default:10 }}"
+                                   min="0"
+                                   max="65535"
+                                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                                   placeholder="10">
+                            <p class="mt-1 text-xs text-gray-500">Lower values have higher priority</p>
+                        </div>
+
+                        <!-- Proxied Field -->
+                        <div class="flex items-center space-x-3">
+                            <input type="checkbox"
+                                   name="proxied"
+                                   id="id_proxied"
+                                   {% if record.proxied %}checked{% endif %}
+                                   class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                            <label for="id_proxied" class="text-sm font-medium text-gray-700">
+                                Proxy through Cloudflare (orange cloud)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'domain_dns_records' domain=domain_name %}"
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Update DNS Record</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const recordTypeSelect = document.getElementById('id_record_type');
+        const priorityField = document.getElementById('priority-field');
+        const proxiedCheckbox = document.getElementById('id_proxied');
+
+        const typesWithPriority = ['MX', 'SRV'];
+        const typesWithProxy = ['A', 'AAAA', 'CNAME'];
+
+        function updateFieldVisibility() {
+            const recordType = recordTypeSelect.value;
+
+            // Show/hide priority field
+            if (typesWithPriority.includes(recordType)) {
+                priorityField.classList.remove('hidden');
+            } else {
+                priorityField.classList.add('hidden');
+            }
+
+            // Enable/disable proxy checkbox
+            if (typesWithProxy.includes(recordType)) {
+                proxiedCheckbox.disabled = false;
+                proxiedCheckbox.parentElement.classList.remove('opacity-50');
+            } else {
+                proxiedCheckbox.checked = false;
+                proxiedCheckbox.disabled = true;
+                proxiedCheckbox.parentElement.classList.add('opacity-50');
+            }
+        }
+
+        recordTypeSelect.addEventListener('change', updateFieldVisibility);
+        updateFieldVisibility();
+
+        // Form submission with loading state
+        const form = document.getElementById('edit-dns-record-form');
+        const submitButton = form.querySelector('button[type="submit"]');
+
+        form.addEventListener('submit', function(e) {
+            const originalContent = submitButton.innerHTML;
+            submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Updating...';
+            submitButton.disabled = true;
+
+            setTimeout(() => {
+                submitButton.innerHTML = originalContent;
+                submitButton.disabled = false;
+            }, 5000);
+        });
+    });
+</script>
+{% endblock %}

@@ -61,6 +61,11 @@ from .dns import (
     create_dns_record_in_cloudflare,
     create_cf_zone,
     edit_dns_record_simple,
+    # Domain-centric DNS views
+    domain_dns_records,
+    add_domain_dns_record,
+    edit_domain_dns_record,
+    delete_domain_dns_record,
 )
 
 # Node views
@@ -169,6 +174,11 @@ __all__ = [
     'create_dns_record_in_cloudflare',
     'create_cf_zone',
     'edit_dns_record_simple',
+    # Domain-centric DNS
+    'domain_dns_records',
+    'add_domain_dns_record',
+    'edit_domain_dns_record',
+    'delete_domain_dns_record',
 
     # Nodes
     'node_list',

@@ -10,13 +10,21 @@ from django.db import transaction
 import json
 import logging
 
-from dashboard.models import DNSZone, DNSRecord, CloudflareAPIToken
+from dashboard.models import DNSZone, DNSRecord, CloudflareAPIToken, Domain
 from dashboard.forms import APITokenForm, ZoneCreationForm, DNSRecordForm
 from dashboard.services.dns_service import (
     CloudflareDNSService,
     DNSZoneManager,
     DNSRecordData,
     CloudflareAPIException,
+)
+from dashboard.k8s import (
+    get_domain as k8s_get_domain,
+    add_dns_record as k8s_add_dns_record,
+    update_dns_record as k8s_update_dns_record,
+    delete_dns_record_from_cr as k8s_delete_dns_record,
+    K8sNotFoundError,
+    K8sClientError,
 )
 
 logger = logging.getLogger("django")
@@ -485,6 +493,202 @@ def delete_api_token(request, token_id):
             messages.error(request, f"Error deleting token: {e}")
         return redirect("list_api_tokens")
     return render(request, "main/delete_confirm.html", {"object": token, "type": "API Token"})
+
+
+# =============================================================================
+# Domain-centric DNS management (via Domain CR)
+# =============================================================================
+
+@login_required
+def domain_dns_records(request, domain):
+    """List DNS records from Domain CR status."""
+    domain_obj = get_object_or_404(Domain, domain_name=domain)
+
+    try:
+        k8s_domain = k8s_get_domain(domain)
+        dns_spec = k8s_domain.spec.get('dns', {})
+        dns_status = k8s_domain.status._raw.get('dns', {}) if k8s_domain.status else {}
+
+        # Get records from spec (what we want) and status (what CF has)
+        spec_records = dns_spec.get('records', [])
+        status_records = dns_status.get('records', [])
+
+        # Merge status info with spec records (for display)
+        records = []
+        for i, record in enumerate(spec_records):
+            record_display = {
+                'index': i,
+                'type': record.get('type', ''),
+                'name': record.get('name', ''),
+                'content': record.get('content', ''),
+                'ttl': record.get('ttl', 1),
+                'proxied': record.get('proxied', False),
+                'priority': record.get('priority'),
+            }
+            # Try to find matching status record for CF ID and status
+            for status_rec in status_records:
+                if (status_rec.get('type') == record.get('type') and
+                    status_rec.get('name') == record.get('name') and
+                    status_rec.get('content') == record.get('content')):
+                    record_display['cf_record_id'] = status_rec.get('recordId')
+                    record_display['status'] = status_rec.get('status', 'Unknown')
+                    break
+            else:
+                record_display['status'] = 'Pending'
+            records.append(record_display)
+
+        zone = dns_status.get('zone', {})
+        dns_enabled = dns_spec.get('enabled', False)
+
+    except K8sNotFoundError:
+        messages.error(request, f"Domain CR not found for {domain}")
+        return redirect('kpmain')
+    except K8sClientError as e:
+        messages.error(request, f"Error fetching domain: {e}")
+        return redirect('kpmain')
+
+    return render(request, 'main/domain_dns_records.html', {
+        'domain': domain_obj,
+        'domain_name': domain,
+        'zone': zone,
+        'records': records,
+        'dns_phase': dns_status.get('phase'),
+        'dns_enabled': dns_enabled,
+    })
+
+
+@login_required
+def add_domain_dns_record(request, domain):
+    """Add DNS record by patching Domain CR spec."""
+    domain_obj = get_object_or_404(Domain, domain_name=domain)
+
+    if request.method == 'POST':
+        record_type = request.POST.get('record_type', 'A')
+        name = request.POST.get('name', '@')
+        content = request.POST.get('content', '')
+        ttl = int(request.POST.get('ttl', 1))
+        proxied = request.POST.get('proxied') == 'on'
+        priority = request.POST.get('priority')
+
+        new_record = {
+            'type': record_type,
+            'name': name,
+            'content': content,
+            'ttl': ttl,
+            'proxied': proxied,
+        }
+        if priority and record_type in ['MX', 'SRV']:
+            new_record['priority'] = int(priority)
+
+        try:
+            k8s_add_dns_record(domain, new_record)
+            messages.success(request, f"DNS record added. It may take a moment to propagate to Cloudflare.")
+            return redirect('domain_dns_records', domain=domain)
+        except K8sClientError as e:
+            messages.error(request, f"Failed to add DNS record: {e}")
+
+    return render(request, 'main/add_domain_dns_record.html', {
+        'domain': domain_obj,
+        'domain_name': domain,
+        'record_types': ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'SRV', 'CAA'],
+    })
+
+
+@login_required
+def edit_domain_dns_record(request, domain, record_index):
+    """Edit DNS record by patching Domain CR spec."""
+    domain_obj = get_object_or_404(Domain, domain_name=domain)
+
+    try:
+        k8s_domain = k8s_get_domain(domain)
+        dns_spec = k8s_domain.spec.get('dns', {})
+        records = dns_spec.get('records', [])
+
+        if record_index < 0 or record_index >= len(records):
+            messages.error(request, "Record not found.")
+            return redirect('domain_dns_records', domain=domain)
+
+        record = records[record_index]
+
+    except K8sNotFoundError:
+        messages.error(request, f"Domain CR not found for {domain}")
+        return redirect('kpmain')
+    except K8sClientError as e:
+        messages.error(request, f"Error fetching domain: {e}")
+        return redirect('kpmain')
+
+    if request.method == 'POST':
+        record_type = request.POST.get('record_type', record.get('type', 'A'))
+        name = request.POST.get('name', record.get('name', '@'))
+        content = request.POST.get('content', record.get('content', ''))
+        ttl = int(request.POST.get('ttl', record.get('ttl', 1)))
+        proxied = request.POST.get('proxied') == 'on'
+        priority = request.POST.get('priority')
+
+        updated_record = {
+            'type': record_type,
+            'name': name,
+            'content': content,
+            'ttl': ttl,
+            'proxied': proxied,
+        }
+        if priority and record_type in ['MX', 'SRV']:
+            updated_record['priority'] = int(priority)
+
+        try:
+            k8s_update_dns_record(domain, record_index, updated_record)
+            messages.success(request, f"DNS record updated. It may take a moment to propagate to Cloudflare.")
+            return redirect('domain_dns_records', domain=domain)
+        except K8sClientError as e:
+            messages.error(request, f"Failed to update DNS record: {e}")
+
+    return render(request, 'main/edit_domain_dns_record.html', {
+        'domain': domain_obj,
+        'domain_name': domain,
+        'record': record,
+        'record_index': record_index,
+        'record_types': ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'SRV', 'CAA'],
+    })
+
+
+@login_required
+def delete_domain_dns_record(request, domain, record_index):
+    """Delete DNS record from Domain CR spec."""
+    domain_obj = get_object_or_404(Domain, domain_name=domain)
+
+    try:
+        k8s_domain = k8s_get_domain(domain)
+        dns_spec = k8s_domain.spec.get('dns', {})
+        records = dns_spec.get('records', [])
+
+        if record_index < 0 or record_index >= len(records):
+            messages.error(request, "Record not found.")
+            return redirect('domain_dns_records', domain=domain)
+
+        record = records[record_index]
+
+    except K8sNotFoundError:
+        messages.error(request, f"Domain CR not found for {domain}")
+        return redirect('kpmain')
+    except K8sClientError as e:
+        messages.error(request, f"Error fetching domain: {e}")
+        return redirect('kpmain')
+
+    if request.method == 'POST':
+        try:
+            k8s_delete_dns_record(domain, record_index)
+            messages.success(request, f"DNS record deleted. It may take a moment to be removed from Cloudflare.")
+            return redirect('domain_dns_records', domain=domain)
+        except K8sClientError as e:
+            messages.error(request, f"Failed to delete DNS record: {e}")
+            return redirect('domain_dns_records', domain=domain)
+
+    return render(request, 'main/delete_domain_dns_record_confirm.html', {
+        'domain': domain_obj,
+        'domain_name': domain,
+        'record': record,
+        'record_index': record_index,
+    })
 
 
 # Legacy functions
