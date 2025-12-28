@@ -20,11 +20,15 @@ from dashboard.services.dns_service import (
 )
 from dashboard.k8s import (
     get_domain as k8s_get_domain,
-    add_dns_record as k8s_add_dns_record,
-    update_dns_record as k8s_update_dns_record,
-    delete_dns_record_from_cr as k8s_delete_dns_record,
     K8sNotFoundError,
     K8sClientError,
+    # DNSZone CR operations
+    get_dnszone,
+    add_dnszone_record,
+    update_dnszone_record,
+    delete_dnszone_record,
+    get_dnszone_records,
+    get_dnszone_record,
 )
 
 logger = logging.getLogger("django")
@@ -496,70 +500,61 @@ def delete_api_token(request, token_id):
 
 
 # =============================================================================
-# Domain-centric DNS management (via Domain CR)
+# Domain-centric DNS management (via DNSZone CR)
 # =============================================================================
 
 @login_required
 def domain_dns_records(request, domain):
-    """List DNS records from Domain CR status."""
+    """List DNS records from DNSZone CR."""
     domain_obj = get_object_or_404(Domain, domain_name=domain)
 
     try:
-        k8s_domain = k8s_get_domain(domain)
-        dns_spec = k8s_domain.spec.get('dns', {})
-        dns_status = k8s_domain.status._raw.get('dns', {}) if k8s_domain.status else {}
+        dnszone = get_dnszone(domain)
 
-        # Get records from status (what's actually in Cloudflare)
-        # Status records are the source of truth - they reflect what the operator has created
-        spec_records = dns_spec.get('records', [])
-        status_records = dns_status.get('records', [])
+        # Get records from spec (source of truth)
+        spec_records = dnszone.records
+        status_records = dnszone.status.records
 
-        # Show records from status (what's actually in Cloudflare)
+        # Build lookup of status records by recordId
+        status_by_id = {r.get('recordId'): r for r in status_records if r.get('recordId')}
+
+        # Show records from spec (Django manages all records)
         records = []
-        for i, status_rec in enumerate(status_records):
+        for i, spec_rec in enumerate(spec_records):
+            record_id = spec_rec.get('recordId')
+            status_rec = status_by_id.get(record_id, {}) if record_id else {}
+
             record_display = {
                 'index': i,
-                'type': status_rec.get('type', ''),
-                'name': status_rec.get('name', ''),
-                'content': status_rec.get('content', ''),
-                'ttl': status_rec.get('ttl', 1),
-                'proxied': status_rec.get('proxied', False),
-                'priority': status_rec.get('priority'),
-                'cf_record_id': status_rec.get('recordId'),
-                'status': status_rec.get('status', 'Ready'),
+                'type': spec_rec.get('type', ''),
+                'name': spec_rec.get('name', ''),
+                'content': spec_rec.get('content', ''),
+                'ttl': spec_rec.get('ttl', 1),
+                'proxied': spec_rec.get('proxied', False),
+                'priority': spec_rec.get('priority'),
+                'cf_record_id': record_id,
+                # Sync status: if no recordId, it's pending sync
+                'synced': record_id is not None and status_rec.get('synced', False),
+                'pending_sync': record_id is None,
+                'error': status_rec.get('error'),
             }
-            # Check if this record is managed (exists in spec)
-            # Match by recordId first (for edited records), then by (type, name, content)
-            record_display['managed'] = False
-            status_record_id = status_rec.get('recordId')
-
-            for j, spec_rec in enumerate(spec_records):
-                # Match by recordId (handles edits where content differs)
-                if status_record_id and spec_rec.get('recordId') == status_record_id:
-                    record_display['managed'] = True
-                    record_display['spec_index'] = j
-                    # Check if content differs (pending update)
-                    if spec_rec.get('content') != status_rec.get('content'):
-                        record_display['pending_update'] = True
-                    break
-                # Match by (type, name, content) for new records without recordId
-                if (spec_rec.get('type') == status_rec.get('type') and
-                    spec_rec.get('name') == status_rec.get('name') and
-                    spec_rec.get('content') == status_rec.get('content')):
-                    record_display['managed'] = True
-                    record_display['spec_index'] = j
-                    break
-
             records.append(record_display)
 
-        zone = dns_status.get('zone', {})
-        dns_enabled = dns_spec.get('enabled', False)
+        zone = {
+            'id': dnszone.status.zone_id,
+            'name': dnszone.zone_name,
+        }
+        dns_enabled = True
+        dns_phase = dnszone.status.phase
 
     except K8sNotFoundError:
-        messages.error(request, f"Domain CR not found for {domain}")
-        return redirect('kpmain')
+        # No DNSZone CR means DNS is not enabled
+        records = []
+        zone = {}
+        dns_enabled = False
+        dns_phase = None
     except K8sClientError as e:
-        messages.error(request, f"Error fetching domain: {e}")
+        messages.error(request, f"Error fetching DNS zone: {e}")
         return redirect('kpmain')
 
     return render(request, 'main/domain_dns_records.html', {
@@ -567,15 +562,22 @@ def domain_dns_records(request, domain):
         'domain_name': domain,
         'zone': zone,
         'records': records,
-        'dns_phase': dns_status.get('phase'),
+        'dns_phase': dns_phase,
         'dns_enabled': dns_enabled,
     })
 
 
 @login_required
 def add_domain_dns_record(request, domain):
-    """Add DNS record by patching Domain CR spec."""
+    """Add DNS record by patching DNSZone CR spec."""
     domain_obj = get_object_or_404(Domain, domain_name=domain)
+
+    # Check if DNSZone exists
+    try:
+        get_dnszone(domain)
+    except K8sNotFoundError:
+        messages.error(request, f"DNS is not enabled for {domain}. Please enable DNS first.")
+        return redirect('view_domain', domain=domain)
 
     if request.method == 'POST':
         record_type = request.POST.get('record_type', 'A')
@@ -596,7 +598,7 @@ def add_domain_dns_record(request, domain):
             new_record['priority'] = int(priority)
 
         try:
-            k8s_add_dns_record(domain, new_record)
+            add_dnszone_record(domain, new_record)
             messages.success(request, f"DNS record added. It may take a moment to propagate to Cloudflare.")
             return redirect('domain_dns_records', domain=domain)
         except K8sClientError as e:
@@ -611,39 +613,20 @@ def add_domain_dns_record(request, domain):
 
 @login_required
 def edit_domain_dns_record(request, domain, record_index):
-    """Edit DNS record by patching Domain CR spec."""
+    """Edit DNS record by patching DNSZone CR spec."""
     domain_obj = get_object_or_404(Domain, domain_name=domain)
 
     try:
-        k8s_domain = k8s_get_domain(domain)
-        dns_spec = k8s_domain.spec.get('dns', {})
-        # Access raw dict from DomainStatus object
-        status_raw = k8s_domain.status._raw if k8s_domain.status else {}
-        dns_status = status_raw.get('dns', {})
-        records = dns_spec.get('records', [])
-        status_records = dns_status.get('records', [])
-
-        if record_index < 0 or record_index >= len(records):
+        record = get_dnszone_record(domain, record_index)
+        if record is None:
             messages.error(request, "Record not found.")
             return redirect('domain_dns_records', domain=domain)
 
-        record = records[record_index]
-
-        # Find the corresponding status record to get the recordId
-        # Match by (type, name, content) since that's what the operator uses
-        record_id = None
-        for sr in status_records:
-            if (sr.get('type') == record.get('type') and
-                sr.get('name') == record.get('name') and
-                sr.get('content') == record.get('content')):
-                record_id = sr.get('recordId')
-                break
-
     except K8sNotFoundError:
-        messages.error(request, f"Domain CR not found for {domain}")
+        messages.error(request, f"DNS zone not found for {domain}")
         return redirect('kpmain')
     except K8sClientError as e:
-        messages.error(request, f"Error fetching domain: {e}")
+        messages.error(request, f"Error fetching DNS zone: {e}")
         return redirect('kpmain')
 
     if request.method == 'POST':
@@ -664,13 +647,10 @@ def edit_domain_dns_record(request, domain, record_index):
         if priority and record_type in ['MX', 'SRV']:
             updated_record['priority'] = int(priority)
 
-        # Include the recordId if we have it - this tells the operator
-        # which Cloudflare record to update instead of creating a new one
-        if record_id:
-            updated_record['recordId'] = record_id
+        # recordId is preserved by update_dnszone_record if present in original record
 
         try:
-            k8s_update_dns_record(domain, record_index, updated_record)
+            update_dnszone_record(domain, record_index, updated_record)
             messages.success(request, f"DNS record updated. It may take a moment to propagate to Cloudflare.")
             return redirect('domain_dns_records', domain=domain)
         except K8sClientError as e:
@@ -687,30 +667,25 @@ def edit_domain_dns_record(request, domain, record_index):
 
 @login_required
 def delete_domain_dns_record(request, domain, record_index):
-    """Delete DNS record from Domain CR spec."""
+    """Delete DNS record from DNSZone CR spec."""
     domain_obj = get_object_or_404(Domain, domain_name=domain)
 
     try:
-        k8s_domain = k8s_get_domain(domain)
-        dns_spec = k8s_domain.spec.get('dns', {})
-        records = dns_spec.get('records', [])
-
-        if record_index < 0 or record_index >= len(records):
+        record = get_dnszone_record(domain, record_index)
+        if record is None:
             messages.error(request, "Record not found.")
             return redirect('domain_dns_records', domain=domain)
 
-        record = records[record_index]
-
     except K8sNotFoundError:
-        messages.error(request, f"Domain CR not found for {domain}")
+        messages.error(request, f"DNS zone not found for {domain}")
         return redirect('kpmain')
     except K8sClientError as e:
-        messages.error(request, f"Error fetching domain: {e}")
+        messages.error(request, f"Error fetching DNS zone: {e}")
         return redirect('kpmain')
 
     if request.method == 'POST':
         try:
-            k8s_delete_dns_record(domain, record_index)
+            delete_dnszone_record(domain, record_index)
             messages.success(request, f"DNS record deleted. It may take a moment to be removed from Cloudflare.")
             return redirect('domain_dns_records', domain=domain)
         except K8sClientError as e:

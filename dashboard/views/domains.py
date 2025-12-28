@@ -43,6 +43,11 @@ from dashboard.k8s import (
     get_backup,
     create_restore,
     list_restores,
+    # DNSZone operations
+    create_dnszone,
+    delete_dnszone,
+    dnszone_exists,
+    get_dnszone,
 )
 
 logger = logging.getLogger("django")
@@ -160,7 +165,9 @@ def add_domain(request):
             }
 
             # Set up DNS config if auto_dns is enabled
+            # DNS is now managed via separate DNSZone CR, not via Domain CR
             cf_token = None
+            cf_credential_secret_name = None
             if auto_dns and api_token_id:
                 try:
                     cf_token = CloudflareAPIToken.objects.get(
@@ -169,15 +176,6 @@ def add_domain(request):
                     )
                     # Create credential secret name based on token
                     cf_credential_secret_name = f"cf-token-{cf_token.pk}"
-
-                    domain_spec.dns_enabled = True
-                    domain_spec.dns_credential_secret_ref = {
-                        "name": cf_credential_secret_name,
-                        "namespace": "kubepanel"
-                    }
-                    domain_spec.dns_zone_name = domain_name
-                    domain_spec.dns_zone_create = True
-                    domain_spec.dns_auto_create_records = True
                 except (CloudflareAPIToken.DoesNotExist, ValueError):
                     logger.warning(f"API token {api_token_id} not found for DNS setup")
                     cf_token = None
@@ -201,10 +199,11 @@ def add_domain(request):
                         messages.error(request, f"{field}: {error}")
                 return redirect('add_domain')
 
-            # Atomic operation: Create DKIM secret, Domain CR, and Django model
+            # Atomic operation: Create DKIM secret, Domain CR, Django model, and DNSZone CR
             k8s_domain = None
             dkim_secret_created = False
             cf_secret_created = False
+            dns_enabled = False
             try:
                 with transaction.atomic():
                     # 1. Create DKIM secret in kubepanel namespace
@@ -224,7 +223,7 @@ def add_domain(request):
                         raise ValueError(f"Failed to create DKIM secret: {str(e)}")
 
                     # 2. Create Cloudflare credential secret if DNS is enabled
-                    if cf_token and domain_spec.dns_enabled:
+                    if cf_token and cf_credential_secret_name:
                         try:
                             from kubernetes.client import V1Secret, V1ObjectMeta
                             from kubernetes.client.rest import ApiException as K8sApiException
@@ -267,11 +266,8 @@ def add_domain(request):
                         except Exception as e:
                             logger.error(f"Failed to create CF credential secret: {e}")
                             # Don't fail the domain creation, just disable DNS entirely
-                            domain_spec.dns_enabled = None
-                            domain_spec.dns_credential_secret_ref = None
-                            domain_spec.dns_zone_name = None
-                            domain_spec.dns_zone_create = None
-                            domain_spec.dns_auto_create_records = None
+                            cf_token = None
+                            cf_credential_secret_name = None
 
                     # 3. Save Django model
                     domain_model.save()
@@ -293,6 +289,94 @@ def add_domain(request):
                         logger.error(f"Failed to create Domain CR: {e}")
                         raise ValueError(f"Failed to create domain in cluster: {str(e)}")
 
+                    # 5. Create DNSZone CR if DNS is enabled
+                    if cf_token and cf_credential_secret_name:
+                        try:
+                            # Get cluster IPs for A records
+                            cluster_ips = list(ClusterIP.objects.values_list('ip_address', flat=True))
+
+                            # Build DNS records
+                            dns_records = []
+
+                            # A records for root and www
+                            for ip in cluster_ips:
+                                dns_records.append({
+                                    'type': 'A',
+                                    'name': '@',
+                                    'content': ip,
+                                    'ttl': 1,
+                                    'proxied': False,
+                                })
+                                dns_records.append({
+                                    'type': 'A',
+                                    'name': 'www',
+                                    'content': ip,
+                                    'ttl': 1,
+                                    'proxied': False,
+                                })
+
+                            # MX records
+                            for i, ip in enumerate(cluster_ips):
+                                mx_hostname = f'mx{i}'
+                                # A record for mail server
+                                dns_records.append({
+                                    'type': 'A',
+                                    'name': mx_hostname,
+                                    'content': ip,
+                                    'ttl': 1,
+                                    'proxied': False,
+                                })
+                                # MX record pointing to mx hostname
+                                dns_records.append({
+                                    'type': 'MX',
+                                    'name': '@',
+                                    'content': f'{mx_hostname}.{domain_name}',
+                                    'ttl': 1,
+                                    'priority': i * 10,
+                                })
+
+                            # SPF record
+                            spf_ips = ' '.join(f'ip4:{ip}' for ip in cluster_ips)
+                            dns_records.append({
+                                'type': 'TXT',
+                                'name': '@',
+                                'content': f'v=spf1 {spf_ips} -all',
+                                'ttl': 1,
+                            })
+
+                            # DMARC record
+                            dns_records.append({
+                                'type': 'TXT',
+                                'name': '_dmarc',
+                                'content': 'v=DMARC1; p=none;',
+                                'ttl': 1,
+                            })
+
+                            # DKIM record
+                            if dkim_dns_record:
+                                dns_records.append({
+                                    'type': 'TXT',
+                                    'name': f'{dkim_selector}._domainkey',
+                                    'content': dkim_dns_record,
+                                    'ttl': 1,
+                                })
+
+                            # Create DNSZone CR
+                            create_dnszone(
+                                zone_name=domain_name,
+                                credential_secret_ref={
+                                    'name': cf_credential_secret_name,
+                                    'namespace': 'kubepanel',
+                                },
+                                records=dns_records,
+                            )
+                            dns_enabled = True
+                            logger.info(f"Created DNSZone CR for '{domain_name}' with {len(dns_records)} records")
+                        except K8sClientError as e:
+                            logger.error(f"Failed to create DNSZone CR: {e}")
+                            # Don't fail domain creation, just log the error
+                            messages.warning(request, f"Domain created but DNS setup failed: {e}")
+
                     LogEntry.objects.create(
                         content_object=domain_model,
                         actor=f"user:{request.user.username}",
@@ -301,7 +385,7 @@ def add_domain(request):
                         message=f"Created domain {domain_name}",
                         data={
                             "domain_id": domain_model.pk,
-                            "dns_enabled": domain_spec.dns_enabled or False,
+                            "dns_enabled": dns_enabled,
                         }
                     )
 
@@ -322,7 +406,7 @@ def add_domain(request):
                 return redirect('add_domain')
 
             # Success message
-            if domain_spec.dns_enabled:
+            if dns_enabled:
                 messages.success(
                     request,
                     f"Domain '{domain_name}' created. DNS records will be configured automatically."
@@ -429,15 +513,21 @@ def view_domain(request, domain):
             k8s_credentials['dkim_pubkey'] = status.dkim_public_key
             k8s_credentials['dkim_dns_record'] = status.dkim_dns_record
 
-            # Get DNS status
-            dns_status = k8s_domain.status._raw.get('dns', {})
-            dns_records = dns_status.get('records', [])
-            k8s_credentials['dns_enabled'] = k8s_domain.spec.get('dns', {}).get('enabled', False)
-            k8s_credentials['dns_phase'] = dns_status.get('phase')
-            k8s_credentials['dns_zone'] = dns_status.get('zone', {})
-            k8s_credentials['dns_records'] = dns_records
-            k8s_credentials['dns_record_count'] = len(dns_records)
-            k8s_credentials['dns_message'] = dns_status.get('message', '')
+            # Get DNS status from DNSZone CR (separate from Domain CR)
+            try:
+                dnszone = get_dnszone(domain)
+                k8s_credentials['dns_enabled'] = True
+                k8s_credentials['dns_phase'] = dnszone.status.phase
+                k8s_credentials['dns_zone'] = {'id': dnszone.status.zone_id, 'name': dnszone.zone_name}
+                k8s_credentials['dns_records'] = dnszone.records  # From spec (source of truth)
+                k8s_credentials['dns_record_count'] = len(dnszone.records)
+                k8s_credentials['dns_message'] = dnszone.status.message
+            except K8sNotFoundError:
+                # No DNSZone CR means DNS is not enabled for this domain
+                k8s_credentials['dns_enabled'] = False
+            except K8sClientError as e:
+                logger.warning(f"Failed to get DNSZone for {domain}: {e}")
+                k8s_credentials['dns_enabled'] = False
 
     except K8sNotFoundError:
         k8s_credentials['error'] = 'Domain not found in Kubernetes cluster'
@@ -574,6 +664,17 @@ def delete_domain(request, domain):
 
     if request.method == 'POST':
         try:
+            # Delete DNSZone CR first (if it exists)
+            try:
+                delete_dnszone(domain)
+                logger.info(f"Deleted DNSZone CR for '{domain}'")
+            except K8sNotFoundError:
+                logger.info(f"DNSZone CR for '{domain}' not found (may not have DNS enabled)")
+            except K8sClientError as e:
+                logger.warning(f"Failed to delete DNSZone CR: {e}")
+                # Continue with domain deletion even if DNSZone deletion fails
+
+            # Delete Domain CR
             try:
                 k8s_delete_domain(domain)
                 logger.info(f"Deleted Domain CR for '{domain}'")

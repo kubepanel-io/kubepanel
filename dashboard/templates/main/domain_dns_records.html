@@ -164,46 +164,42 @@
                   </div>
                 </td>
                 <td class="px-8 py-6">
-                  {% if record.status == 'Ready' %}
+                  {% if record.synced %}
                   <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                     <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
                     Synced
                   </span>
-                  {% elif record.status == 'Pending' %}
+                  {% elif record.pending_sync %}
                   <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                     <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5 animate-pulse"></span>
                     Pending
                   </span>
-                  {% elif record.status == 'Failed' %}
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                  {% elif record.error %}
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title="{{ record.error }}">
                     <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
                     Failed
                   </span>
                   {% else %}
                   <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    {{ record.status|default:"Unknown" }}
+                    Syncing...
                   </span>
                   {% endif %}
                 </td>
                 <td class="px-8 py-6">
                   <div class="flex items-center space-x-3">
-                    {% if record.managed %}
-                    <a href="{% url 'edit_domain_dns_record' domain=domain_name record_index=record.spec_index %}" class="px-4 py-2 bg-gradient-to-r from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 text-blue-700 rounded-xl font-medium transition-all duration-300 flex items-center space-x-2 border border-blue-200/50 shadow-sm hover:shadow-md text-sm">
+                    <a href="{% url 'edit_domain_dns_record' domain=domain_name record_index=record.index %}" class="px-4 py-2 bg-gradient-to-r from-blue-50 to-cyan-50 hover:from-blue-100 hover:to-cyan-100 text-blue-700 rounded-xl font-medium transition-all duration-300 flex items-center space-x-2 border border-blue-200/50 shadow-sm hover:shadow-md text-sm">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                         </svg>
                         <span>Edit</span>
                     </a>
-                    <a href="{% url 'delete_domain_dns_record' domain=domain_name record_index=record.spec_index %}"
+                    <a href="{% url 'delete_domain_dns_record' domain=domain_name record_index=record.index %}"
                        class="px-4 py-2 bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 text-red-700 rounded-xl font-medium transition-all duration-300 flex items-center space-x-2 border border-red-200/50 shadow-sm hover:shadow-md text-sm">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                       </svg>
                       <span>Delete</span>
                     </a>
-                    {% else %}
-                    <span class="text-xs text-gray-500 italic" title="Auto-created records are managed by the system">Auto-managed</span>
-                    {% endif %}
                   </div>
                 </td>
               </tr>

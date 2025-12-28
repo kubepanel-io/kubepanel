@@ -66,6 +66,22 @@ from .firewall import (
     get_current_modsecurity_rules,
 )
 
+from .dnszone import (
+    DNSZone,
+    DNSZoneStatus,
+    create_dnszone,
+    get_dnszone,
+    dnszone_exists,
+    delete_dnszone,
+    patch_dnszone_records,
+    add_dns_record as add_dnszone_record,
+    update_dns_record as update_dnszone_record,
+    delete_dns_record as delete_dnszone_record,
+    get_dns_records as get_dnszone_records,
+    get_dns_record as get_dnszone_record,
+    get_dns_status as get_dnszone_status,
+)
+
 __all__ = [
     # Exceptions
     'K8sClientError',
@@ -124,4 +140,19 @@ __all__ = [
     # Firewall operations
     'sync_modsecurity_rules',
     'get_current_modsecurity_rules',
+
+    # DNSZone operations
+    'DNSZone',
+    'DNSZoneStatus',
+    'create_dnszone',
+    'get_dnszone',
+    'dnszone_exists',
+    'delete_dnszone',
+    'patch_dnszone_records',
+    'add_dnszone_record',
+    'update_dnszone_record',
+    'delete_dnszone_record',
+    'get_dnszone_records',
+    'get_dnszone_record',
+    'get_dnszone_status',
 ]
