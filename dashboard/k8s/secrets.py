@@ -219,3 +219,74 @@ def update_database_password(
         }
     )
     logger.info(f"Updated database password in secret for namespace '{namespace}'")
+
+
+def create_dkim_secret(
+    name: str,
+    namespace: str,
+    private_key: str,
+    public_key: str,
+    dns_record: str,
+    selector: str = "default"
+) -> None:
+    """
+    Create a DKIM credentials secret in Kubernetes.
+
+    This is called by Django when creating a new domain, before the
+    Domain CR is created. The operator will read this secret to
+    configure OpenDKIM.
+
+    Args:
+        name: Secret name (e.g., 'dkim-example-com')
+        namespace: Namespace to create secret in (typically 'kubepanel')
+        private_key: PEM-encoded RSA private key
+        public_key: Base64-encoded public key
+        dns_record: Complete DKIM DNS TXT record value
+        selector: DKIM selector name (default 'default')
+
+    Raises:
+        K8sClientError: For K8s API errors
+    """
+    from kubernetes.client import V1Secret, V1ObjectMeta
+
+    core_api = get_core_api()
+
+    secret = V1Secret(
+        api_version="v1",
+        kind="Secret",
+        metadata=V1ObjectMeta(
+            name=name,
+            namespace=namespace,
+            labels={
+                "app.kubernetes.io/managed-by": "kubepanel",
+                "kubepanel.io/type": "dkim",
+            }
+        ),
+        type="Opaque",
+        string_data={
+            "selector": selector,
+            "private-key": private_key,
+            "public-key": public_key,
+            "dns-txt-record": dns_record,
+        }
+    )
+
+    try:
+        core_api.create_namespaced_secret(namespace=namespace, body=secret)
+        logger.info(f"Created DKIM secret '{namespace}/{name}'")
+    except ApiException as e:
+        if e.status == 409:
+            # Secret already exists, update it
+            logger.info(f"DKIM secret '{namespace}/{name}' already exists, updating")
+            update_secret_keys(
+                name=name,
+                namespace=namespace,
+                updates={
+                    "selector": selector,
+                    "private-key": private_key,
+                    "public-key": public_key,
+                    "dns-txt-record": dns_record,
+                }
+            )
+        else:
+            handle_api_exception(e, f"Secret '{namespace}/{name}'")

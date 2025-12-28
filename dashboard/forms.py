@@ -12,94 +12,181 @@ class PhpImageChoiceField(forms.ModelChoiceField):
         return f"{obj.version}"
 
 class DomainForm(forms.ModelForm):
+    """
+    Form for Django-backed domain fields (resource limits, PHP version).
 
-  php_image = PhpImageChoiceField(
-      queryset=PhpImage.objects.all(),
-      widget=forms.Select(attrs={'class': 'form-select'}),
-      label='PHP Version',
-      required=True,
-  )
+    These fields are stored in Django for quota enforcement.
+    Infrastructure config (PHP/nginx settings) is in DomainConfigForm.
+    """
+    php_image = PhpImageChoiceField(
+        queryset=PhpImage.objects.all(),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='PHP Version',
+        required=True,
+    )
 
-  class Meta:
-    model = Domain
-    fields = [
-        # Resource limits
-        "cpu_limit", "mem_limit", "php_image",
-        # PHP settings
-        "php_memory_limit", "php_max_execution_time",
-        "php_upload_max_filesize", "php_post_max_size",
-        "custom_php_config",
-        # Webserver settings
-        "document_root", "client_max_body_size",
-        "ssl_redirect", "www_redirect",
-        "custom_nginx_config",
-    ]
-    widgets = {
-        'cpu_limit': forms.NumberInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'CPU Limit in milliCPU',
-            'min': 100,
-            'max': 4000,
-        }),
-        'mem_limit': forms.NumberInput(attrs={
-            'class': 'form-control',
-            'min': 32,
-            'max': 4096,
-            'placeholder': 'Memory Limit in MiB'
-        }),
-        # PHP settings
-        'php_memory_limit': forms.TextInput(attrs={
+    class Meta:
+        model = Domain
+        fields = ["cpu_limit", "mem_limit", "php_image"]
+        widgets = {
+            'cpu_limit': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'CPU Limit in milliCPU',
+                'min': 100,
+                'max': 4000,
+            }),
+            'mem_limit': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 32,
+                'max': 4096,
+                'placeholder': 'Memory Limit in MiB'
+            }),
+        }
+
+
+class DomainConfigForm(forms.Form):
+    """
+    Form for domain infrastructure config (PHP/nginx settings).
+
+    This is NOT a ModelForm - config is stored in the Kubernetes Domain CR,
+    not in the Django database. The CR is the single source of truth.
+    """
+    # PHP settings
+    php_memory_limit = forms.CharField(
+        max_length=10,
+        required=False,
+        widget=forms.TextInput(attrs={
             'class': 'form-control',
             'placeholder': 'e.g. 256M'
         }),
-        'php_max_execution_time': forms.NumberInput(attrs={
+        label='PHP Memory Limit',
+    )
+    php_max_execution_time = forms.IntegerField(
+        min_value=1,
+        max_value=300,
+        required=False,
+        widget=forms.NumberInput(attrs={
             'class': 'form-control',
             'min': 1,
             'max': 300,
             'placeholder': 'Seconds (1-300)'
         }),
-        'php_upload_max_filesize': forms.TextInput(attrs={
+        label='Max Execution Time',
+    )
+    php_upload_max_filesize = forms.CharField(
+        max_length=10,
+        required=False,
+        widget=forms.TextInput(attrs={
             'class': 'form-control',
             'placeholder': 'e.g. 64M'
         }),
-        'php_post_max_size': forms.TextInput(attrs={
+        label='Upload Max Filesize',
+    )
+    php_post_max_size = forms.CharField(
+        max_length=10,
+        required=False,
+        widget=forms.TextInput(attrs={
             'class': 'form-control',
             'placeholder': 'e.g. 64M'
         }),
-        'custom_php_config': forms.Textarea(attrs={
+        label='Post Max Size',
+    )
+    custom_php_config = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
             'class': 'form-control font-mono',
             'rows': 4,
             'placeholder': '; Custom php.ini directives\n; display_errors = Off'
         }),
-        # Webserver settings
-        'document_root': forms.TextInput(attrs={
+        label='Custom PHP Config',
+    )
+
+    # Webserver settings
+    document_root = forms.CharField(
+        max_length=255,
+        required=False,
+        widget=forms.TextInput(attrs={
             'class': 'form-control',
             'placeholder': '/public_html'
         }),
-        'client_max_body_size': forms.TextInput(attrs={
+        label='Document Root',
+    )
+    client_max_body_size = forms.CharField(
+        max_length=10,
+        required=False,
+        widget=forms.TextInput(attrs={
             'class': 'form-control',
             'placeholder': 'e.g. 64m'
         }),
-        'ssl_redirect': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        'www_redirect': forms.Select(attrs={'class': 'form-select'}),
-        'custom_nginx_config': forms.Textarea(attrs={
+        label='Client Max Body Size',
+    )
+    ssl_redirect = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label='Redirect HTTP to HTTPS',
+    )
+    www_redirect = forms.ChoiceField(
+        choices=[
+            ('none', 'No redirect'),
+            ('www-to-root', 'Redirect www to root'),
+            ('root-to-www', 'Redirect root to www'),
+        ],
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='WWW Redirect',
+    )
+    custom_nginx_config = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
             'class': 'form-control font-mono',
             'rows': 4,
             'placeholder': '# Custom nginx location directives\n# location /api { proxy_pass http://...; }'
         }),
-    }
-    labels = {
-        'php_memory_limit': 'PHP Memory Limit',
-        'php_max_execution_time': 'Max Execution Time',
-        'php_upload_max_filesize': 'Upload Max Filesize',
-        'php_post_max_size': 'Post Max Size',
-        'custom_php_config': 'Custom PHP Config',
-        'document_root': 'Document Root',
-        'client_max_body_size': 'Client Max Body Size',
-        'ssl_redirect': 'Redirect HTTP to HTTPS',
-        'www_redirect': 'WWW Redirect',
-        'custom_nginx_config': 'Custom Nginx Config',
-    }
+        label='Custom Nginx Config',
+    )
+
+    def to_cr_patch(self) -> dict:
+        """Convert form data to Domain CR patch format."""
+        data = self.cleaned_data
+        patch = {
+            "php": {
+                "settings": {}
+            },
+            "webserver": {}
+        }
+
+        # PHP settings
+        if data.get("php_memory_limit"):
+            patch["php"]["settings"]["memoryLimit"] = data["php_memory_limit"]
+        if data.get("php_max_execution_time"):
+            patch["php"]["settings"]["maxExecutionTime"] = data["php_max_execution_time"]
+        if data.get("php_upload_max_filesize"):
+            patch["php"]["settings"]["uploadMaxFilesize"] = data["php_upload_max_filesize"]
+        if data.get("php_post_max_size"):
+            patch["php"]["settings"]["postMaxSize"] = data["php_post_max_size"]
+        if data.get("custom_php_config"):
+            patch["php"]["customConfig"] = data["custom_php_config"]
+
+        # Webserver settings
+        if data.get("document_root"):
+            patch["webserver"]["documentRoot"] = data["document_root"]
+        if data.get("client_max_body_size"):
+            patch["webserver"]["clientMaxBodySize"] = data["client_max_body_size"]
+        patch["webserver"]["sslRedirect"] = data.get("ssl_redirect", True)
+        if data.get("www_redirect"):
+            patch["webserver"]["wwwRedirect"] = data["www_redirect"]
+        if data.get("custom_nginx_config"):
+            patch["webserver"]["customConfig"] = data["custom_nginx_config"]
+
+        # Clean up empty nested dicts
+        if not patch["php"]["settings"]:
+            del patch["php"]["settings"]
+        if not patch["php"]:
+            del patch["php"]
+        if not patch["webserver"]:
+            del patch["webserver"]
+
+        return patch
 
 class DomainAddForm(forms.ModelForm):
 

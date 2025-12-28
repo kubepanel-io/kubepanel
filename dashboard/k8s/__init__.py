@@ -19,6 +19,11 @@ from .domain import (
     create_domain,
     get_domain,
     get_domain_by_cr_name,
+    get_domain_config,
+    get_dns_status,
+    add_dns_record,
+    update_dns_record,
+    delete_dns_record_from_cr,
     list_domains,
     update_domain,
     patch_domain,
@@ -35,6 +40,7 @@ from .secrets import (
     get_database_password,
     update_sftp_password,
     update_database_password,
+    create_dkim_secret,
 )
 
 from .backup import (
@@ -77,6 +83,11 @@ __all__ = [
     'create_domain',
     'get_domain',
     'get_domain_by_cr_name',
+    'get_domain_config',
+    'get_dns_status',
+    'add_dns_record',
+    'update_dns_record',
+    'delete_dns_record_from_cr',
     'list_domains',
     'update_domain',
     'patch_domain',
@@ -92,6 +103,7 @@ __all__ = [
     'get_database_password',
     'update_sftp_password',
     'update_database_password',
+    'create_dkim_secret',
 
     # Backup operations
     'Backup',

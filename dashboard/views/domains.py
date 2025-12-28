@@ -14,16 +14,18 @@ from kubernetes import client, config
 import os
 import logging
 import base64
+import re
 import pymysql
 
 from dashboard.models import Domain, DomainAlias, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry
-from dashboard.forms import DomainForm, DomainAddForm, DomainAliasForm
-from dashboard.services.dns_service import DNSZoneManager, CloudflareAPIException, generate_email_dns_records
+from dashboard.forms import DomainForm, DomainConfigForm, DomainAddForm, DomainAliasForm
+from dashboard.services.dkim import generate_dkim_keypair
 from dashboard.k8s import (
     DomainSpec,
     create_domain as k8s_create_domain,
     delete_domain as k8s_delete_domain,
     get_domain as k8s_get_domain,
+    get_domain_config as k8s_get_domain_config,
     patch_domain as k8s_patch_domain,
     suspend_domain as k8s_suspend_domain,
     unsuspend_domain as k8s_unsuspend_domain,
@@ -32,6 +34,7 @@ from dashboard.k8s import (
     get_secret_value,
     update_sftp_password as k8s_update_sftp_password,
     update_database_password as k8s_update_database_password,
+    create_dkim_secret,
     K8sClientError,
     K8sConflictError,
     K8sNotFoundError,
@@ -43,6 +46,13 @@ from dashboard.k8s import (
 )
 
 logger = logging.getLogger("django")
+
+
+def _sanitize_k8s_name(name: str) -> str:
+    """Convert a domain name to a valid Kubernetes resource name."""
+    sanitized = re.sub(r'[^a-z0-9-]', '-', name.lower())
+    sanitized = re.sub(r'-+', '-', sanitized)
+    return sanitized.strip('-')
 
 
 @login_required(login_url="/dashboard/")
@@ -125,7 +135,12 @@ def add_domain(request):
 
             wp_preinstall = request.POST.get("wordpress_preinstall") == "1"
             auto_dns = request.POST.get("auto_dns") == "1"
-            api_token = request.POST.get("api_token", "") if auto_dns else None
+            api_token_id = request.POST.get("api_token", "") if auto_dns else None
+
+            # Generate DKIM keypair
+            dkim_private_key, dkim_public_key, dkim_dns_record = generate_dkim_keypair()
+            dkim_secret_name = f"dkim-{_sanitize_k8s_name(domain_name)}"
+            dkim_selector = "default"
 
             # Build Domain CR spec
             domain_spec = DomainSpec(
@@ -138,6 +153,34 @@ def add_domain(request):
             domain_spec.title = domain_name
             domain_spec.wordpress_preinstall = wp_preinstall
             domain_spec.email_enabled = True
+            domain_spec.dkim_selector = dkim_selector
+            domain_spec.dkim_secret_ref = {
+                "name": dkim_secret_name,
+                "namespace": "kubepanel"
+            }
+
+            # Set up DNS config if auto_dns is enabled
+            cf_token = None
+            if auto_dns and api_token_id:
+                try:
+                    cf_token = CloudflareAPIToken.objects.get(
+                        pk=int(api_token_id),
+                        user=request.user
+                    )
+                    # Create credential secret name based on token
+                    cf_credential_secret_name = f"cf-token-{cf_token.pk}"
+
+                    domain_spec.dns_enabled = True
+                    domain_spec.dns_credential_secret_ref = {
+                        "name": cf_credential_secret_name,
+                        "namespace": "kubepanel"
+                    }
+                    domain_spec.dns_zone_name = domain_name
+                    domain_spec.dns_zone_create = True
+                    domain_spec.dns_auto_create_records = True
+                except (CloudflareAPIToken.DoesNotExist, ValueError):
+                    logger.warning(f"API token {api_token_id} not found for DNS setup")
+                    cf_token = None
 
             # Build Django model (don't save yet)
             domain_model = Domain(
@@ -158,12 +201,76 @@ def add_domain(request):
                         messages.error(request, f"{field}: {error}")
                 return redirect('add_domain')
 
-            # Atomic operation: Create both or neither
+            # Atomic operation: Create DKIM secret, Domain CR, and Django model
             k8s_domain = None
+            dkim_secret_created = False
+            cf_secret_created = False
             try:
                 with transaction.atomic():
+                    # 1. Create DKIM secret in kubepanel namespace
+                    try:
+                        create_dkim_secret(
+                            name=dkim_secret_name,
+                            namespace="kubepanel",
+                            private_key=dkim_private_key,
+                            public_key=dkim_public_key,
+                            dns_record=dkim_dns_record,
+                            selector=dkim_selector
+                        )
+                        dkim_secret_created = True
+                        logger.info(f"Created DKIM secret '{dkim_secret_name}' for '{domain_name}'")
+                    except K8sClientError as e:
+                        logger.error(f"Failed to create DKIM secret: {e}")
+                        raise ValueError(f"Failed to create DKIM secret: {str(e)}")
+
+                    # 2. Create Cloudflare credential secret if DNS is enabled
+                    if cf_token and domain_spec.dns_enabled:
+                        try:
+                            from kubernetes.client import V1Secret, V1ObjectMeta
+                            from dashboard.k8s.client import get_core_api
+
+                            core_api = get_core_api()
+                            cf_secret = V1Secret(
+                                api_version="v1",
+                                kind="Secret",
+                                metadata=V1ObjectMeta(
+                                    name=cf_credential_secret_name,
+                                    namespace="kubepanel",
+                                    labels={
+                                        "app.kubernetes.io/managed-by": "kubepanel",
+                                        "kubepanel.io/type": "cloudflare-credential",
+                                    }
+                                ),
+                                type="Opaque",
+                                string_data={
+                                    "api_token": cf_token.api_token,
+                                }
+                            )
+                            try:
+                                core_api.create_namespaced_secret(namespace="kubepanel", body=cf_secret)
+                                cf_secret_created = True
+                                logger.info(f"Created Cloudflare credential secret '{cf_credential_secret_name}'")
+                            except client.rest.ApiException as e:
+                                if e.status == 409:
+                                    # Secret already exists, update it
+                                    core_api.replace_namespaced_secret(
+                                        name=cf_credential_secret_name,
+                                        namespace="kubepanel",
+                                        body=cf_secret
+                                    )
+                                    cf_secret_created = True
+                                    logger.info(f"Updated Cloudflare credential secret '{cf_credential_secret_name}'")
+                                else:
+                                    raise
+                        except Exception as e:
+                            logger.warning(f"Failed to create CF credential secret: {e}")
+                            # Don't fail the domain creation, just disable DNS
+                            domain_spec.dns_enabled = False
+
+                    # 3. Save Django model
                     domain_model.save()
 
+                    # 4. Create Domain CR
                     try:
                         k8s_domain = k8s_create_domain(
                             spec=domain_spec,
@@ -182,13 +289,17 @@ def add_domain(request):
                         user=request.user,
                         level="INFO",
                         message=f"Created domain {domain_name}",
-                        data={"domain_id": domain_model.pk}
+                        data={
+                            "domain_id": domain_model.pk,
+                            "dns_enabled": domain_spec.dns_enabled or False,
+                        }
                     )
 
             except ValueError as e:
                 messages.error(request, str(e))
                 return redirect('add_domain')
             except Exception as e:
+                # Cleanup on failure
                 if k8s_domain:
                     try:
                         k8s_delete_domain(domain_name)
@@ -200,45 +311,12 @@ def add_domain(request):
                 messages.error(request, f"Failed to create domain: {str(e)}")
                 return redirect('add_domain')
 
-            # Handle auto DNS if requested
-            if auto_dns and api_token:
-                try:
-                    user_token = CloudflareAPIToken.objects.get(
-                        api_token=api_token,
-                        user=request.user
-                    )
-                    cluster_ips = list(ClusterIP.objects.values_list("ip_address", flat=True))
-                    dns_records = generate_email_dns_records(domain_name, cluster_ips)
-                    zone_manager = DNSZoneManager(user_token)
-                    zone_obj, created_records = zone_manager.create_zone_with_records(
-                        domain_name,
-                        dns_records
-                    )
-
-                    logger.info(f"Created DNS zone for '{domain_name}' with {len(created_records)} records")
-                    messages.success(
-                        request,
-                        f"Domain '{domain_name}' created with {len(created_records)} DNS records."
-                    )
-
-                except CloudflareAPIToken.DoesNotExist:
-                    logger.warning(f"API token not found for DNS setup")
-                    messages.warning(
-                        request,
-                        f"Domain '{domain_name}' created, but DNS setup failed: Invalid API token."
-                    )
-                except CloudflareAPIException as e:
-                    logger.error(f"Cloudflare API error: {e}")
-                    messages.warning(
-                        request,
-                        f"Domain '{domain_name}' created, but DNS setup failed: {e.message}"
-                    )
-                except Exception as e:
-                    logger.error(f"DNS setup error: {e}")
-                    messages.warning(
-                        request,
-                        f"Domain '{domain_name}' created, but DNS setup failed: {str(e)}"
-                    )
+            # Success message
+            if domain_spec.dns_enabled:
+                messages.success(
+                    request,
+                    f"Domain '{domain_name}' created. DNS records will be configured automatically."
+                )
             else:
                 messages.success(request, f"Domain '{domain_name}' created successfully.")
 
@@ -262,6 +340,10 @@ def add_domain(request):
 def view_domain(request, domain):
     """
     View domain details with credentials fetched from Kubernetes.
+
+    Uses two forms:
+    - DomainForm: Django-backed fields (cpu_limit, mem_limit, php_image)
+    - DomainConfigForm: CR-backed config (PHP/nginx settings from K8s)
     """
     try:
         if request.user.is_superuser:
@@ -284,7 +366,24 @@ def view_domain(request, domain):
         'dkim_dns_record': None,
         'phase': 'Unknown',
         'error': None,
+        # DNS status
+        'dns_enabled': False,
+        'dns_phase': None,
+        'dns_zone': {},
+        'dns_records': [],
+        'dns_message': '',
     }
+
+    # Get config from CR (single source of truth for infrastructure config)
+    config_initial = {}
+    try:
+        config_initial = k8s_get_domain_config(domain)
+    except K8sNotFoundError:
+        logger.warning(f"Domain CR not found for {domain}, using defaults")
+    except K8sClientError as e:
+        logger.warning(f"Failed to get domain config for {domain}: {e}")
+
+    config_form = DomainConfigForm(initial=config_initial)
 
     try:
         k8s_domain = k8s_get_domain(domain)
@@ -319,6 +418,14 @@ def view_domain(request, domain):
             k8s_credentials['dkim_pubkey'] = status.dkim_public_key
             k8s_credentials['dkim_dns_record'] = status.dkim_dns_record
 
+            # Get DNS status
+            dns_status = k8s_domain.status._raw.get('dns', {})
+            k8s_credentials['dns_enabled'] = k8s_domain.spec.get('dns', {}).get('enabled', False)
+            k8s_credentials['dns_phase'] = dns_status.get('phase')
+            k8s_credentials['dns_zone'] = dns_status.get('zone', {})
+            k8s_credentials['dns_records'] = dns_status.get('records', [])
+            k8s_credentials['dns_message'] = dns_status.get('message', '')
+
     except K8sNotFoundError:
         k8s_credentials['error'] = 'Domain not found in Kubernetes cluster'
         k8s_credentials['phase'] = 'NotFound'
@@ -333,13 +440,21 @@ def view_domain(request, domain):
     return render(request, "main/view_domain.html", {
         "domain": domain_model,
         "form": form,
+        "config_form": config_form,
         "k8s": k8s_credentials,
     })
 
 
 @login_required(login_url="/dashboard/")
 def save_domain(request, domain):
-    """Save domain settings. Updates both Django model and K8s Domain CR."""
+    """
+    Save domain settings.
+
+    - Django model fields (cpu_limit, mem_limit, php_image): saved to Django DB
+    - Config fields (PHP/nginx settings): saved directly to K8s Domain CR
+
+    The CR is the single source of truth for infrastructure configuration.
+    """
     try:
         domain_instance = Domain.objects.get(domain_name=domain)
     except Domain.DoesNotExist:
@@ -351,8 +466,11 @@ def save_domain(request, domain):
     if request.method != 'POST':
         return redirect('view_domain', domain=domain_instance.domain_name)
 
+    # Validate both forms
     form = DomainForm(request.POST, instance=domain_instance)
-    if not form.is_valid():
+    config_form = DomainConfigForm(request.POST)
+
+    if not form.is_valid() or not config_form.is_valid():
         k8s_credentials = {'phase': 'Unknown', 'error': None}
         try:
             k8s_domain = k8s_get_domain(domain)
@@ -371,12 +489,16 @@ def save_domain(request, domain):
         return render(request, "main/view_domain.html", {
             "domain": domain_instance,
             "form": form,
+            "config_form": config_form,
             "k8s": k8s_credentials,
         })
 
+    # Save Django fields (resource limits for quota enforcement)
     form.save()
 
+    # Build CR patch from both Django fields and config form
     try:
+        # Start with resource limits from Django model
         patch = {
             "resources": {
                 "limits": {
@@ -386,25 +508,15 @@ def save_domain(request, domain):
             },
             "php": {
                 "version": domain_instance.php_image.version,
-                "settings": {
-                    "memoryLimit": domain_instance.php_memory_limit,
-                    "maxExecutionTime": domain_instance.php_max_execution_time,
-                    "uploadMaxFilesize": domain_instance.php_upload_max_filesize,
-                    "postMaxSize": domain_instance.php_post_max_size,
-                },
-            },
-            "webserver": {
-                "documentRoot": domain_instance.document_root,
-                "clientMaxBodySize": domain_instance.client_max_body_size,
-                "sslRedirect": domain_instance.ssl_redirect,
-                "wwwRedirect": domain_instance.www_redirect,
             },
         }
-        # Add custom configs only if they have content
-        if domain_instance.custom_php_config:
-            patch["php"]["customConfig"] = domain_instance.custom_php_config
-        if domain_instance.custom_nginx_config:
-            patch["webserver"]["customConfig"] = domain_instance.custom_nginx_config
+
+        # Merge config from config_form (CR-only fields)
+        config_patch = config_form.to_cr_patch()
+        if "php" in config_patch:
+            patch["php"].update(config_patch["php"])
+        if "webserver" in config_patch:
+            patch["webserver"] = config_patch["webserver"]
 
         k8s_patch_domain(domain_instance.domain_name, patch)
         logger.info(f"Patched Domain CR for {domain_instance.domain_name}")
@@ -425,8 +537,8 @@ def save_domain(request, domain):
             "cpu_limit": domain_instance.cpu_limit,
             "mem_limit": domain_instance.mem_limit,
             "php_version": domain_instance.php_image.version,
-            "php_memory_limit": domain_instance.php_memory_limit,
-            "document_root": domain_instance.document_root,
+            "php_memory_limit": config_form.cleaned_data.get("php_memory_limit"),
+            "document_root": config_form.cleaned_data.get("document_root"),
         }
     )
 

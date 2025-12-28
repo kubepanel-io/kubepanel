@@ -94,8 +94,17 @@ class DomainSpec:
         self.database_enabled: Optional[bool] = None
         self.email_enabled: Optional[bool] = None
         self.dkim_selector: Optional[str] = None
+        self.dkim_secret_ref: Optional[dict] = None  # {"name": "...", "namespace": "..."}
         self.sftp_enabled: Optional[bool] = None
         self.wordpress_preinstall: Optional[bool] = None
+
+        # DNS configuration (optional)
+        self.dns_enabled: Optional[bool] = None
+        self.dns_credential_secret_ref: Optional[dict] = None  # {"name": "...", "namespace": "..."}
+        self.dns_zone_name: Optional[str] = None
+        self.dns_zone_create: Optional[bool] = None
+        self.dns_auto_create_records: Optional[bool] = None
+        self.dns_records: Optional[list] = None  # List of record dicts
     
     def to_dict(self) -> dict:
         """Convert to Domain CR spec dict."""
@@ -164,19 +173,38 @@ class DomainSpec:
         # Add feature toggles if explicitly set
         if self.database_enabled is not None:
             spec["database"] = {"enabled": self.database_enabled}
-        
-        if self.email_enabled is not None or self.dkim_selector:
+
+        if self.email_enabled is not None or self.dkim_selector or self.dkim_secret_ref:
             spec["email"] = {}
             if self.email_enabled is not None:
                 spec["email"]["enabled"] = self.email_enabled
             if self.dkim_selector:
                 spec["email"]["dkimSelector"] = self.dkim_selector
-        
+            if self.dkim_secret_ref:
+                spec["email"]["dkimSecretRef"] = self.dkim_secret_ref
+
         if self.sftp_enabled is not None:
             spec["sftp"] = {"enabled": self.sftp_enabled}
 
         if self.wordpress_preinstall is not None:
             spec["wordpress"] = {"preinstall": self.wordpress_preinstall}
+
+        # Add DNS configuration if enabled
+        if self.dns_enabled is not None:
+            dns = {"enabled": self.dns_enabled}
+            if self.dns_credential_secret_ref:
+                dns["credentialSecretRef"] = self.dns_credential_secret_ref
+            if self.dns_zone_name or self.dns_zone_create is not None:
+                dns["zone"] = {}
+                if self.dns_zone_name:
+                    dns["zone"]["name"] = self.dns_zone_name
+                if self.dns_zone_create is not None:
+                    dns["zone"]["create"] = self.dns_zone_create
+            if self.dns_auto_create_records is not None:
+                dns["autoCreateRecords"] = self.dns_auto_create_records
+            if self.dns_records:
+                dns["records"] = self.dns_records
+            spec["dns"] = dns
 
         return spec
 
@@ -260,10 +288,31 @@ class DomainStatus:
     @property
     def dkim_public_key(self) -> Optional[str]:
         return self._raw.get("email", {}).get("dkimPublicKey")
-    
+
     @property
     def dkim_dns_record(self) -> Optional[str]:
         return self._raw.get("email", {}).get("dkimDnsRecord")
+
+    # DNS
+    @property
+    def dns_phase(self) -> Optional[str]:
+        return self._raw.get("dns", {}).get("phase")
+
+    @property
+    def dns_zone_id(self) -> Optional[str]:
+        return self._raw.get("dns", {}).get("zone", {}).get("id")
+
+    @property
+    def dns_zone_name(self) -> Optional[str]:
+        return self._raw.get("dns", {}).get("zone", {}).get("name")
+
+    @property
+    def dns_records(self) -> list[dict]:
+        return self._raw.get("dns", {}).get("records", [])
+
+    @property
+    def dns_message(self) -> Optional[str]:
+        return self._raw.get("dns", {}).get("message")
 
 
 class Domain:
@@ -599,10 +648,10 @@ def unsuspend_domain(domain_name: str) -> Domain:
 def domain_exists(domain_name: str) -> bool:
     """
     Check if a domain exists.
-    
+
     Args:
         domain_name: The domain name to check
-    
+
     Returns:
         True if exists, False otherwise
     """
@@ -611,3 +660,161 @@ def domain_exists(domain_name: str) -> bool:
         return True
     except K8sNotFoundError:
         return False
+
+
+def get_dns_status(domain_name: str) -> dict:
+    """
+    Get DNS status from Domain CR.
+
+    Args:
+        domain_name: The domain name
+
+    Returns:
+        Dict with DNS status:
+        - phase: Ready/Provisioning/Failed
+        - zone: {id, name}
+        - records: List of record status dicts
+
+    Raises:
+        K8sNotFoundError: If domain not found
+        K8sClientError: For other K8s errors
+    """
+    domain = get_domain(domain_name)
+    return domain.status._raw.get("dns", {})
+
+
+def add_dns_record(domain_name: str, record: dict) -> Domain:
+    """
+    Add a DNS record to Domain CR spec.
+
+    Args:
+        domain_name: The domain name
+        record: Record dict with type, name, content, ttl, proxied, priority
+
+    Returns:
+        Updated Domain object
+    """
+    domain = get_domain(domain_name)
+    current_dns = domain.spec.get("dns", {})
+    records = current_dns.get("records", [])
+
+    records.append(record)
+
+    return patch_domain(domain_name, {
+        "dns": {
+            **current_dns,
+            "records": records
+        }
+    })
+
+
+def update_dns_record(domain_name: str, record_index: int, record: dict) -> Domain:
+    """
+    Update a DNS record in Domain CR spec.
+
+    Args:
+        domain_name: The domain name
+        record_index: Index of the record in spec.dns.records
+        record: Updated record dict
+
+    Returns:
+        Updated Domain object
+    """
+    domain = get_domain(domain_name)
+    current_dns = domain.spec.get("dns", {})
+    records = list(current_dns.get("records", []))
+
+    if 0 <= record_index < len(records):
+        records[record_index] = record
+    else:
+        raise K8sClientError(f"Record index {record_index} out of range")
+
+    return patch_domain(domain_name, {
+        "dns": {
+            **current_dns,
+            "records": records
+        }
+    })
+
+
+def delete_dns_record_from_cr(domain_name: str, record_index: int) -> Domain:
+    """
+    Delete a DNS record from Domain CR spec.
+
+    Args:
+        domain_name: The domain name
+        record_index: Index of the record to delete
+
+    Returns:
+        Updated Domain object
+    """
+    domain = get_domain(domain_name)
+    current_dns = domain.spec.get("dns", {})
+    records = list(current_dns.get("records", []))
+
+    if 0 <= record_index < len(records):
+        records.pop(record_index)
+    else:
+        raise K8sClientError(f"Record index {record_index} out of range")
+
+    return patch_domain(domain_name, {
+        "dns": {
+            **current_dns,
+            "records": records
+        }
+    })
+
+
+def get_domain_config(domain_name: str) -> dict:
+    """
+    Get domain configuration from CR spec.
+
+    Returns a flat dict with all config values that can be used
+    to populate edit forms. This is the single source of truth
+    for infrastructure configuration.
+
+    Args:
+        domain_name: The domain name
+
+    Returns:
+        Dict with config values:
+        - php_memory_limit
+        - php_max_execution_time
+        - php_upload_max_filesize
+        - php_post_max_size
+        - custom_php_config
+        - document_root
+        - client_max_body_size
+        - ssl_redirect
+        - www_redirect
+        - custom_nginx_config
+
+    Raises:
+        K8sNotFoundError: If domain not found
+        K8sClientError: For other K8s errors
+    """
+    domain = get_domain(domain_name)
+    spec = domain.spec
+
+    # Extract PHP settings
+    php = spec.get("php", {})
+    php_settings = php.get("settings", {})
+
+    # Extract webserver settings
+    webserver = spec.get("webserver", {})
+
+    return {
+        # PHP settings
+        "php_memory_limit": php_settings.get("memoryLimit", "256M"),
+        "php_max_execution_time": php_settings.get("maxExecutionTime", 30),
+        "php_upload_max_filesize": php_settings.get("uploadMaxFilesize", "64M"),
+        "php_post_max_size": php_settings.get("postMaxSize", "64M"),
+        "custom_php_config": php.get("customConfig", ""),
+
+        # Webserver settings
+        "document_root": webserver.get("documentRoot", "/public_html"),
+        "client_max_body_size": webserver.get("clientMaxBodySize", "64m"),
+        "ssl_redirect": webserver.get("sslRedirect", True),
+        "www_redirect": webserver.get("wwwRedirect", "none"),
+        "custom_nginx_config": webserver.get("customConfig", ""),
+    }

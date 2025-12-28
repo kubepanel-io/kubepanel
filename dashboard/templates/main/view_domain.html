@@ -362,11 +362,11 @@
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Memory Limit</label>
-                                {{ form.php_memory_limit }}
+                                {{ config_form.php_memory_limit }}
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Max Execution Time (sec)</label>
-                                {{ form.php_max_execution_time }}
+                                {{ config_form.php_max_execution_time }}
                             </div>
                         </div>
 
@@ -374,18 +374,18 @@
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Upload Max Filesize</label>
-                                {{ form.php_upload_max_filesize }}
+                                {{ config_form.php_upload_max_filesize }}
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Post Max Size</label>
-                                {{ form.php_post_max_size }}
+                                {{ config_form.php_post_max_size }}
                             </div>
                         </div>
 
                         <!-- Custom PHP Config -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Custom php.ini Directives</label>
-                            {{ form.custom_php_config }}
+                            {{ config_form.custom_php_config }}
                             <p class="mt-1 text-xs text-gray-500">Add custom PHP configuration (one directive per line)</p>
                         </div>
                     </div>
@@ -403,31 +403,31 @@
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Document Root</label>
-                                {{ form.document_root }}
+                                {{ config_form.document_root }}
                                 <p class="mt-1 text-xs text-gray-500">Path relative to domain root</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Client Max Body Size</label>
-                                {{ form.client_max_body_size }}
+                                {{ config_form.client_max_body_size }}
                             </div>
                         </div>
 
                         <!-- Redirects -->
                         <div class="grid grid-cols-2 gap-4">
                             <div class="flex items-center">
-                                {{ form.ssl_redirect }}
+                                {{ config_form.ssl_redirect }}
                                 <label class="ml-2 text-sm font-medium text-gray-700">Redirect HTTP to HTTPS</label>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">WWW Redirect</label>
-                                {{ form.www_redirect }}
+                                {{ config_form.www_redirect }}
                             </div>
                         </div>
 
                         <!-- Custom Nginx Config -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Custom Nginx Config</label>
-                            {{ form.custom_nginx_config }}
+                            {{ config_form.custom_nginx_config }}
                             <p class="mt-1 text-xs text-gray-500">Add custom nginx location directives</p>
                         </div>
                     </div>

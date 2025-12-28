@@ -3,7 +3,6 @@ from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
-from .defaultconfigs import NGINX_DEFAULT_CONFIG
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.db.models.signals import post_save
@@ -102,67 +101,6 @@ class Domain(models.Model):
         on_delete=models.PROTECT,
         related_name='domains',
         help_text="PHP version for this domain"
-    )
-
-    # PHP Settings
-    php_memory_limit = models.CharField(
-        max_length=10,
-        default='256M',
-        help_text="PHP memory_limit (e.g. 256M, 512M, 1G)"
-    )
-    php_max_execution_time = models.IntegerField(
-        default=30,
-        validators=[MinValueValidator(1), MaxValueValidator(300)],
-        help_text="PHP max_execution_time in seconds"
-    )
-    php_upload_max_filesize = models.CharField(
-        max_length=10,
-        default='64M',
-        help_text="PHP upload_max_filesize (e.g. 64M, 128M)"
-    )
-    php_post_max_size = models.CharField(
-        max_length=10,
-        default='64M',
-        help_text="PHP post_max_size (e.g. 64M, 128M)"
-    )
-    custom_php_config = models.TextField(
-        blank=True,
-        default='',
-        help_text="Custom php.ini directives"
-    )
-
-    # === Webserver (Nginx) Configuration ===
-    document_root = models.CharField(
-        max_length=255,
-        default='/public_html',
-        help_text="Document root path relative to domain root"
-    )
-
-    client_max_body_size = models.CharField(
-        max_length=10,
-        default='64m',
-        help_text="Nginx client_max_body_size (e.g. 64m, 128m)"
-    )
-    ssl_redirect = models.BooleanField(
-        default=True,
-        help_text="Redirect HTTP to HTTPS"
-    )
-
-    WWW_REDIRECT_CHOICES = [
-        ('none', 'No redirect'),
-        ('www-to-root', 'Redirect www to root'),
-        ('root-to-www', 'Redirect root to www'),
-    ]
-    www_redirect = models.CharField(
-        max_length=20,
-        choices=WWW_REDIRECT_CHOICES,
-        default='none',
-        help_text="WWW redirect behavior"
-    )
-    custom_nginx_config = models.TextField(
-        blank=True,
-        default='',
-        help_text="Custom nginx location directives"
     )
 
     # === Timestamps ===
