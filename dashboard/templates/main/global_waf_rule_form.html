@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if edit_mode %}Edit{% else %}Add{% endif %} WAF Rule | KubePanel{% endblock %}
+
+{% block page_title %}{% if edit_mode %}Edit{% else %}Add{% endif %} WAF Rule{% endblock %}
+{% block page_subtitle %}{% if edit_mode %}Modify existing WAF rule{% else %}Create a new WAF rule{% endif %}{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'global_waf_list' %}"
+   class="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center space-x-2">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Rules</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <form method="POST" class="space-y-6">
+        {% csrf_token %}
+
+        <!-- Action Selection -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Action</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <label class="relative cursor-pointer">
+                    <input type="radio" name="action" value="block" class="peer sr-only"
+                           {% if rule.action == "block" or not rule.action %}checked{% endif %}>
+                    <div class="p-4 border-2 rounded-lg peer-checked:border-red-500 peer-checked:bg-red-50 hover:bg-gray-50 transition-colors">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-3">
+                                <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <span class="font-medium text-gray-900">Block</span>
+                                <p class="text-sm text-gray-500">Deny matching requests</p>
+                            </div>
+                        </div>
+                    </div>
+                </label>
+                <label class="relative cursor-pointer">
+                    <input type="radio" name="action" value="allow" class="peer sr-only"
+                           {% if rule.action == "allow" %}checked{% endif %}>
+                    <div class="p-4 border-2 rounded-lg peer-checked:border-green-500 peer-checked:bg-green-50 hover:bg-gray-50 transition-colors">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <span class="font-medium text-gray-900">Allow</span>
+                                <p class="text-sm text-gray-500">Whitelist matching requests</p>
+                            </div>
+                        </div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- Matching Conditions -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Matching Conditions</h3>
+            <p class="text-sm text-gray-500 mb-6">At least one condition is required. Multiple conditions are combined with AND logic.</p>
+
+            <div class="space-y-6">
+                <!-- Domain -->
+                <div>
+                    <label for="domain" class="block text-sm font-medium text-gray-700 mb-2">
+                        Domain
+                        <span class="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <input type="text"
+                           id="domain"
+                           name="domain"
+                           value="{{ rule.domain|default:'' }}"
+                           placeholder="example.com"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm">
+                    <p class="mt-1 text-sm text-gray-500">Leave empty to match all domains</p>
+                </div>
+
+                <!-- IP Address -->
+                <div>
+                    <label for="ip" class="block text-sm font-medium text-gray-700 mb-2">
+                        IP Address
+                        <span class="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <input type="text"
+                           id="ip"
+                           name="ip"
+                           value="{{ rule.ip|default:'' }}"
+                           placeholder="192.168.1.100 or 10.0.0.0/24"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm font-mono">
+                    <p class="mt-1 text-sm text-gray-500">Single IP or CIDR notation. Leave empty to match all IPs</p>
+                </div>
+
+                <!-- Path -->
+                <div>
+                    <label for="path" class="block text-sm font-medium text-gray-700 mb-2">
+                        Path
+                        <span class="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <div class="flex space-x-3">
+                        <input type="text"
+                               id="path"
+                               name="path"
+                               value="{{ rule.path|default:'' }}"
+                               placeholder="/wp-admin or /.env"
+                               class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm font-mono">
+                        <select name="pathMatchType"
+                                class="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white">
+                            <option value="prefix" {% if rule.pathMatchType == "prefix" or not rule.pathMatchType %}selected{% endif %}>Prefix</option>
+                            <option value="exact" {% if rule.pathMatchType == "exact" %}selected{% endif %}>Exact</option>
+                            <option value="regex" {% if rule.pathMatchType == "regex" %}selected{% endif %}>Regex</option>
+                        </select>
+                    </div>
+                    <p class="mt-1 text-sm text-gray-500">Leave empty to match all paths</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comment -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Description</h3>
+            <div>
+                <label for="comment" class="block text-sm font-medium text-gray-700 mb-2">
+                    Comment
+                    <span class="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <textarea id="comment"
+                          name="comment"
+                          rows="2"
+                          placeholder="Why this rule exists..."
+                          class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm resize-none">{{ rule.comment|default:'' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Submit Buttons -->
+        <div class="flex items-center justify-end space-x-4">
+            <a href="{% url 'global_waf_list' %}"
+               class="px-6 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                Cancel
+            </a>
+            <button type="submit"
+                    class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200">
+                {% if edit_mode %}Update Rule{% else %}Add Rule{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Preview Section -->
+<div class="max-w-2xl mx-auto mt-8">
+    <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+        <h4 class="text-sm font-medium text-gray-700 mb-3">Rule Preview</h4>
+        <div id="rule-preview" class="text-sm font-mono bg-white p-4 rounded-lg border border-gray-200 text-gray-600">
+            Fill in the form above to see the rule preview
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const domainInput = document.getElementById('domain');
+    const ipInput = document.getElementById('ip');
+    const pathInput = document.getElementById('path');
+    const pathMatchSelect = document.querySelector('select[name="pathMatchType"]');
+    const actionInputs = document.querySelectorAll('input[name="action"]');
+    const preview = document.getElementById('rule-preview');
+
+    function updatePreview() {
+        const domain = domainInput.value.trim();
+        const ip = ipInput.value.trim();
+        const path = pathInput.value.trim();
+        const pathMatch = pathMatchSelect.value;
+        let action = 'block';
+        actionInputs.forEach(input => {
+            if (input.checked) action = input.value;
+        });
+
+        const conditions = [];
+        if (domain) conditions.push(`domain="${domain}"`);
+        if (ip) conditions.push(`ip="${ip}"`);
+        if (path) conditions.push(`path="${path}" (${pathMatch})`);
+
+        if (conditions.length === 0) {
+            preview.textContent = 'At least one condition (domain, IP, or path) is required';
+            preview.classList.add('text-red-500');
+            preview.classList.remove('text-gray-600');
+        } else {
+            const actionText = action === 'block' ? 'BLOCK' : 'ALLOW';
+            preview.textContent = `${actionText} requests where ${conditions.join(' AND ')}`;
+            preview.classList.remove('text-red-500');
+            preview.classList.add('text-gray-600');
+        }
+    }
+
+    // Add event listeners
+    domainInput.addEventListener('input', updatePreview);
+    ipInput.addEventListener('input', updatePreview);
+    pathInput.addEventListener('input', updatePreview);
+    pathMatchSelect.addEventListener('change', updatePreview);
+    actionInputs.forEach(input => {
+        input.addEventListener('change', updatePreview);
+    });
+
+    // Initial preview
+    updatePreview();
+});
+</script>
+{% endblock %}
+{% endblock %}

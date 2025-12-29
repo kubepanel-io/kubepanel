@@ -61,11 +61,6 @@ from .restore import (
     delete_restore,
 )
 
-from .firewall import (
-    sync_modsecurity_rules,
-    get_current_modsecurity_rules,
-)
-
 from .dnszone import (
     DNSZone,
     DNSZoneStatus,
@@ -80,6 +75,23 @@ from .dnszone import (
     get_dns_records as get_dnszone_records,
     get_dns_record as get_dnszone_record,
     get_dns_status as get_dnszone_status,
+)
+
+from .global_waf import (
+    GlobalWAF,
+    GlobalWAFStatus,
+    get_globalwaf,
+    globalwaf_exists,
+    create_globalwaf,
+    delete_globalwaf,
+    patch_globalwaf,
+    set_globalwaf_enabled,
+    get_or_create_globalwaf,
+    add_waf_rule,
+    update_waf_rule,
+    delete_waf_rule,
+    get_waf_rule,
+    get_waf_rules,
 )
 
 __all__ = [
@@ -137,10 +149,6 @@ __all__ = [
     'create_restore',
     'delete_restore',
 
-    # Firewall operations
-    'sync_modsecurity_rules',
-    'get_current_modsecurity_rules',
-
     # DNSZone operations
     'DNSZone',
     'DNSZoneStatus',
@@ -155,4 +163,20 @@ __all__ = [
     'get_dnszone_records',
     'get_dnszone_record',
     'get_dnszone_status',
+
+    # GlobalWAF operations
+    'GlobalWAF',
+    'GlobalWAFStatus',
+    'get_globalwaf',
+    'globalwaf_exists',
+    'create_globalwaf',
+    'delete_globalwaf',
+    'patch_globalwaf',
+    'set_globalwaf_enabled',
+    'get_or_create_globalwaf',
+    'add_waf_rule',
+    'update_waf_rule',
+    'delete_waf_rule',
+    'get_waf_rule',
+    'get_waf_rules',
 ]

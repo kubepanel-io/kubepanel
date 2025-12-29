@@ -248,9 +248,8 @@
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm">
                         {% if log.vhost and log.x_forwarded_for and log.path %}
-                        <a href="{% url 'block_entry' vhost=log.vhost x_forwarded_for=log.x_forwarded_for path=log.path %}"
-                           class="text-red-600 hover:text-red-800 text-xs font-medium bg-red-50 hover:bg-red-100 px-2 py-1 rounded transition-colors"
-                           >
+                        <a href="{% url 'global_waf_add_rule' %}?domain={{ log.vhost|urlencode }}&ip={{ log.x_forwarded_for|urlencode }}&path={{ log.path|urlencode }}&comment={{ log.vhost|urlencode }}%20block%20from%20livetraffic"
+                           class="text-red-600 hover:text-red-800 text-xs font-medium bg-red-50 hover:bg-red-100 px-2 py-1 rounded transition-colors">
                             Block
                         </a>
                         {% endif %}

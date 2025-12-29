@@ -222,21 +222,6 @@ class DomainAlias(models.Model):
         return f"{self.alias_name} → {self.domain.domain_name}"
 
 
-class BlockRule(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    ip_address = models.CharField(max_length=45, blank=True, null=True)
-    vhost = models.CharField(max_length=255, blank=True, null=True)
-    path = models.CharField(max_length=2000, blank=True, null=True)
-
-    block_ip = models.BooleanField(default=False)
-    block_vhost = models.BooleanField(default=False)
-    block_path = models.BooleanField(default=False)
-
-    def __str__(self):
-        return f"BlockRule {self.pk} [IP={self.ip_address}, vhost={self.vhost}, path={self.path}]"
-
-
 class CloudflareAPIToken(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)

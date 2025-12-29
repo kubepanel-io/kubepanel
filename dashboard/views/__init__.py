@@ -100,16 +100,20 @@ from .security import (
     manage_ips,
     add_ip,
     delete_ip,
-    blocked_objects,
-    block_entry,
-    firewall_rule_delete,
-    generate_modsec_rule,
-    render_modsec_rules,
 )
 
 # Monitoring views
 from .monitoring import (
     livetraffic,
+)
+
+# GlobalWAF views
+from .global_waf import (
+    global_waf_list,
+    global_waf_toggle,
+    global_waf_add_rule,
+    global_waf_edit_rule,
+    global_waf_delete_rule,
 )
 
 # Utility exports
@@ -207,14 +211,16 @@ __all__ = [
     'manage_ips',
     'add_ip',
     'delete_ip',
-    'blocked_objects',
-    'block_entry',
-    'firewall_rule_delete',
-    'generate_modsec_rule',
-    'render_modsec_rules',
 
     # Monitoring
     'livetraffic',
+
+    # GlobalWAF
+    'global_waf_list',
+    'global_waf_toggle',
+    'global_waf_add_rule',
+    'global_waf_edit_rule',
+    'global_waf_delete_rule',
 
     # Utils
     'SuperuserRequiredMixin',
