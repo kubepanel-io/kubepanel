@@ -237,3 +237,114 @@ def _build_rule_from_post(post_data) -> dict:
         rule['comment'] = comment
 
     return rule
+
+
+# =============================================================================
+# Geo-blocking views
+# =============================================================================
+
+@login_required
+@user_passes_test(is_superuser, login_url='/dashboard/')
+def global_waf_toggle_geo(request):
+    """
+    Toggle geo-blocking enabled/disabled state.
+    """
+    if request.method != 'POST':
+        return redirect('global_waf_list')
+
+    try:
+        globalwaf = get_globalwaf()
+        geo_block = globalwaf.geo_block or {'enabled': False, 'blockedCountries': []}
+        new_state = not geo_block.get('enabled', False)
+
+        patch_globalwaf(geo_block={
+            'enabled': new_state,
+            'blockedCountries': geo_block.get('blockedCountries', [])
+        })
+
+        state_text = "enabled" if new_state else "disabled"
+        messages.success(request, f"Geo-blocking has been {state_text}.")
+    except K8sNotFoundError:
+        messages.error(request, "GlobalWAF CR not found.")
+    except K8sClientError as e:
+        logger.error(f"Failed to toggle geo-blocking: {e}")
+        messages.error(request, f"Failed to toggle geo-blocking: {e}")
+
+    return redirect('global_waf_list')
+
+
+@login_required
+@user_passes_test(is_superuser, login_url='/dashboard/')
+def global_waf_add_country(request):
+    """
+    Add a country to the geo-block list.
+    """
+    if request.method != 'POST':
+        return redirect('global_waf_list')
+
+    country_code = request.POST.get('country_code', '').strip().upper()
+    if not country_code or len(country_code) != 2:
+        messages.error(request, "Invalid country code. Must be 2-letter ISO code.")
+        return redirect('global_waf_list')
+
+    try:
+        globalwaf = get_globalwaf()
+        geo_block = globalwaf.geo_block or {'enabled': False, 'blockedCountries': []}
+        blocked_countries = geo_block.get('blockedCountries', [])
+
+        if country_code in blocked_countries:
+            messages.warning(request, f"Country {country_code} is already blocked.")
+            return redirect('global_waf_list')
+
+        blocked_countries.append(country_code)
+
+        patch_globalwaf(geo_block={
+            'enabled': geo_block.get('enabled', False),
+            'blockedCountries': blocked_countries
+        })
+
+        messages.success(request, f"Country {country_code} added to block list.")
+    except K8sNotFoundError:
+        messages.error(request, "GlobalWAF CR not found.")
+    except K8sClientError as e:
+        logger.error(f"Failed to add country: {e}")
+        messages.error(request, f"Failed to add country: {e}")
+
+    return redirect('global_waf_list')
+
+
+@login_required
+@user_passes_test(is_superuser, login_url='/dashboard/')
+def global_waf_remove_country(request, country_code):
+    """
+    Remove a country from the geo-block list.
+    """
+    if request.method != 'POST':
+        return redirect('global_waf_list')
+
+    country_code = country_code.upper()
+
+    try:
+        globalwaf = get_globalwaf()
+        geo_block = globalwaf.geo_block or {'enabled': False, 'blockedCountries': []}
+        blocked_countries = geo_block.get('blockedCountries', [])
+
+        if country_code not in blocked_countries:
+            messages.warning(request, f"Country {country_code} is not in block list.")
+            return redirect('global_waf_list')
+
+        blocked_countries.remove(country_code)
+
+        patch_globalwaf(geo_block={
+            'enabled': geo_block.get('enabled', False),
+            'blockedCountries': blocked_countries
+        })
+
+        messages.success(request, f"Country {country_code} removed from block list.")
+    except K8sNotFoundError:
+        messages.error(request, "GlobalWAF CR not found.")
+    except K8sClientError as e:
+        logger.error(f"Failed to remove country: {e}")
+        messages.error(request, f"Failed to remove country: {e}")
+
+    return redirect('global_waf_list')

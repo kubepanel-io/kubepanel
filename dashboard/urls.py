@@ -89,6 +89,10 @@ urlpatterns = [
     path('global-waf/rules/add/', views.global_waf_add_rule, name='global_waf_add_rule'),
     path('global-waf/rules/<int:rule_index>/edit/', views.global_waf_edit_rule, name='global_waf_edit_rule'),
     path('global-waf/rules/<int:rule_index>/delete/', views.global_waf_delete_rule, name='global_waf_delete_rule'),
+    # GlobalWAF geo-blocking routes
+    path('global-waf/geo/toggle/', views.global_waf_toggle_geo, name='global_waf_toggle_geo'),
+    path('global-waf/geo/add/', views.global_waf_add_country, name='global_waf_add_country'),
+    path('global-waf/geo/<str:country_code>/remove/', views.global_waf_remove_country, name='global_waf_remove_country'),
     # API endpoints
     path('api/logs/', views_logging.logs_api, name='logs_api'),
 ]

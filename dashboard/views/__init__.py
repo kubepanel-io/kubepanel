@@ -114,6 +114,9 @@ from .global_waf import (
     global_waf_add_rule,
     global_waf_edit_rule,
     global_waf_delete_rule,
+    global_waf_toggle_geo,
+    global_waf_add_country,
+    global_waf_remove_country,
 )
 
 # Utility exports
@@ -221,6 +224,9 @@ __all__ = [
     'global_waf_add_rule',
     'global_waf_edit_rule',
     'global_waf_delete_rule',
+    'global_waf_toggle_geo',
+    'global_waf_add_country',
+    'global_waf_remove_country',
 
     # Utils
     'SuperuserRequiredMixin',
