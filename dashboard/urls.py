@@ -93,6 +93,19 @@ urlpatterns = [
     path('global-waf/geo/toggle/', views.global_waf_toggle_geo, name='global_waf_toggle_geo'),
     path('global-waf/geo/add/', views.global_waf_add_country, name='global_waf_add_country'),
     path('global-waf/geo/<str:country_code>/remove/', views.global_waf_remove_country, name='global_waf_remove_country'),
+    # L3 Firewall routes (superuser only)
+    path('l3-firewall/', views.l3_firewall_list, name='l3_firewall_list'),
+    path('l3-firewall/toggle/', views.l3_firewall_toggle, name='l3_firewall_toggle'),
+    path('l3-firewall/rules/add/', views.l3_firewall_add_rule, name='l3_firewall_add_rule'),
+    path('l3-firewall/rules/<int:rule_index>/edit/', views.l3_firewall_edit_rule, name='l3_firewall_edit_rule'),
+    path('l3-firewall/rules/<int:rule_index>/delete/', views.l3_firewall_delete_rule, name='l3_firewall_delete_rule'),
+    # Domain Metrics routes
+    path('domains/<str:domain>/metrics/', views.domain_metrics_page, name='domain_metrics_page'),
+    path('api/domains/<str:domain>/metrics/', views.domain_metrics_api, name='domain_metrics_api'),
+    path('api/domains/<str:domain>/metrics/summary/', views.domain_metrics_summary, name='domain_metrics_summary'),
+    # Global Metrics routes (superuser only)
+    path('metrics/', views.global_metrics_page, name='global_metrics_page'),
+    path('api/metrics/global/', views.global_metrics_api, name='global_metrics_api'),
     # API endpoints
     path('api/logs/', views_logging.logs_api, name='logs_api'),
 ]

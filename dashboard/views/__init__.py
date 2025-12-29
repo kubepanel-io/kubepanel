@@ -119,6 +119,24 @@ from .global_waf import (
     global_waf_remove_country,
 )
 
+# L3 Firewall views
+from .l3_firewall import (
+    l3_firewall_list,
+    l3_firewall_toggle,
+    l3_firewall_add_rule,
+    l3_firewall_edit_rule,
+    l3_firewall_delete_rule,
+)
+
+# Metrics views
+from .metrics import (
+    domain_metrics_page,
+    domain_metrics_api,
+    domain_metrics_summary,
+    global_metrics_page,
+    global_metrics_api,
+)
+
 # Utility exports
 from .utils import (
     SuperuserRequiredMixin,
@@ -227,6 +245,20 @@ __all__ = [
     'global_waf_toggle_geo',
     'global_waf_add_country',
     'global_waf_remove_country',
+
+    # L3 Firewall
+    'l3_firewall_list',
+    'l3_firewall_toggle',
+    'l3_firewall_add_rule',
+    'l3_firewall_edit_rule',
+    'l3_firewall_delete_rule',
+
+    # Metrics
+    'domain_metrics_page',
+    'domain_metrics_api',
+    'domain_metrics_summary',
+    'global_metrics_page',
+    'global_metrics_api',
 
     # Utils
     'SuperuserRequiredMixin',

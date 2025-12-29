@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if edit_mode %}Edit{% else %}Add{% endif %} L3 Firewall Rule | KubePanel{% endblock %}
+
+{% block page_title %}{% if edit_mode %}Edit{% else %}Add{% endif %} L3 Firewall Rule{% endblock %}
+{% block page_subtitle %}{% if edit_mode %}Modify an existing network-level firewall rule{% else %}Create a new network-level firewall rule{% endif %}{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'l3_firewall_list' %}"
+   class="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center space-x-2">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Rules</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Rule Configuration</h3>
+            <p class="text-sm text-gray-500 mt-1">Configure the network-level firewall rule settings</p>
+        </div>
+
+        <form method="post" class="px-6 py-4 space-y-6">
+            {% csrf_token %}
+
+            <!-- Rule Name -->
+            <div>
+                <label for="name" class="block text-sm font-medium text-gray-700">Rule Name</label>
+                <input type="text"
+                       name="name"
+                       id="name"
+                       value="{{ rule.name|default:'' }}"
+                       placeholder="e.g., Block malicious IPs"
+                       class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+                <p class="mt-1 text-sm text-gray-500">A descriptive name for this rule</p>
+            </div>
+
+            <!-- Action -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Action</label>
+                <div class="mt-2 grid grid-cols-2 gap-3">
+                    <label class="relative flex items-center justify-center rounded-lg border border-gray-300 bg-white p-4 cursor-pointer hover:bg-gray-50 focus:outline-none">
+                        <input type="radio"
+                               name="action"
+                               value="deny"
+                               {% if rule.action == "deny" or not rule.action %}checked{% endif %}
+                               class="sr-only">
+                        <span class="flex flex-col items-center">
+                            <svg class="h-6 w-6 text-red-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636"></path>
+                            </svg>
+                            <span class="text-sm font-medium text-gray-900">Deny</span>
+                            <span class="text-xs text-gray-500">Block matching traffic</span>
+                        </span>
+                        <span class="absolute -inset-px rounded-lg border-2 pointer-events-none" aria-hidden="true"
+                              :class="{'border-red-500': checked, 'border-transparent': !checked}"></span>
+                    </label>
+                    <label class="relative flex items-center justify-center rounded-lg border border-gray-300 bg-white p-4 cursor-pointer hover:bg-gray-50 focus:outline-none">
+                        <input type="radio"
+                               name="action"
+                               value="allow"
+                               {% if rule.action == "allow" %}checked{% endif %}
+                               class="sr-only">
+                        <span class="flex flex-col items-center">
+                            <svg class="h-6 w-6 text-green-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span class="text-sm font-medium text-gray-900">Allow</span>
+                            <span class="text-xs text-gray-500">Permit matching traffic</span>
+                        </span>
+                        <span class="absolute -inset-px rounded-lg border-2 pointer-events-none" aria-hidden="true"
+                              :class="{'border-green-500': checked, 'border-transparent': !checked}"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Protocol -->
+            <div>
+                <label for="protocol" class="block text-sm font-medium text-gray-700">Protocol</label>
+                <select name="protocol"
+                        id="protocol"
+                        class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+                    <option value="TCP" {% if rule.protocol == "TCP" or not rule.protocol %}selected{% endif %}>TCP</option>
+                    <option value="UDP" {% if rule.protocol == "UDP" %}selected{% endif %}>UDP</option>
+                </select>
+            </div>
+
+            <!-- Source Networks -->
+            <div class="space-y-4">
+                <div>
+                    <label for="source_nets" class="block text-sm font-medium text-gray-700">Source CIDRs (Match)</label>
+                    <textarea name="source_nets"
+                              id="source_nets"
+                              rows="3"
+                              placeholder="e.g., 1.2.3.4/32, 10.0.0.0/8"
+                              class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm font-mono">{{ rule.source_nets|default:'' }}</textarea>
+                    <p class="mt-1 text-sm text-gray-500">Comma-separated CIDRs to match. Leave empty to match all sources.</p>
+                </div>
+
+                <div class="text-center text-sm text-gray-500">- OR -</div>
+
+                <div>
+                    <label for="source_not_nets" class="block text-sm font-medium text-gray-700">Source CIDRs (NOT Match - Inverse)</label>
+                    <textarea name="source_not_nets"
+                              id="source_not_nets"
+                              rows="3"
+                              placeholder="e.g., 10.0.0.0/8 (matches everything EXCEPT this)"
+                              class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm font-mono">{{ rule.source_not_nets|default:'' }}</textarea>
+                    <p class="mt-1 text-sm text-gray-500">Matches traffic NOT from these CIDRs (inverse match). Useful for "external only" rules.</p>
+                </div>
+            </div>
+
+            <!-- Destination Ports -->
+            <div>
+                <label for="destination_ports" class="block text-sm font-medium text-gray-700">Destination Ports</label>
+                <input type="text"
+                       name="destination_ports"
+                       id="destination_ports"
+                       value="{{ rule.destination_ports|default:'' }}"
+                       placeholder="e.g., 22, 3306, 443"
+                       class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm font-mono">
+                <p class="mt-1 text-sm text-gray-500">Comma-separated port numbers. Leave empty to match all ports.</p>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                <a href="{% url 'l3_firewall_list' %}"
+                   class="bg-white text-gray-700 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50 transition-colors">
+                    Cancel
+                </a>
+                <button type="submit"
+                        class="btn-primary text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200">
+                    {% if edit_mode %}Update Rule{% else %}Add Rule{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Help -->
+    <div class="mt-6 bg-blue-50 rounded-xl p-4 border border-blue-200">
+        <h4 class="text-sm font-medium text-blue-900 mb-2">Tips</h4>
+        <ul class="text-sm text-blue-800 space-y-1 list-disc list-inside">
+            <li>Use CIDR notation: <code class="bg-blue-100 px-1 rounded">/32</code> for single IP, <code class="bg-blue-100 px-1 rounded">/24</code> for 256 IPs, etc.</li>
+            <li>Use "NOT Match" to create rules like "block external SSH" (deny port 22 from NOT 10.0.0.0/8)</li>
+            <li>Rules are evaluated in order - place more specific rules first</li>
+            <li>Default behavior: Allow all traffic (if no rules match)</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

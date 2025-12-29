@@ -94,6 +94,23 @@ from .global_waf import (
     get_waf_rules,
 )
 
+from .l3_firewall import (
+    GlobalL3Firewall,
+    L3FirewallStatus,
+    get_l3_firewall,
+    l3_firewall_exists,
+    create_l3_firewall,
+    delete_l3_firewall,
+    patch_l3_firewall,
+    set_l3_firewall_enabled,
+    get_or_create_l3_firewall,
+    add_l3_rule,
+    update_l3_rule,
+    delete_l3_rule,
+    get_l3_rule,
+    get_l3_rules,
+)
+
 __all__ = [
     # Exceptions
     'K8sClientError',
@@ -179,4 +196,20 @@ __all__ = [
     'delete_waf_rule',
     'get_waf_rule',
     'get_waf_rules',
+
+    # GlobalL3Firewall operations
+    'GlobalL3Firewall',
+    'L3FirewallStatus',
+    'get_l3_firewall',
+    'l3_firewall_exists',
+    'create_l3_firewall',
+    'delete_l3_firewall',
+    'patch_l3_firewall',
+    'set_l3_firewall_enabled',
+    'get_or_create_l3_firewall',
+    'add_l3_rule',
+    'update_l3_rule',
+    'delete_l3_rule',
+    'get_l3_rule',
+    'get_l3_rules',
 ]

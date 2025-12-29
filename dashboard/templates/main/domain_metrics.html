@@ -1,0 +1,459 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Metrics - {{ domain.domain_name }} | KubePanel{% endblock %}
+
+{% block page_title %}{{ domain.domain_name }} Metrics{% endblock %}
+{% block page_subtitle %}Resource usage and traffic statistics{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <a href="{% url 'view_domain' domain=domain.domain_name %}"
+       class="text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        <span>Back to Domain</span>
+    </a>
+    <div class="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+        <button type="button" data-hours="6" class="time-range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">6h</button>
+        <button type="button" data-hours="24" class="time-range-btn px-3 py-1.5 rounded text-sm font-medium bg-white shadow-sm text-gray-900">24h</button>
+        <button type="button" data-hours="168" class="time-range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">7d</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <!-- CPU Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                </svg>
+            </div>
+            <span class="text-xs text-gray-500 uppercase tracking-wide">CPU</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-900" id="cpu-value">--</div>
+        <div class="text-sm text-gray-500" id="cpu-limit">of -- limit</div>
+    </div>
+
+    <!-- Memory Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+            </div>
+            <span class="text-xs text-gray-500 uppercase tracking-wide">Memory</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-900" id="memory-value">--</div>
+        <div class="text-sm text-gray-500" id="memory-limit">of -- limit</div>
+    </div>
+
+    <!-- Requests Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+            </div>
+            <span class="text-xs text-gray-500 uppercase tracking-wide">Requests (24h)</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-900" id="requests-value">--</div>
+        <div class="text-sm text-gray-500" id="requests-errors">-- errors</div>
+    </div>
+
+    <!-- Latency Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </div>
+            <span class="text-xs text-gray-500 uppercase tracking-wide">Avg Latency</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-900" id="latency-value">--</div>
+        <div class="text-sm text-gray-500">average response time</div>
+    </div>
+</div>
+
+<!-- Charts Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- CPU Usage Chart -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">CPU Usage</h3>
+            <p class="text-sm text-gray-500">Millicores used over time</p>
+        </div>
+        <div class="p-6">
+            <canvas id="cpuChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Memory Usage Chart -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Memory Usage</h3>
+            <p class="text-sm text-gray-500">MB used over time</p>
+        </div>
+        <div class="p-6">
+            <canvas id="memoryChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- HTTP Requests Chart -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">HTTP Requests</h3>
+            <p class="text-sm text-gray-500">Requests per collection period</p>
+        </div>
+        <div class="p-6">
+            <canvas id="httpChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Response Codes Chart -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Response Status Codes</h3>
+            <p class="text-sm text-gray-500">Breakdown by HTTP status</p>
+        </div>
+        <div class="p-6">
+            <canvas id="statusChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Latency Chart -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Response Latency</h3>
+            <p class="text-sm text-gray-500">Average response time in milliseconds</p>
+        </div>
+        <div class="p-6">
+            <canvas id="latencyChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Bandwidth Chart -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Bandwidth</h3>
+            <p class="text-sm text-gray-500">Data transferred (in/out)</p>
+        </div>
+        <div class="p-6">
+            <canvas id="bandwidthChart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- No Data State -->
+<div id="no-data-message" class="hidden">
+    <div class="bg-gray-50 rounded-xl p-12 text-center">
+        <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+        </svg>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">No Metrics Data Yet</h3>
+        <p class="text-gray-500 max-w-md mx-auto">
+            Metrics are collected every 5 minutes. If this is a new domain, please wait for the first collection cycle to complete.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>
+(function() {
+    const apiUrl = '{% url "domain_metrics_api" domain=domain.domain_name %}';
+    const summaryUrl = '{% url "domain_metrics_summary" domain=domain.domain_name %}';
+
+    let charts = {};
+    let currentHours = 24;
+
+    // Chart color palette
+    const colors = {
+        blue: { bg: 'rgba(59, 130, 246, 0.1)', border: 'rgb(59, 130, 246)' },
+        purple: { bg: 'rgba(147, 51, 234, 0.1)', border: 'rgb(147, 51, 234)' },
+        green: { bg: 'rgba(34, 197, 94, 0.1)', border: 'rgb(34, 197, 94)' },
+        amber: { bg: 'rgba(245, 158, 11, 0.1)', border: 'rgb(245, 158, 11)' },
+        red: { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgb(239, 68, 68)' },
+        gray: { bg: 'rgba(107, 114, 128, 0.1)', border: 'rgb(107, 114, 128)' },
+    };
+
+    // Common chart options
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: true,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                titleColor: '#fff',
+                bodyColor: '#fff',
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+                borderWidth: 1,
+                padding: 12,
+                cornerRadius: 8,
+            }
+        },
+        scales: {
+            x: {
+                type: 'time',
+                time: { displayFormats: { hour: 'HH:mm', day: 'MMM d' } },
+                grid: { display: false },
+                ticks: { color: '#6B7280', font: { size: 11 } }
+            },
+            y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(243, 244, 246, 1)' },
+                ticks: { color: '#6B7280', font: { size: 11 } }
+            }
+        }
+    };
+
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num.toString();
+    }
+
+    function createChart(canvasId, type, datasets, options = {}) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return null;
+
+        if (charts[canvasId]) {
+            charts[canvasId].destroy();
+        }
+
+        charts[canvasId] = new Chart(ctx, {
+            type: type,
+            data: { datasets: datasets },
+            options: { ...commonOptions, ...options }
+        });
+
+        return charts[canvasId];
+    }
+
+    async function loadSummary() {
+        try {
+            const response = await fetch(summaryUrl);
+            const data = await response.json();
+
+            if (!data.has_data) {
+                document.getElementById('no-data-message').classList.remove('hidden');
+                return;
+            }
+
+            // Update summary cards
+            const latest = data.latest;
+            const last24h = data.last_24h;
+
+            document.getElementById('cpu-value').textContent = latest.cpu_percent + '%';
+            document.getElementById('cpu-limit').textContent = latest.cpu_millicores + 'm used';
+
+            document.getElementById('memory-value').textContent = latest.memory_percent + '%';
+            document.getElementById('memory-limit').textContent = latest.memory_mb + ' MB used';
+
+            document.getElementById('requests-value').textContent = formatNumber(last24h.total_requests);
+            document.getElementById('requests-errors').textContent = formatNumber(last24h.total_errors) + ' errors';
+
+            document.getElementById('latency-value').textContent = last24h.avg_latency_ms + ' ms';
+        } catch (error) {
+            console.error('Error loading summary:', error);
+        }
+    }
+
+    async function loadMetrics(hours) {
+        currentHours = hours;
+
+        // Determine period based on hours
+        let period = '5min';
+        if (hours > 48) period = 'hourly';
+        if (hours > 168) period = 'daily';
+
+        try {
+            const response = await fetch(`${apiUrl}?hours=${hours}&period=${period}`);
+            const data = await response.json();
+
+            if (data.meta.count === 0) {
+                document.getElementById('no-data-message').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('no-data-message').classList.add('hidden');
+
+            // Parse labels as dates
+            const labels = data.labels.map(l => new Date(l));
+
+            // CPU Chart
+            createChart('cpuChart', 'line', [{
+                label: 'CPU (millicores)',
+                data: labels.map((l, i) => ({ x: l, y: data.cpu.values[i] })),
+                borderColor: colors.blue.border,
+                backgroundColor: colors.blue.bg,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 2,
+            }]);
+
+            // Memory Chart
+            createChart('memoryChart', 'line', [{
+                label: 'Memory (MB)',
+                data: labels.map((l, i) => ({ x: l, y: data.memory.values[i] })),
+                borderColor: colors.purple.border,
+                backgroundColor: colors.purple.bg,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 2,
+            }]);
+
+            // HTTP Requests Chart
+            createChart('httpChart', 'bar', [{
+                label: 'Requests',
+                data: labels.map((l, i) => ({ x: l, y: data.http.requests[i] })),
+                backgroundColor: colors.green.border,
+                borderRadius: 4,
+            }]);
+
+            // Status Codes Chart (stacked)
+            createChart('statusChart', 'bar', [
+                {
+                    label: '2xx (Success)',
+                    data: labels.map((l, i) => ({ x: l, y: data.http.status_2xx[i] })),
+                    backgroundColor: 'rgb(34, 197, 94)',
+                    stack: 'status',
+                },
+                {
+                    label: '3xx (Redirect)',
+                    data: labels.map((l, i) => ({ x: l, y: data.http.status_3xx[i] })),
+                    backgroundColor: 'rgb(59, 130, 246)',
+                    stack: 'status',
+                },
+                {
+                    label: '4xx (Client Error)',
+                    data: labels.map((l, i) => ({ x: l, y: data.http.status_4xx[i] })),
+                    backgroundColor: 'rgb(245, 158, 11)',
+                    stack: 'status',
+                },
+                {
+                    label: '5xx (Server Error)',
+                    data: labels.map((l, i) => ({ x: l, y: data.http.status_5xx[i] })),
+                    backgroundColor: 'rgb(239, 68, 68)',
+                    stack: 'status',
+                }
+            ], {
+                plugins: {
+                    legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15 } }
+                },
+                scales: {
+                    ...commonOptions.scales,
+                    x: { ...commonOptions.scales.x, stacked: true },
+                    y: { ...commonOptions.scales.y, stacked: true }
+                }
+            });
+
+            // Latency Chart
+            createChart('latencyChart', 'line', [{
+                label: 'Latency (ms)',
+                data: labels.map((l, i) => ({ x: l, y: data.http.latency_ms[i] })),
+                borderColor: colors.amber.border,
+                backgroundColor: colors.amber.bg,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 2,
+            }]);
+
+            // Bandwidth Chart
+            createChart('bandwidthChart', 'line', [
+                {
+                    label: 'Bytes In',
+                    data: labels.map((l, i) => ({ x: l, y: data.bandwidth.bytes_in[i] })),
+                    borderColor: colors.green.border,
+                    backgroundColor: 'transparent',
+                    tension: 0.3,
+                    pointRadius: 0,
+                    borderWidth: 2,
+                },
+                {
+                    label: 'Bytes Out',
+                    data: labels.map((l, i) => ({ x: l, y: data.bandwidth.bytes_out[i] })),
+                    borderColor: colors.blue.border,
+                    backgroundColor: 'transparent',
+                    tension: 0.3,
+                    pointRadius: 0,
+                    borderWidth: 2,
+                }
+            ], {
+                plugins: {
+                    legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15 } },
+                    tooltip: {
+                        ...commonOptions.plugins.tooltip,
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + formatBytes(context.parsed.y);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    ...commonOptions.scales,
+                    y: {
+                        ...commonOptions.scales.y,
+                        ticks: {
+                            ...commonOptions.scales.y.ticks,
+                            callback: function(value) { return formatBytes(value); }
+                        }
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error('Error loading metrics:', error);
+        }
+    }
+
+    // Time range buttons
+    document.querySelectorAll('.time-range-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.time-range-btn').forEach(b => {
+                b.classList.remove('bg-white', 'shadow-sm', 'text-gray-900');
+                b.classList.add('text-gray-600');
+            });
+            this.classList.add('bg-white', 'shadow-sm', 'text-gray-900');
+            this.classList.remove('text-gray-600');
+
+            loadMetrics(parseInt(this.dataset.hours));
+        });
+    });
+
+    // Initial load
+    loadSummary();
+    loadMetrics(24);
+
+    // Refresh every 5 minutes
+    setInterval(() => {
+        loadSummary();
+        loadMetrics(currentHours);
+    }, 5 * 60 * 1000);
+})();
+</script>
+{% endblock %}

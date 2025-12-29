@@ -345,3 +345,117 @@ class LogEntry(models.Model):
             f"[{self.level}] {self.timestamp:%Y-%m-%d %H:%M:%S} "
             f"— {self.actor} → {self.content_object}: {self.message}"
         )
+
+
+class DomainMetric(models.Model):
+    """
+    Stores time-series metrics for each domain.
+
+    Data sources:
+    - CPU/Memory: Kubernetes metrics-server API
+    - HTTP metrics: Ingress-nginx logs
+
+    Aggregation periods:
+    - '5min': Raw data, kept for 24 hours (288 records/domain)
+    - 'hourly': Aggregated, kept for 7 days (168 records/domain)
+    - 'daily': Aggregated, kept for 30 days (30 records/domain)
+    """
+    PERIOD_CHOICES = [
+        ('5min', '5 Minutes'),
+        ('hourly', 'Hourly'),
+        ('daily', 'Daily'),
+    ]
+
+    domain = models.ForeignKey(
+        Domain,
+        on_delete=models.CASCADE,
+        related_name='metrics'
+    )
+    timestamp = models.DateTimeField(db_index=True)
+    period = models.CharField(max_length=10, choices=PERIOD_CHOICES, default='5min')
+
+    # CPU/Memory metrics (from metrics-server)
+    cpu_millicores = models.IntegerField(
+        default=0,
+        help_text="CPU usage in millicores"
+    )
+    cpu_limit_millicores = models.IntegerField(
+        default=0,
+        help_text="CPU limit in millicores"
+    )
+    memory_bytes = models.BigIntegerField(
+        default=0,
+        help_text="Memory usage in bytes"
+    )
+    memory_limit_bytes = models.BigIntegerField(
+        default=0,
+        help_text="Memory limit in bytes"
+    )
+
+    # HTTP metrics (from ingress-nginx logs)
+    http_requests = models.IntegerField(
+        default=0,
+        help_text="Total HTTP requests in this period"
+    )
+    http_2xx = models.IntegerField(
+        default=0,
+        help_text="Successful responses (2xx)"
+    )
+    http_3xx = models.IntegerField(
+        default=0,
+        help_text="Redirect responses (3xx)"
+    )
+    http_4xx = models.IntegerField(
+        default=0,
+        help_text="Client error responses (4xx)"
+    )
+    http_5xx = models.IntegerField(
+        default=0,
+        help_text="Server error responses (5xx)"
+    )
+    avg_latency_ms = models.FloatField(
+        default=0,
+        help_text="Average response latency in milliseconds"
+    )
+    bytes_in = models.BigIntegerField(
+        default=0,
+        help_text="Bytes received from clients"
+    )
+    bytes_out = models.BigIntegerField(
+        default=0,
+        help_text="Bytes sent to clients"
+    )
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['domain', 'timestamp']),
+            models.Index(fields=['domain', 'period', 'timestamp']),
+        ]
+
+    def __str__(self):
+        return f"{self.domain.domain_name} @ {self.timestamp:%Y-%m-%d %H:%M} ({self.period})"
+
+    @property
+    def cpu_percent(self):
+        """CPU usage as percentage of limit."""
+        if self.cpu_limit_millicores > 0:
+            return round(100 * self.cpu_millicores / self.cpu_limit_millicores, 1)
+        return 0
+
+    @property
+    def memory_percent(self):
+        """Memory usage as percentage of limit."""
+        if self.memory_limit_bytes > 0:
+            return round(100 * self.memory_bytes / self.memory_limit_bytes, 1)
+        return 0
+
+    @property
+    def memory_mb(self):
+        """Memory usage in MB."""
+        return round(self.memory_bytes / (1024 * 1024), 1)
+
+    @property
+    def memory_limit_mb(self):
+        """Memory limit in MB."""
+        return round(self.memory_limit_bytes / (1024 * 1024), 1)

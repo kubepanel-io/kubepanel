@@ -1,0 +1,426 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Global Metrics | KubePanel{% endblock %}
+
+{% block page_title %}Global Metrics{% endblock %}
+{% block page_subtitle %}Cluster-wide resource usage and traffic statistics{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <div class="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+        <button type="button" data-hours="6" class="time-range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">6h</button>
+        <button type="button" data-hours="24" class="time-range-btn px-3 py-1.5 rounded text-sm font-medium bg-white shadow-sm text-gray-900">24h</button>
+        <button type="button" data-hours="168" class="time-range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">7d</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <!-- Domains Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+                <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                </svg>
+            </div>
+            <span class="text-xs text-gray-500 uppercase tracking-wide">Domains</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-900" id="total-domains">--</div>
+        <div class="text-sm text-gray-500">active domains</div>
+    </div>
+
+    <!-- CPU Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                </svg>
+            </div>
+            <span class="text-xs text-gray-500 uppercase tracking-wide">Total CPU</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-900" id="total-cpu">--</div>
+        <div class="text-sm text-gray-500">millicores used</div>
+    </div>
+
+    <!-- Memory Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+            </div>
+            <span class="text-xs text-gray-500 uppercase tracking-wide">Total Memory</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-900" id="total-memory">--</div>
+        <div class="text-sm text-gray-500">MB used</div>
+    </div>
+
+    <!-- Requests Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+            </div>
+            <span class="text-xs text-gray-500 uppercase tracking-wide">Requests (24h)</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-900" id="total-requests">--</div>
+        <div class="text-sm text-gray-500">HTTP requests</div>
+    </div>
+</div>
+
+<!-- Top Consumers Tables -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <!-- Top CPU Consumers -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Top CPU Consumers</h3>
+        </div>
+        <div class="p-4">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-500">
+                        <th class="pb-2">Domain</th>
+                        <th class="pb-2 text-right">CPU</th>
+                    </tr>
+                </thead>
+                <tbody id="top-cpu-table">
+                    <tr><td colspan="2" class="text-gray-400 py-4 text-center">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Top Memory Consumers -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Top Memory Consumers</h3>
+        </div>
+        <div class="p-4">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-500">
+                        <th class="pb-2">Domain</th>
+                        <th class="pb-2 text-right">Memory</th>
+                    </tr>
+                </thead>
+                <tbody id="top-memory-table">
+                    <tr><td colspan="2" class="text-gray-400 py-4 text-center">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Top Request Consumers -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Top Traffic (24h)</h3>
+        </div>
+        <div class="p-4">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-500">
+                        <th class="pb-2">Domain</th>
+                        <th class="pb-2 text-right">Requests</th>
+                    </tr>
+                </thead>
+                <tbody id="top-requests-table">
+                    <tr><td colspan="2" class="text-gray-400 py-4 text-center">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- Aggregate CPU Usage Chart -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Total CPU Usage</h3>
+            <p class="text-sm text-gray-500">Aggregate CPU across all domains</p>
+        </div>
+        <div class="p-6">
+            <canvas id="cpuChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Aggregate Memory Usage Chart -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Total Memory Usage</h3>
+            <p class="text-sm text-gray-500">Aggregate memory across all domains</p>
+        </div>
+        <div class="p-6">
+            <canvas id="memoryChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- HTTP Requests Chart -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">HTTP Requests</h3>
+            <p class="text-sm text-gray-500">Total requests per collection period</p>
+        </div>
+        <div class="p-6">
+            <canvas id="httpChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Response Codes Chart -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Response Status Codes</h3>
+            <p class="text-sm text-gray-500">Breakdown by HTTP status</p>
+        </div>
+        <div class="p-6">
+            <canvas id="statusChart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- No Data State -->
+<div id="no-data-message" class="hidden">
+    <div class="bg-gray-50 rounded-xl p-12 text-center mt-8">
+        <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+        </svg>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">No Metrics Data Yet</h3>
+        <p class="text-gray-500 max-w-md mx-auto">
+            Metrics are collected every 5 minutes. Please wait for the first collection cycle to complete.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>
+(function() {
+    const apiUrl = '{% url "global_metrics_api" %}';
+
+    let charts = {};
+    let currentHours = 24;
+
+    // Chart color palette
+    const colors = {
+        blue: { bg: 'rgba(59, 130, 246, 0.1)', border: 'rgb(59, 130, 246)' },
+        purple: { bg: 'rgba(147, 51, 234, 0.1)', border: 'rgb(147, 51, 234)' },
+        green: { bg: 'rgba(34, 197, 94, 0.1)', border: 'rgb(34, 197, 94)' },
+        amber: { bg: 'rgba(245, 158, 11, 0.1)', border: 'rgb(245, 158, 11)' },
+        red: { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgb(239, 68, 68)' },
+    };
+
+    // Common chart options
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: true,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                titleColor: '#fff',
+                bodyColor: '#fff',
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+                borderWidth: 1,
+                padding: 12,
+                cornerRadius: 8,
+            }
+        },
+        scales: {
+            x: {
+                type: 'time',
+                time: { displayFormats: { hour: 'HH:mm', day: 'MMM d' } },
+                grid: { display: false },
+                ticks: { color: '#6B7280', font: { size: 11 } }
+            },
+            y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(243, 244, 246, 1)' },
+                ticks: { color: '#6B7280', font: { size: 11 } }
+            }
+        }
+    };
+
+    function formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num.toString();
+    }
+
+    function createChart(canvasId, type, datasets, options = {}) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return null;
+
+        if (charts[canvasId]) {
+            charts[canvasId].destroy();
+        }
+
+        charts[canvasId] = new Chart(ctx, {
+            type: type,
+            data: { datasets: datasets },
+            options: { ...commonOptions, ...options }
+        });
+
+        return charts[canvasId];
+    }
+
+    function updateTopTable(tableId, items, valueKey, formatFn) {
+        const tbody = document.getElementById(tableId);
+        if (!items || items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2" class="text-gray-400 py-4 text-center">No data</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = items.map((item, idx) => `
+            <tr class="border-t border-gray-100">
+                <td class="py-2">
+                    <a href="/dashboard/domains/${item.domain}/metrics/" class="text-blue-600 hover:text-blue-800 hover:underline">
+                        ${item.domain}
+                    </a>
+                </td>
+                <td class="py-2 text-right font-medium">${formatFn(item[valueKey])}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function loadMetrics(hours) {
+        currentHours = hours;
+
+        // Determine period based on hours
+        let period = '5min';
+        if (hours > 48) period = 'hourly';
+        if (hours > 168) period = 'daily';
+
+        try {
+            const response = await fetch(`${apiUrl}?hours=${hours}&period=${period}`);
+            const data = await response.json();
+
+            // Update summary cards
+            document.getElementById('total-domains').textContent = data.summary.total_domains;
+            document.getElementById('total-cpu').textContent = formatNumber(data.summary.total_cpu_millicores) + 'm';
+            document.getElementById('total-memory').textContent = formatNumber(Math.round(data.summary.total_memory_mb)) + ' MB';
+            document.getElementById('total-requests').textContent = formatNumber(data.summary.total_requests_24h);
+
+            // Update top consumer tables
+            updateTopTable('top-cpu-table', data.top_cpu, 'cpu_millicores', v => v + 'm');
+            updateTopTable('top-memory-table', data.top_memory, 'memory_mb', v => Math.round(v) + ' MB');
+            updateTopTable('top-requests-table', data.top_requests, 'requests_24h', formatNumber);
+
+            if (data.meta.data_points === 0) {
+                document.getElementById('no-data-message').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('no-data-message').classList.add('hidden');
+
+            // Parse labels as dates
+            const labels = data.timeseries.labels.map(l => new Date(l));
+
+            // CPU Chart
+            createChart('cpuChart', 'line', [{
+                label: 'CPU (millicores)',
+                data: labels.map((l, i) => ({ x: l, y: data.timeseries.cpu[i] })),
+                borderColor: colors.blue.border,
+                backgroundColor: colors.blue.bg,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 2,
+            }]);
+
+            // Memory Chart
+            createChart('memoryChart', 'line', [{
+                label: 'Memory (MB)',
+                data: labels.map((l, i) => ({ x: l, y: data.timeseries.memory[i] })),
+                borderColor: colors.purple.border,
+                backgroundColor: colors.purple.bg,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 2,
+            }]);
+
+            // HTTP Requests Chart
+            createChart('httpChart', 'bar', [{
+                label: 'Requests',
+                data: labels.map((l, i) => ({ x: l, y: data.timeseries.requests[i] })),
+                backgroundColor: colors.green.border,
+                borderRadius: 4,
+            }]);
+
+            // Status Codes Chart (stacked)
+            createChart('statusChart', 'bar', [
+                {
+                    label: '2xx (Success)',
+                    data: labels.map((l, i) => ({ x: l, y: data.timeseries.http_2xx[i] })),
+                    backgroundColor: 'rgb(34, 197, 94)',
+                    stack: 'status',
+                },
+                {
+                    label: '3xx (Redirect)',
+                    data: labels.map((l, i) => ({ x: l, y: data.timeseries.http_3xx[i] })),
+                    backgroundColor: 'rgb(59, 130, 246)',
+                    stack: 'status',
+                },
+                {
+                    label: '4xx (Client Error)',
+                    data: labels.map((l, i) => ({ x: l, y: data.timeseries.http_4xx[i] })),
+                    backgroundColor: 'rgb(245, 158, 11)',
+                    stack: 'status',
+                },
+                {
+                    label: '5xx (Server Error)',
+                    data: labels.map((l, i) => ({ x: l, y: data.timeseries.http_5xx[i] })),
+                    backgroundColor: 'rgb(239, 68, 68)',
+                    stack: 'status',
+                }
+            ], {
+                plugins: {
+                    legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15 } }
+                },
+                scales: {
+                    ...commonOptions.scales,
+                    x: { ...commonOptions.scales.x, stacked: true },
+                    y: { ...commonOptions.scales.y, stacked: true }
+                }
+            });
+
+        } catch (error) {
+            console.error('Error loading metrics:', error);
+        }
+    }
+
+    // Time range buttons
+    document.querySelectorAll('.time-range-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.time-range-btn').forEach(b => {
+                b.classList.remove('bg-white', 'shadow-sm', 'text-gray-900');
+                b.classList.add('text-gray-600');
+            });
+            this.classList.add('bg-white', 'shadow-sm', 'text-gray-900');
+            this.classList.remove('text-gray-600');
+
+            loadMetrics(parseInt(this.dataset.hours));
+        });
+    });
+
+    // Initial load
+    loadMetrics(24);
+
+    // Refresh every 5 minutes
+    setInterval(() => {
+        loadMetrics(currentHours);
+    }, 5 * 60 * 1000);
+})();
+</script>
+{% endblock %}
