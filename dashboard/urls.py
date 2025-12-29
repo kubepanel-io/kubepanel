@@ -83,12 +83,12 @@ urlpatterns = [
     path('logs/<int:log_id>/', views_logging.log_detail, name='log_detail'),
     path('logs/object/<int:content_type_id>/<int:object_id>/', views_logging.object_logs, name='object_logs'),
     path("change_password/<str:domain>/<str:password_type>", views.change_password, name="change_password"),
-    # GlobalWAF routes (admin only)
-    path('admin/global-waf/', views.global_waf_list, name='global_waf_list'),
-    path('admin/global-waf/toggle/', views.global_waf_toggle, name='global_waf_toggle'),
-    path('admin/global-waf/rules/add/', views.global_waf_add_rule, name='global_waf_add_rule'),
-    path('admin/global-waf/rules/<int:rule_index>/edit/', views.global_waf_edit_rule, name='global_waf_edit_rule'),
-    path('admin/global-waf/rules/<int:rule_index>/delete/', views.global_waf_delete_rule, name='global_waf_delete_rule'),
+    # GlobalWAF routes (superuser only)
+    path('global-waf/', views.global_waf_list, name='global_waf_list'),
+    path('global-waf/toggle/', views.global_waf_toggle, name='global_waf_toggle'),
+    path('global-waf/rules/add/', views.global_waf_add_rule, name='global_waf_add_rule'),
+    path('global-waf/rules/<int:rule_index>/edit/', views.global_waf_edit_rule, name='global_waf_edit_rule'),
+    path('global-waf/rules/<int:rule_index>/delete/', views.global_waf_delete_rule, name='global_waf_delete_rule'),
     # API endpoints
     path('api/logs/', views_logging.logs_api, name='logs_api'),
 ]
