@@ -214,13 +214,13 @@ class Command(BaseCommand):
                         log_entry = json.loads(line)
 
                         # Check if this request is for our domain
-                        host = log_entry.get('host', '')
-                        if domain_name not in host:
+                        vhost = log_entry.get('vhost', '')
+                        if domain_name not in vhost:
                             continue
 
                         # Skip static files for request count
-                        uri = log_entry.get('uri', '')
-                        if self._is_static_file(uri):
+                        path = log_entry.get('path', '')
+                        if self._is_static_file(path):
                             continue
 
                         metrics['total'] += 1
