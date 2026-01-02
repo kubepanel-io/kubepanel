@@ -53,10 +53,10 @@ def fetch_ingress_logs(since_seconds=300):
 
     for pod in pods:
         pod_name = pod["metadata"]["name"]
-        # Add protection limits: limitBytes=2MB, tailLines=1000
+        # Add protection limit: limitBytes=5MB (no tailLines - it shows last N lines, not first N)
         log_url = (
             f"https://{host}:{port}/api/v1/namespaces/{namespace}/pods/{pod_name}/log"
-            f"?sinceSeconds={since_seconds}&limitBytes=2000000&tailLines=1000"
+            f"?sinceSeconds={since_seconds}&limitBytes=5000000"
         )
         response = requests.get(log_url, headers=headers, verify=ca_cert_path)
 
