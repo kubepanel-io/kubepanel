@@ -349,7 +349,7 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         // Auto-refresh functionality
-        let autoRefresh = false;
+        let autoRefresh = localStorage.getItem('livetraffic_autorefresh') === 'true';
         let refreshInterval;
         const REFRESH_INTERVAL = 30000; // 30 seconds
         const refreshButton = document.getElementById('auto-refresh-toggle');
@@ -384,10 +384,11 @@
             }
         });
 
-        // Auto-refresh with real AJAX polling
-        async function fetchNewLogs() {
+        // Auto-refresh - reload page to get fresh data
+        function refreshPage() {
+            // Preserve current timeframe settings in URL
             const sinceTime = document.getElementById('since-time').value;
-            let url = '{% url "livetraffic_api" %}';
+            let url = '{% url "livetraffic" %}';
 
             if (sinceTime) {
                 url += '?since_time=' + encodeURIComponent(sinceTime);
@@ -395,37 +396,21 @@
                 url += '?since_minutes={{ since_minutes|default:5 }}';
             }
 
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error('Failed to fetch');
-                const data = await response.json();
-
-                // Update stats
-                if (data.stats) {
-                    document.getElementById('total-requests').textContent = data.stats.total;
-                    document.getElementById('success-requests').textContent = data.stats.success;
-                    document.getElementById('client-errors').textContent = data.stats.client_errors;
-                    document.getElementById('server-errors').textContent = data.stats.server_errors;
-                }
-
-                updateLastUpdated();
-            } catch (error) {
-                console.error('Auto-refresh failed:', error);
-            }
+            window.location.href = url;
         }
 
-        function toggleAutoRefresh() {
-            autoRefresh = !autoRefresh;
+        function setAutoRefreshState(enabled) {
+            autoRefresh = enabled;
+            localStorage.setItem('livetraffic_autorefresh', enabled);
 
-            if (autoRefresh) {
-                refreshText.textContent = 'Auto Refresh: On';
+            if (enabled) {
+                refreshText.textContent = 'Auto Refresh: On (30s)';
                 refreshButton.classList.add('bg-green-50', 'border-green-300', 'text-green-700');
                 refreshButton.classList.remove('border-gray-300', 'text-gray-600');
                 refreshIcon.classList.add('animate-spin');
 
-                // Fetch immediately, then every 30 seconds
-                fetchNewLogs();
-                refreshInterval = setInterval(fetchNewLogs, REFRESH_INTERVAL);
+                // Start interval - page will reload every 30 seconds
+                refreshInterval = setInterval(refreshPage, REFRESH_INTERVAL);
             } else {
                 refreshText.textContent = 'Auto Refresh: Off';
                 refreshButton.classList.remove('bg-green-50', 'border-green-300', 'text-green-700');
@@ -438,9 +423,18 @@
             }
         }
 
+        function toggleAutoRefresh() {
+            setAutoRefreshState(!autoRefresh);
+        }
+
         function updateLastUpdated() {
             const now = new Date();
             lastUpdated.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+        }
+
+        // Initialize auto-refresh state from localStorage
+        if (autoRefresh) {
+            setAutoRefreshState(true);
         }
 
         refreshButton.addEventListener('click', toggleAutoRefresh);
