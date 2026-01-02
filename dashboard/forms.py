@@ -3,31 +3,43 @@ from django.core.exceptions import ValidationError
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
-from dashboard.models import PhpImage, Package, UserProfile, Domain, DomainAlias, CloudflareAPIToken, DNSRecord, DNSZone, MailUser, MailAlias
+from dashboard.models import (
+    PhpImage, Package, UserProfile, Domain, DomainAlias,
+    CloudflareAPIToken, DNSRecord, DNSZone, MailUser, MailAlias,
+    WorkloadType, WorkloadVersion,
+)
 from passlib.hash import sha512_crypt
 
+
+# DEPRECATED: Keep for backward compatibility
 class PhpImageChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
-        # return whatever you like here; for example:
         return f"{obj.version}"
+
+
+class WorkloadVersionChoiceField(forms.ModelChoiceField):
+    """Custom field that displays workload type + version."""
+    def label_from_instance(self, obj):
+        return f"{obj.workload_type.name} {obj.version}"
+
 
 class DomainForm(forms.ModelForm):
     """
-    Form for Django-backed domain fields (resource limits, PHP version).
+    Form for Django-backed domain fields (resource limits, workload version).
 
     These fields are stored in Django for quota enforcement.
-    Infrastructure config (PHP/nginx settings) is in DomainConfigForm.
+    Infrastructure config (app/nginx settings) is in DomainConfigForm.
     """
-    php_image = PhpImageChoiceField(
-        queryset=PhpImage.objects.all(),
+    workload_version = WorkloadVersionChoiceField(
+        queryset=WorkloadVersion.objects.filter(is_active=True).select_related('workload_type'),
         widget=forms.Select(attrs={'class': 'form-select'}),
-        label='PHP Version',
+        label='Workload Version',
         required=True,
     )
 
     class Meta:
         model = Domain
-        fields = ["cpu_limit", "mem_limit", "php_image"]
+        fields = ["cpu_limit", "mem_limit", "workload_version"]
         widgets = {
             'cpu_limit': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -46,12 +58,14 @@ class DomainForm(forms.ModelForm):
 
 class DomainConfigForm(forms.Form):
     """
-    Form for domain infrastructure config (PHP/nginx settings).
+    Form for domain infrastructure config (workload/nginx settings).
 
     This is NOT a ModelForm - config is stored in the Kubernetes Domain CR,
     not in the Django database. The CR is the single source of truth.
+
+    Note: PHP-specific fields are shown/hidden via JavaScript based on workload type.
     """
-    # PHP settings
+    # PHP settings (shown only for PHP workloads)
     php_memory_limit = forms.CharField(
         max_length=10,
         required=False,
@@ -91,14 +105,16 @@ class DomainConfigForm(forms.Form):
         }),
         label='Post Max Size',
     )
-    custom_php_config = forms.CharField(
+
+    # Generic workload custom config (works for all types)
+    custom_app_config = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
             'class': 'form-control font-mono',
             'rows': 4,
-            'placeholder': '; Custom php.ini directives\n; display_errors = Off'
+            'placeholder': '# Custom app configuration'
         }),
-        label='Custom PHP Config',
+        label='Custom App Config',
     )
 
     # Webserver settings
@@ -145,27 +161,30 @@ class DomainConfigForm(forms.Form):
         label='Custom Nginx Config',
     )
 
-    def to_cr_patch(self) -> dict:
+    def to_cr_patch(self, workload_type: str = 'php') -> dict:
         """Convert form data to Domain CR patch format."""
         data = self.cleaned_data
         patch = {
-            "php": {
+            "workload": {
                 "settings": {}
             },
             "webserver": {}
         }
 
-        # PHP settings
-        if data.get("php_memory_limit"):
-            patch["php"]["settings"]["memoryLimit"] = data["php_memory_limit"]
-        if data.get("php_max_execution_time"):
-            patch["php"]["settings"]["maxExecutionTime"] = data["php_max_execution_time"]
-        if data.get("php_upload_max_filesize"):
-            patch["php"]["settings"]["uploadMaxFilesize"] = data["php_upload_max_filesize"]
-        if data.get("php_post_max_size"):
-            patch["php"]["settings"]["postMaxSize"] = data["php_post_max_size"]
-        if data.get("custom_php_config"):
-            patch["php"]["customConfig"] = data["custom_php_config"]
+        # Workload settings (PHP-specific settings go in settings dict)
+        if workload_type == 'php':
+            if data.get("php_memory_limit"):
+                patch["workload"]["settings"]["memoryLimit"] = data["php_memory_limit"]
+            if data.get("php_max_execution_time"):
+                patch["workload"]["settings"]["maxExecutionTime"] = data["php_max_execution_time"]
+            if data.get("php_upload_max_filesize"):
+                patch["workload"]["settings"]["uploadMaxFilesize"] = data["php_upload_max_filesize"]
+            if data.get("php_post_max_size"):
+                patch["workload"]["settings"]["postMaxSize"] = data["php_post_max_size"]
+
+        # Custom config for any workload type
+        if data.get("custom_app_config"):
+            patch["workload"]["customConfig"] = data["custom_app_config"]
 
         # Webserver settings
         if data.get("document_root"):
@@ -179,47 +198,63 @@ class DomainConfigForm(forms.Form):
             patch["webserver"]["customConfig"] = data["custom_nginx_config"]
 
         # Clean up empty nested dicts
-        if not patch["php"]["settings"]:
-            del patch["php"]["settings"]
-        if not patch["php"]:
-            del patch["php"]
+        if not patch["workload"]["settings"]:
+            del patch["workload"]["settings"]
+        if not patch["workload"]:
+            del patch["workload"]
         if not patch["webserver"]:
             del patch["webserver"]
 
         return patch
 
 class DomainAddForm(forms.ModelForm):
+    """Form for creating a new domain with workload selection."""
 
-  php_image = PhpImageChoiceField(
-      queryset=PhpImage.objects.all(),
-      widget=forms.Select(attrs={'class': 'form-select'}),
-      label='PHP Version',
-      required=True,
-  )
+    workload_type = forms.ModelChoiceField(
+        queryset=WorkloadType.objects.filter(is_active=True).order_by('display_order', 'name'),
+        widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_workload_type'}),
+        label='Workload Type',
+        required=True,
+    )
 
-  class Meta:
-    model = Domain
-    fields = ["cpu_limit","mem_limit","storage_size", "php_image"]
-    widgets = {
-                'cpu_limit': forms.NumberInput(attrs={
-                    'class': 'form-control',
-                    'placeholder': 'CPU Limit in milliCPU',
-                    'min': 100,
-                    'max': 4000,
-                }),
-                'mem_limit': forms.NumberInput(attrs={
-                    'class': 'form-control',
-                    'placeholder': 'Memory Limit in MiB',
-                    'min': 32,
-                    'max': 4096,
-                }),
-                'storage_size': forms.NumberInput(attrs={
-                    'class': 'form-control',
-                    'placeholder': 'Storage size in GiB',
-                    'min': 1,
-                    'max': 10000,
-                }),
-            }
+    workload_version = WorkloadVersionChoiceField(
+        queryset=WorkloadVersion.objects.filter(is_active=True).select_related('workload_type'),
+        widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_workload_version'}),
+        label='Version',
+        required=True,
+    )
+
+    class Meta:
+        model = Domain
+        fields = ["cpu_limit", "mem_limit", "storage_size", "workload_version"]
+        widgets = {
+            'cpu_limit': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'CPU Limit in milliCPU',
+                'min': 100,
+                'max': 4000,
+            }),
+            'mem_limit': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Memory Limit in MiB',
+                'min': 32,
+                'max': 4096,
+            }),
+            'storage_size': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Storage size in GiB',
+                'min': 1,
+                'max': 10000,
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Set default workload type if there's one with a default version
+        default_version = WorkloadVersion.objects.filter(is_default=True, is_active=True).first()
+        if default_version:
+            self.fields['workload_type'].initial = default_version.workload_type
+            self.fields['workload_version'].initial = default_version
 
 class APITokenForm(forms.ModelForm):
     class Meta:

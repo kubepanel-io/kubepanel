@@ -108,4 +108,6 @@ urlpatterns = [
     path('api/metrics/global/', views.global_metrics_api, name='global_metrics_api'),
     # API endpoints
     path('api/logs/', views_logging.logs_api, name='logs_api'),
+    path('api/workload-types/', views.get_workload_types, name='api_workload_types'),
+    path('api/workload-versions/<int:type_id>/', views.get_workload_versions, name='api_workload_versions'),
 ]

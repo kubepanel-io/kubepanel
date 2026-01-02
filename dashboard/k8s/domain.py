@@ -40,56 +40,72 @@ def _sanitize_cr_name(domain_name: str) -> str:
 class DomainSpec:
     """
     Domain specification builder.
-    
+
     Provides a clean interface to build Domain CR specs with validation.
+    Now supports multiple workload types (PHP, Python, Node.js, etc.)
     """
-    
+
     def __init__(
         self,
         domain_name: str,
-        php_version: str,
-        storage: str,
-        cpu_limit: str,
-        memory_limit: str,
+        # Workload configuration (replaces php_version)
+        workload_type: str,
+        workload_version: str,
+        workload_image: str,
+        workload_port: int = 9000,
+        proxy_mode: str = 'fastcgi',
+        # Resource limits
+        storage: str = '5Gi',
+        cpu_limit: str = '500m',
+        memory_limit: str = '256Mi',
     ):
         """
         Initialize required fields.
-        
+
         Args:
             domain_name: Primary domain name (e.g., 'example.com')
-            php_version: PHP version (e.g., '8.2')
+            workload_type: Workload type slug (e.g., 'php', 'python', 'nodejs')
+            workload_version: Version string (e.g., '8.2', '3.11', '20')
+            workload_image: Full container image URL
+            workload_port: App container port (e.g., 9001 for PHP, 8000 for Python)
+            proxy_mode: How nginx proxies to app ('fastcgi', 'http', 'uwsgi')
             storage: Storage size (e.g., '5Gi')
             cpu_limit: CPU limit (e.g., '500m')
             memory_limit: Memory limit (e.g., '256Mi')
         """
         self.domain_name = domain_name
-        self.php_version = php_version
+        self.workload_type = workload_type
+        self.workload_version = workload_version
+        self.workload_image = workload_image
+        self.workload_port = workload_port
+        self.proxy_mode = proxy_mode
         self.storage = storage
         self.cpu_limit = cpu_limit
         self.memory_limit = memory_limit
-        
+
         # Optional fields with defaults
         self.title: Optional[str] = None
         self.aliases: list[str] = []
         self.suspended: bool = False
-        
-        # PHP settings (optional)
-        self.php_memory_limit: Optional[str] = None
-        self.php_max_execution_time: Optional[int] = None
-        self.php_upload_max_filesize: Optional[str] = None
-        self.php_post_max_size: Optional[str] = None
-        
+
+        # Workload optional fields
+        self.workload_command: Optional[list] = None
+        self.workload_args: Optional[list] = None
+        self.workload_env: Optional[list] = None  # [{"name": "...", "value": "..."}]
+        self.workload_settings: Optional[dict] = None  # Type-specific settings
+        self.workload_custom_config: Optional[str] = None
+
         # Resource requests (optional, operator uses low defaults)
         self.cpu_request: Optional[str] = None
         self.memory_request: Optional[str] = None
-        
+
         # Webserver settings (optional)
         self.document_root: Optional[str] = None
         self.client_max_body_size: Optional[str] = None
         self.ssl_redirect: Optional[bool] = None
         self.www_redirect: Optional[str] = None
         self.custom_nginx_config: Optional[str] = None
-        
+
         # Feature toggles (optional)
         self.database_enabled: Optional[bool] = None
         self.email_enabled: Optional[bool] = None
@@ -105,13 +121,17 @@ class DomainSpec:
         self.dns_zone_create: Optional[bool] = None
         self.dns_auto_create_records: Optional[bool] = None
         self.dns_records: Optional[list] = None  # List of record dicts
-    
+
     def to_dict(self) -> dict:
         """Convert to Domain CR spec dict."""
         spec = {
             "domainName": self.domain_name,
-            "php": {
-                "version": self.php_version,
+            "workload": {
+                "type": self.workload_type,
+                "version": self.workload_version,
+                "image": self.workload_image,
+                "port": self.workload_port,
+                "proxyMode": self.proxy_mode,
             },
             "resources": {
                 "storage": self.storage,
@@ -121,32 +141,31 @@ class DomainSpec:
                 },
             },
         }
-        
+
+        # Add optional workload fields
+        if self.workload_command:
+            spec["workload"]["command"] = self.workload_command
+        if self.workload_args:
+            spec["workload"]["args"] = self.workload_args
+        if self.workload_env:
+            spec["workload"]["env"] = self.workload_env
+        if self.workload_settings:
+            spec["workload"]["settings"] = self.workload_settings
+        if self.workload_custom_config:
+            spec["workload"]["customConfig"] = self.workload_custom_config
+
         # Add optional title
         if self.title:
             spec["title"] = self.title
-        
+
         # Add aliases if any
         if self.aliases:
             spec["aliases"] = self.aliases
-        
+
         # Add suspended if True
         if self.suspended:
             spec["suspended"] = True
-        
-        # Add PHP settings if any are set
-        php_settings = {}
-        if self.php_memory_limit:
-            php_settings["memoryLimit"] = self.php_memory_limit
-        if self.php_max_execution_time:
-            php_settings["maxExecutionTime"] = self.php_max_execution_time
-        if self.php_upload_max_filesize:
-            php_settings["uploadMaxFilesize"] = self.php_upload_max_filesize
-        if self.php_post_max_size:
-            php_settings["postMaxSize"] = self.php_post_max_size
-        if php_settings:
-            spec["php"]["settings"] = php_settings
-        
+
         # Add resource requests if any are set
         if self.cpu_request or self.memory_request:
             spec["resources"]["requests"] = {}

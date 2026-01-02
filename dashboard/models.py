@@ -39,11 +39,167 @@ def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
 
 class PhpImage(models.Model):
+    """DEPRECATED: Use WorkloadVersion instead. Kept for migration compatibility."""
     version = models.CharField(max_length=50, unique=True)
     repository_url = models.CharField(max_length=255)
 
     def __str__(self):
         return self.repository_url
+
+
+class WorkloadType(models.Model):
+    """
+    Admin-configurable workload types (PHP, Python, Node.js, Django, etc.)
+
+    Each type defines how the app container runs and connects to nginx.
+    """
+    PROXY_MODE_CHOICES = [
+        ('fastcgi', 'FastCGI (PHP-FPM)'),
+        ('http', 'HTTP Proxy'),
+        ('uwsgi', 'uWSGI Protocol'),
+    ]
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Display name (e.g., 'PHP', 'Python', 'Node.js')"
+    )
+    slug = models.SlugField(
+        max_length=50,
+        unique=True,
+        help_text="URL-safe identifier (e.g., 'php', 'python', 'nodejs')"
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this workload type"
+    )
+    icon = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="CSS class or emoji for UI display"
+    )
+
+    # Container configuration
+    app_port = models.IntegerField(
+        default=9000,
+        help_text="Port the app container listens on (e.g., 9001 for PHP-FPM, 8000 for Python)"
+    )
+    proxy_mode = models.CharField(
+        max_length=20,
+        choices=PROXY_MODE_CHOICES,
+        default='fastcgi',
+        help_text="How nginx connects to the app container"
+    )
+
+    # Default resource settings
+    default_cpu_limit = models.IntegerField(
+        default=500,
+        validators=[MinValueValidator(100), MaxValueValidator(4000)],
+        help_text="Default CPU limit in millicores"
+    )
+    default_memory_limit = models.IntegerField(
+        default=256,
+        validators=[MinValueValidator(32), MaxValueValidator(4096)],
+        help_text="Default memory limit in MB"
+    )
+
+    # Ordering and status
+    display_order = models.IntegerField(
+        default=0,
+        help_text="Order in UI dropdowns (lower = first)"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this type is available for selection"
+    )
+
+    class Meta:
+        ordering = ['display_order', 'name']
+        verbose_name = "Workload Type"
+        verbose_name_plural = "Workload Types"
+
+    def __str__(self):
+        return self.name
+
+
+class WorkloadVersion(models.Model):
+    """
+    Specific versions available for each workload type.
+
+    Admin configures the full container image URL for each version.
+    """
+    workload_type = models.ForeignKey(
+        WorkloadType,
+        on_delete=models.CASCADE,
+        related_name='versions',
+        help_text="Parent workload type"
+    )
+    version = models.CharField(
+        max_length=50,
+        help_text="Version string (e.g., '8.2', '3.11', '20')"
+    )
+
+    # Full image URL (admin-configured)
+    image_url = models.CharField(
+        max_length=500,
+        help_text="Full container image URL (e.g., docker.io/kubepanel/php82:v1.0)"
+    )
+
+    # Version-specific defaults (override type defaults if set)
+    default_cpu_limit = models.IntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(100), MaxValueValidator(4000)],
+        help_text="Override CPU limit for this version (leave blank to use type default)"
+    )
+    default_memory_limit = models.IntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(32), MaxValueValidator(4096)],
+        help_text="Override memory limit for this version (leave blank to use type default)"
+    )
+
+    # Ordering and status
+    display_order = models.IntegerField(
+        default=0,
+        help_text="Order in UI dropdowns (lower = first)"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this version is available for selection"
+    )
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Default version for this workload type"
+    )
+
+    class Meta:
+        ordering = ['workload_type', 'display_order', '-version']
+        unique_together = ['workload_type', 'version']
+        verbose_name = "Workload Version"
+        verbose_name_plural = "Workload Versions"
+
+    def __str__(self):
+        return f"{self.workload_type.name} {self.version}"
+
+    @property
+    def effective_cpu_limit(self):
+        """Get CPU limit, falling back to type default."""
+        return self.default_cpu_limit or self.workload_type.default_cpu_limit
+
+    @property
+    def effective_memory_limit(self):
+        """Get memory limit, falling back to type default."""
+        return self.default_memory_limit or self.workload_type.default_memory_limit
+
+    def save(self, *args, **kwargs):
+        # If this is being set as default, unset other defaults for this type
+        if self.is_default:
+            WorkloadVersion.objects.filter(
+                workload_type=self.workload_type,
+                is_default=True
+            ).exclude(pk=self.pk).update(is_default=False)
+        super().save(*args, **kwargs)
 
 
 class Domain(models.Model):
@@ -95,12 +251,24 @@ class Domain(models.Model):
         help_text="Memory limit in MB"
     )
     
-    # === PHP Configuration ===
+    # === Workload Configuration ===
+    workload_version = models.ForeignKey(
+        WorkloadVersion,
+        on_delete=models.PROTECT,
+        related_name='domains',
+        null=True,  # Nullable during migration, will be made required later
+        blank=True,
+        help_text="Workload type and version for this domain"
+    )
+
+    # DEPRECATED: Keep for migration compatibility
     php_image = models.ForeignKey(
         PhpImage,
         on_delete=models.PROTECT,
         related_name='domains',
-        help_text="PHP version for this domain"
+        null=True,  # Made nullable for migration
+        blank=True,
+        help_text="DEPRECATED: Use workload_version instead"
     )
 
     # === Timestamps ===
@@ -146,10 +314,10 @@ class Domain(models.Model):
                 'mem_limit': f"Total memory ({total_mem} MB) exceeds package limit ({pkg.max_memory} MB)."
             })
         
-        # Check PHP image
-        if self.php_image_id is None:
+        # Check workload version (or php_image during migration)
+        if self.workload_version_id is None and self.php_image_id is None:
             raise ValidationError({
-                'php_image': 'A PHP version must be selected.'
+                'workload_version': 'A workload type and version must be selected.'
             })
         
         # Check domain aliases limit

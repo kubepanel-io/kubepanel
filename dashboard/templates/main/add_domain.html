@@ -128,30 +128,46 @@
                     </div>
                 </div>
 
-                <!-- PHP Configuration Section -->
+                <!-- Workload Configuration Section -->
                 <div class="mb-8">
                     <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
                         <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
                         </svg>
-                        PHP Configuration
+                        Workload Configuration
                     </h4>
 
-                    <div class="grid grid-cols-1 gap-6">
-                        <!-- PHP Version -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Workload Type -->
                         <div>
-                            <label for="{{ form.php_image.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                            <label for="id_workload_type" class="block text-sm font-medium text-gray-700 mb-2">
                                 <div class="flex items-center">
                                     <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
                                     </svg>
-                                    PHP Version
+                                    Workload Type
                                 </div>
                             </label>
                             <div class="form-field-wrapper">
-                                {{ form.php_image }}
+                                {{ form.workload_type }}
                             </div>
-                            <p class="mt-1 text-xs text-gray-500">Select the PHP version for your website</p>
+                            <p class="mt-1 text-xs text-gray-500">Select the runtime environment for your application</p>
+                        </div>
+
+                        <!-- Workload Version -->
+                        <div>
+                            <label for="id_workload_version" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                                    </svg>
+                                    Version
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.workload_version }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Select the version for your workload</p>
                         </div>
                     </div>
                 </div>
@@ -267,6 +283,114 @@
 {% block extra_js %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Workload type/version handling
+        const workloadTypeSelect = document.getElementById('id_workload_type');
+        const workloadVersionSelect = document.getElementById('id_workload_version');
+
+        // Store original versions grouped by type
+        const versionsByType = {};
+        const originalVersionOptions = Array.from(workloadVersionSelect.options);
+
+        // Build version mapping from existing options
+        originalVersionOptions.forEach(option => {
+            if (option.value) {
+                // Parse the label to determine the type (e.g., "PHP 8.2" -> "PHP")
+                const label = option.text;
+                const typeName = label.split(' ')[0];
+                if (!versionsByType[typeName]) {
+                    versionsByType[typeName] = [];
+                }
+                versionsByType[typeName].push({
+                    value: option.value,
+                    text: option.text,
+                    selected: option.selected
+                });
+            }
+        });
+
+        function filterVersionsByType() {
+            const selectedTypeId = workloadTypeSelect.value;
+            if (!selectedTypeId) return;
+
+            // Get the type name from the selected option
+            const selectedTypeName = workloadTypeSelect.options[workloadTypeSelect.selectedIndex].text;
+
+            // Clear version dropdown
+            workloadVersionSelect.innerHTML = '';
+
+            // Add placeholder
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.text = 'Select a version...';
+            workloadVersionSelect.appendChild(placeholder);
+
+            // Add versions for this type
+            const versions = versionsByType[selectedTypeName] || [];
+            versions.forEach(version => {
+                const option = document.createElement('option');
+                option.value = version.value;
+                option.text = version.text;
+                if (version.selected) {
+                    option.selected = true;
+                }
+                workloadVersionSelect.appendChild(option);
+            });
+
+            // If only one version, select it automatically
+            if (versions.length === 1) {
+                workloadVersionSelect.value = versions[0].value;
+            }
+        }
+
+        // Alternative: Use API for dynamic loading
+        function loadVersionsFromAPI() {
+            const selectedTypeId = workloadTypeSelect.value;
+            if (!selectedTypeId) {
+                workloadVersionSelect.innerHTML = '<option value="">Select a workload type first...</option>';
+                return;
+            }
+
+            // Show loading state
+            workloadVersionSelect.innerHTML = '<option value="">Loading versions...</option>';
+            workloadVersionSelect.disabled = true;
+
+            fetch(`/dashboard/api/workload-versions/${selectedTypeId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    workloadVersionSelect.innerHTML = '';
+
+                    // Add placeholder
+                    const placeholder = document.createElement('option');
+                    placeholder.value = '';
+                    placeholder.text = 'Select a version...';
+                    workloadVersionSelect.appendChild(placeholder);
+
+                    // Add versions
+                    data.versions.forEach(version => {
+                        const option = document.createElement('option');
+                        option.value = version.id;
+                        option.text = version.label;
+                        if (version.is_default) {
+                            option.selected = true;
+                        }
+                        workloadVersionSelect.appendChild(option);
+                    });
+
+                    workloadVersionSelect.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Failed to load versions:', error);
+                    workloadVersionSelect.innerHTML = '<option value="">Error loading versions</option>';
+                    workloadVersionSelect.disabled = false;
+                });
+        }
+
+        // Use API-based loading for dynamic updates
+        workloadTypeSelect.addEventListener('change', loadVersionsFromAPI);
+
+        // Initialize versions on page load (use existing form options)
+        filterVersionsByType();
+
         // Auto DNS checkbox handling
         const autoDnsCheckbox = document.getElementById('auto_dns');
         const apiTokenSelect = document.getElementById('api_token_select');

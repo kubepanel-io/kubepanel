@@ -137,6 +137,12 @@ from .metrics import (
     global_metrics_api,
 )
 
+# API views
+from .api import (
+    get_workload_versions,
+    get_workload_types,
+)
+
 # Utility exports
 from .utils import (
     SuperuserRequiredMixin,
@@ -259,6 +265,10 @@ __all__ = [
     'domain_metrics_summary',
     'global_metrics_page',
     'global_metrics_api',
+
+    # API
+    'get_workload_versions',
+    'get_workload_types',
 
     # Utils
     'SuperuserRequiredMixin',

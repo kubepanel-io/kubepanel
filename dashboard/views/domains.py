@@ -17,7 +17,7 @@ import base64
 import re
 import pymysql
 
-from dashboard.models import Domain, DomainAlias, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry
+from dashboard.models import Domain, DomainAlias, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry, WorkloadVersion
 from dashboard.forms import DomainForm, DomainConfigForm, DomainAddForm, DomainAliasForm
 from dashboard.services.dkim import generate_dkim_keypair
 from dashboard.k8s import (
@@ -122,16 +122,16 @@ def add_domain(request):
             mem_limit = int(request.POST.get("mem_limit", 256))
             cpu_limit = int(request.POST.get("cpu_limit", 500))
             storage_size = int(request.POST.get("storage_size", 5))
-            php_image_id = request.POST.get("php_image", "")
+            workload_version_id = request.POST.get("workload_version", "")
 
             if not domain_name:
                 messages.error(request, "Domain name is required.")
                 return redirect('add_domain')
 
             try:
-                php_image = PhpImage.objects.get(pk=int(php_image_id))
-            except (PhpImage.DoesNotExist, ValueError):
-                messages.error(request, "Invalid PHP version selected.")
+                workload_version = WorkloadVersion.objects.select_related('workload_type').get(pk=int(workload_version_id))
+            except (WorkloadVersion.DoesNotExist, ValueError):
+                messages.error(request, "Invalid workload version selected.")
                 return redirect('add_domain')
 
             if Domain.objects.filter(domain_name=domain_name).exists():
@@ -148,9 +148,14 @@ def add_domain(request):
             dkim_selector = "default"
 
             # Build Domain CR spec
+            workload_type = workload_version.workload_type
             domain_spec = DomainSpec(
                 domain_name=domain_name,
-                php_version=php_image.version,
+                workload_type=workload_type.slug,
+                workload_version=workload_version.version,
+                workload_image=workload_version.image_url,
+                workload_port=workload_type.app_port,
+                proxy_mode=workload_type.proxy_mode,
                 storage=f"{storage_size}Gi",
                 cpu_limit=f"{cpu_limit}m",
                 memory_limit=f"{mem_limit}Mi",
@@ -185,7 +190,7 @@ def add_domain(request):
                 owner=request.user,
                 domain_name=domain_name,
                 title=domain_name,
-                php_image=php_image,
+                workload_version=workload_version,
                 storage_size=storage_size,
                 cpu_limit=cpu_limit,
                 mem_limit=mem_limit,
@@ -599,9 +604,12 @@ def save_domain(request, domain):
     # Save Django fields (resource limits for quota enforcement)
     form.save()
 
+    # Get workload info for logging and patching
+    workload_version = domain_instance.workload_version
+    workload_type = workload_version.workload_type if workload_version else None
+
     # Build CR patch from both Django fields and config form
     try:
-        # Start with resource limits from Django model
         patch = {
             "resources": {
                 "limits": {
@@ -609,15 +617,25 @@ def save_domain(request, domain):
                     "memory": f"{domain_instance.mem_limit}Mi",
                 }
             },
-            "php": {
-                "version": domain_instance.php_image.version,
-            },
         }
 
+        # Add workload spec if workload_version is set
+        if workload_version and workload_type:
+            patch["workload"] = {
+                "type": workload_type.slug,
+                "version": workload_version.version,
+                "image": workload_version.image_url,
+                "port": workload_type.app_port,
+                "proxyMode": workload_type.proxy_mode,
+            }
+
         # Merge config from config_form (CR-only fields)
-        config_patch = config_form.to_cr_patch()
-        if "php" in config_patch:
-            patch["php"].update(config_patch["php"])
+        config_patch = config_form.to_cr_patch(workload_type=workload_type.slug if workload_type else 'php')
+        if "workload" in config_patch:
+            if "workload" in patch:
+                patch["workload"].update(config_patch["workload"])
+            else:
+                patch["workload"] = config_patch["workload"]
         if "webserver" in config_patch:
             patch["webserver"] = config_patch["webserver"]
 
@@ -639,7 +657,8 @@ def save_domain(request, domain):
             "domain_id": domain_instance.pk,
             "cpu_limit": domain_instance.cpu_limit,
             "mem_limit": domain_instance.mem_limit,
-            "php_version": domain_instance.php_image.version,
+            "workload_type": workload_type.slug if workload_type else None,
+            "workload_version": workload_version.version if workload_version else None,
             "php_memory_limit": config_form.cleaned_data.get("php_memory_limit"),
             "document_root": config_form.cleaned_data.get("document_root"),
         }
