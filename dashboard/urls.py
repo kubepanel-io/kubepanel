@@ -31,6 +31,7 @@ urlpatterns = [
     path("start_backup/<str:domain>", views.start_backup, name="start_backup"),
     path("settings", views.settings, name="settings"),
     path("livetraffic", views.livetraffic, name="livetraffic"),
+    path("livetraffic/api", views.livetraffic_api, name="livetraffic_api"),
     path("delete_domain/<str:domain>", views.delete_domain, name="delete_domain"),
     path("startstop_domain/<str:domain>/<str:action>", views.startstop_domain, name="startstop_domain"),
     path('pods-status/', views.get_pods_status, name='pods_status'),

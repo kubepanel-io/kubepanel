@@ -109,6 +109,42 @@
 </div>
 {% endif %}
 
+<!-- Timeframe Selection -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 p-4">
+    <div class="flex flex-wrap items-center gap-4">
+        <div class="flex items-center gap-2">
+            <label class="text-sm font-medium text-gray-700">Show logs since:</label>
+            <input type="datetime-local"
+                   id="since-time"
+                   class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                   value="{{ since_time|default:'' }}">
+            <button onclick="applyTimeFilter()"
+                    class="btn-primary text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all">
+                Apply
+            </button>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-500">Quick select:</span>
+            <button onclick="setQuickTime(5)"
+                    class="px-3 py-1.5 text-sm rounded-lg border {% if since_minutes == 5 %}bg-primary-50 border-primary-300 text-primary-700{% else %}border-gray-300 text-gray-600 hover:bg-gray-50{% endif %} transition-colors">
+                5 min
+            </button>
+            <button onclick="setQuickTime(15)"
+                    class="px-3 py-1.5 text-sm rounded-lg border {% if since_minutes == 15 %}bg-primary-50 border-primary-300 text-primary-700{% else %}border-gray-300 text-gray-600 hover:bg-gray-50{% endif %} transition-colors">
+                15 min
+            </button>
+            <button onclick="setQuickTime(30)"
+                    class="px-3 py-1.5 text-sm rounded-lg border {% if since_minutes == 30 %}bg-primary-50 border-primary-300 text-primary-700{% else %}border-gray-300 text-gray-600 hover:bg-gray-50{% endif %} transition-colors">
+                30 min
+            </button>
+            <button onclick="setQuickTime(60)"
+                    class="px-3 py-1.5 text-sm rounded-lg border {% if since_minutes == 60 %}bg-primary-50 border-primary-300 text-primary-700{% else %}border-gray-300 text-gray-600 hover:bg-gray-50{% endif %} transition-colors">
+                1 hour
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Live Traffic Table -->
 <div class="bg-white rounded-xl shadow-sm border border-gray-200">
     <div class="px-6 py-4 border-b border-gray-200">
@@ -119,7 +155,7 @@
             </h3>
             <div class="flex items-center space-x-3">
                 <span class="text-sm text-gray-500" id="last-updated">Last updated: Just now</span>
-                <button onclick="clearFilters()" 
+                <button onclick="clearFilters()"
                         class="text-sm text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors">
                     Clear Filters
                 </button>
@@ -141,7 +177,31 @@
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Path</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Duration</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Body</th>
-                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Actions</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28 relative">
+                        Block
+                        <button type="button" onclick="toggleBlockInfo(event)" class="ml-1 text-gray-400 hover:text-gray-600 align-middle">
+                            <svg class="w-4 h-4 inline" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                        <!-- Info popup -->
+                        <div id="block-info-popup" class="hidden absolute right-0 top-full mt-2 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-4 w-80 text-left normal-case font-normal">
+                            <h4 class="font-semibold mb-2 text-gray-900 text-sm">Blocking Options</h4>
+                            <div class="space-y-3 text-xs">
+                                <div>
+                                    <span class="font-medium text-orange-700">WAF (Web Application Firewall)</span>
+                                    <p class="text-gray-600 mt-0.5">Application-level blocking. Can block by IP, path, domain, or user agent. Rules apply to HTTP/HTTPS traffic only. More flexible but processes traffic at Layer 7.</p>
+                                </div>
+                                <div>
+                                    <span class="font-medium text-red-700">FW (L3 Firewall)</span>
+                                    <p class="text-gray-600 mt-0.5">Network-level blocking. Blocks ALL traffic from an IP at the network layer (Layer 3). More efficient for known bad actors - traffic is dropped before reaching your applications.</p>
+                                </div>
+                                <div class="pt-2 border-t border-gray-200 text-gray-500">
+                                    <strong>Tip:</strong> Use FW for known malicious IPs. Use WAF for granular control (e.g., block specific paths or user agents).
+                                </div>
+                            </div>
+                        </div>
+                    </th>
                 </tr>
                 <!-- Filter Row -->
                 <tr class="bg-gray-100">
@@ -247,11 +307,19 @@
                         {% endif %}
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap text-sm">
-                        {% if log.vhost and log.x_forwarded_for and log.path %}
-                        <a href="{% url 'global_waf_add_rule' %}?domain={{ log.vhost|urlencode }}&ip={{ log.x_forwarded_for|urlencode }}&path={{ log.path|urlencode }}&comment={{ log.vhost|urlencode }}%20block%20from%20livetraffic"
-                           class="text-red-600 hover:text-red-800 text-xs font-medium bg-red-50 hover:bg-red-100 px-2 py-1 rounded transition-colors">
-                            Block
-                        </a>
+                        {% if log.vhost and log.x_forwarded_for %}
+                        <div class="flex gap-1">
+                            <a href="{% url 'global_waf_add_rule' %}?domain={{ log.vhost|urlencode }}&ip={{ log.x_forwarded_for|urlencode }}&path={{ log.path|urlencode }}&comment={{ log.vhost|urlencode }}%20block%20from%20livetraffic"
+                               class="text-xs font-medium bg-orange-50 text-orange-700 hover:bg-orange-100 px-2 py-1 rounded transition-colors"
+                               title="Block with Web Application Firewall">
+                                WAF
+                            </a>
+                            <a href="{% url 'l3_firewall_add_rule' %}?ip={{ log.x_forwarded_for|urlencode }}&comment=Block%20{{ log.x_forwarded_for|urlencode }}%20from%20livetraffic"
+                               class="text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 px-2 py-1 rounded transition-colors"
+                               title="Block at network level (L3 Firewall)">
+                                FW
+                            </a>
+                        </div>
                         {% endif %}
                     </td>
                 </tr>
@@ -283,42 +351,98 @@
         // Auto-refresh functionality
         let autoRefresh = false;
         let refreshInterval;
+        const REFRESH_INTERVAL = 30000; // 30 seconds
         const refreshButton = document.getElementById('auto-refresh-toggle');
         const refreshIcon = document.getElementById('refresh-icon');
         const refreshText = document.getElementById('refresh-text');
         const lastUpdated = document.getElementById('last-updated');
-        
+
+        // Timeframe functions
+        window.applyTimeFilter = function() {
+            const sinceTime = document.getElementById('since-time').value;
+            if (sinceTime) {
+                window.location.href = '{% url "livetraffic" %}?since_time=' + encodeURIComponent(sinceTime);
+            }
+        };
+
+        window.setQuickTime = function(minutes) {
+            window.location.href = '{% url "livetraffic" %}?since_minutes=' + minutes;
+        };
+
+        // Info popup toggle
+        window.toggleBlockInfo = function(event) {
+            event.stopPropagation();
+            const popup = document.getElementById('block-info-popup');
+            popup.classList.toggle('hidden');
+        };
+
+        // Close popup when clicking outside
+        document.addEventListener('click', function(e) {
+            const popup = document.getElementById('block-info-popup');
+            if (popup && !popup.contains(e.target)) {
+                popup.classList.add('hidden');
+            }
+        });
+
+        // Auto-refresh with real AJAX polling
+        async function fetchNewLogs() {
+            const sinceTime = document.getElementById('since-time').value;
+            let url = '{% url "livetraffic_api" %}';
+
+            if (sinceTime) {
+                url += '?since_time=' + encodeURIComponent(sinceTime);
+            } else {
+                url += '?since_minutes={{ since_minutes|default:5 }}';
+            }
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Failed to fetch');
+                const data = await response.json();
+
+                // Update stats
+                if (data.stats) {
+                    document.getElementById('total-requests').textContent = data.stats.total;
+                    document.getElementById('success-requests').textContent = data.stats.success;
+                    document.getElementById('client-errors').textContent = data.stats.client_errors;
+                    document.getElementById('server-errors').textContent = data.stats.server_errors;
+                }
+
+                updateLastUpdated();
+            } catch (error) {
+                console.error('Auto-refresh failed:', error);
+            }
+        }
+
         function toggleAutoRefresh() {
             autoRefresh = !autoRefresh;
-            
+
             if (autoRefresh) {
                 refreshText.textContent = 'Auto Refresh: On';
                 refreshButton.classList.add('bg-green-50', 'border-green-300', 'text-green-700');
                 refreshButton.classList.remove('border-gray-300', 'text-gray-600');
                 refreshIcon.classList.add('animate-spin');
-                
-                refreshInterval = setInterval(() => {
-                    // In a real implementation, this would fetch new data
-                    updateLastUpdated();
-                    updateStats();
-                }, 5000);
+
+                // Fetch immediately, then every 30 seconds
+                fetchNewLogs();
+                refreshInterval = setInterval(fetchNewLogs, REFRESH_INTERVAL);
             } else {
                 refreshText.textContent = 'Auto Refresh: Off';
                 refreshButton.classList.remove('bg-green-50', 'border-green-300', 'text-green-700');
                 refreshButton.classList.add('border-gray-300', 'text-gray-600');
                 refreshIcon.classList.remove('animate-spin');
-                
+
                 if (refreshInterval) {
                     clearInterval(refreshInterval);
                 }
             }
         }
-        
+
         function updateLastUpdated() {
             const now = new Date();
             lastUpdated.textContent = `Last updated: ${now.toLocaleTimeString()}`;
         }
-        
+
         refreshButton.addEventListener('click', toggleAutoRefresh);
         
         // Table filtering functionality

@@ -107,12 +107,22 @@ def l3_firewall_add_rule(request):
                 'edit_mode': False,
             })
 
-    # GET - show form
+    # GET - show form, pre-fill from query params if provided
     rule = {
         'name': '',
         'action': 'deny',
         'protocol': 'TCP',
     }
+
+    # Pre-fill from query params (used by livetraffic Block button)
+    if request.GET.get('ip'):
+        ip = request.GET.get('ip')
+        # Normalize IP to CIDR if it's a single IP
+        if '/' not in ip:
+            ip = f"{ip}/32"
+        rule['source_cidrs'] = ip
+    if request.GET.get('comment'):
+        rule['name'] = request.GET.get('comment')
 
     return render(request, 'main/l3_firewall_rule_form.html', {
         'rule': rule,

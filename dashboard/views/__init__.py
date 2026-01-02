@@ -105,6 +105,7 @@ from .security import (
 # Monitoring views
 from .monitoring import (
     livetraffic,
+    livetraffic_api,
 )
 
 # GlobalWAF views
