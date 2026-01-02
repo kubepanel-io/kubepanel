@@ -797,11 +797,13 @@ def get_domain_config(domain_name: str) -> dict:
 
     Returns:
         Dict with config values:
+        - workload_type
+        - workload_version
         - php_memory_limit
         - php_max_execution_time
         - php_upload_max_filesize
         - php_post_max_size
-        - custom_php_config
+        - custom_app_config
         - document_root
         - client_max_body_size
         - ssl_redirect
@@ -815,20 +817,34 @@ def get_domain_config(domain_name: str) -> dict:
     domain = get_domain(domain_name)
     spec = domain.spec
 
-    # Extract PHP settings
-    php = spec.get("php", {})
-    php_settings = php.get("settings", {})
+    # Extract workload settings (new format)
+    workload = spec.get("workload", {})
+    workload_settings = workload.get("settings", {})
+
+    # Fallback to legacy PHP format if workload not present
+    if not workload:
+        php = spec.get("php", {})
+        workload_settings = php.get("settings", {})
+        workload = {
+            "type": "php",
+            "version": php.get("version", "8.2"),
+            "customConfig": php.get("customConfig", ""),
+        }
 
     # Extract webserver settings
     webserver = spec.get("webserver", {})
 
     return {
-        # PHP settings
-        "php_memory_limit": php_settings.get("memoryLimit", "256M"),
-        "php_max_execution_time": php_settings.get("maxExecutionTime", 30),
-        "php_upload_max_filesize": php_settings.get("uploadMaxFilesize", "64M"),
-        "php_post_max_size": php_settings.get("postMaxSize", "64M"),
-        "custom_php_config": php.get("customConfig", ""),
+        # Workload info
+        "workload_type": workload.get("type", "php"),
+        "workload_version": workload.get("version", ""),
+
+        # PHP/workload settings (from workload.settings)
+        "php_memory_limit": workload_settings.get("memoryLimit", "256M"),
+        "php_max_execution_time": workload_settings.get("maxExecutionTime", 30),
+        "php_upload_max_filesize": workload_settings.get("uploadMaxFilesize", "64M"),
+        "php_post_max_size": workload_settings.get("postMaxSize", "64M"),
+        "custom_app_config": workload.get("customConfig", ""),
 
         # Webserver settings
         "document_root": webserver.get("documentRoot", "/public_html"),
