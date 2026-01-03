@@ -21,9 +21,12 @@ from dashboard.k8s import (
     update_domain_waf_rule,
     delete_domain_waf_rule,
     get_domain_waf_rule,
+    add_domain_protected_path,
+    delete_domain_protected_path,
     K8sClientError,
     K8sNotFoundError,
 )
+from .utils import get_country_info
 
 logger = logging.getLogger("django")
 
@@ -106,11 +109,16 @@ def domain_waf_list(request, domain):
         messages.error(request, f"Failed to load WAF configuration: {e}")
         domainwaf = None
 
+    # Get country list for dropdowns
+    countries = get_country_info()
+
     context = {
         'domain': domain_obj,
         'domainwaf': domainwaf,
         'rules': domainwaf.rules if domainwaf else [],
+        'protected_paths': domainwaf.protected_paths if domainwaf else [],
         'status': domainwaf.status if domainwaf else None,
+        'countries': countries,
     }
     return render(request, 'main/domain_waf.html', context)
 
@@ -156,6 +164,9 @@ def domain_waf_add_rule(request, domain):
     if access_denied:
         return access_denied
 
+    # Get country list for dropdown
+    countries = get_country_info()
+
     if request.method == 'POST':
         # Build rule from form data
         rule = _build_rule_from_post(request.POST)
@@ -166,6 +177,7 @@ def domain_waf_add_rule(request, domain):
             return render(request, 'main/domain_waf_rule_form.html', {
                 'domain': domain_obj,
                 'rule': rule,
+                'countries': countries,
                 'edit_mode': False,
             })
 
@@ -179,6 +191,7 @@ def domain_waf_add_rule(request, domain):
             return render(request, 'main/domain_waf_rule_form.html', {
                 'domain': domain_obj,
                 'rule': rule,
+                'countries': countries,
                 'edit_mode': False,
             })
 
@@ -201,6 +214,7 @@ def domain_waf_add_rule(request, domain):
     return render(request, 'main/domain_waf_rule_form.html', {
         'domain': domain_obj,
         'rule': rule,
+        'countries': countries,
         'edit_mode': False,
     })
 
@@ -215,6 +229,9 @@ def domain_waf_edit_rule(request, domain, rule_index):
     access_denied = _check_domain_access(request.user, domain_obj)
     if access_denied:
         return access_denied
+
+    # Get country list for dropdown
+    countries = get_country_info()
 
     try:
         existing_rule = get_domain_waf_rule(domain_obj.namespace, rule_index)
@@ -236,6 +253,7 @@ def domain_waf_edit_rule(request, domain, rule_index):
             return render(request, 'main/domain_waf_rule_form.html', {
                 'domain': domain_obj,
                 'rule': rule,
+                'countries': countries,
                 'rule_index': rule_index,
                 'edit_mode': True,
             })
@@ -250,6 +268,7 @@ def domain_waf_edit_rule(request, domain, rule_index):
             return render(request, 'main/domain_waf_rule_form.html', {
                 'domain': domain_obj,
                 'rule': rule,
+                'countries': countries,
                 'rule_index': rule_index,
                 'edit_mode': True,
             })
@@ -258,6 +277,7 @@ def domain_waf_edit_rule(request, domain, rule_index):
     return render(request, 'main/domain_waf_rule_form.html', {
         'domain': domain_obj,
         'rule': existing_rule,
+        'countries': countries,
         'rule_index': rule_index,
         'edit_mode': True,
     })
@@ -312,12 +332,14 @@ def _build_rule_from_post(post_data) -> dict:
     if user_agent:
         rule['userAgent'] = user_agent
 
-    # Required action
-    action = post_data.get('action', 'block')
-    if action in ('block', 'allow'):
-        rule['action'] = action
-    else:
-        rule['action'] = 'block'
+    # Optional countries - block only from these countries
+    countries = post_data.getlist('countries')
+    if countries:
+        # Filter and uppercase
+        rule['countries'] = [c.strip().upper() for c in countries if c.strip()]
+
+    # Action is always block now (allow is removed)
+    rule['action'] = 'block'
 
     # Optional comment
     comment = post_data.get('comment', '').strip()
@@ -458,5 +480,91 @@ def domain_waf_remove_country(request, domain, country_code):
     except K8sClientError as e:
         logger.error(f"Failed to remove country for {domain}: {e}")
         messages.error(request, f"Failed to remove country: {e}")
+
+    return redirect('domain_waf_list', domain=domain)
+
+
+# =============================================================================
+# Protected Paths views
+# =============================================================================
+
+@login_required
+def domain_waf_add_protected_path(request, domain):
+    """
+    Add a protected path (allowlist).
+    """
+    if request.method != 'POST':
+        return redirect('domain_waf_list', domain=domain)
+
+    domain_obj = get_object_or_404(Domain, domain_name=domain)
+
+    access_denied = _check_domain_access(request.user, domain_obj)
+    if access_denied:
+        return access_denied
+
+    # Build protected path from form data
+    path = request.POST.get('path', '').strip()
+    if not path:
+        messages.error(request, "Path is required.")
+        return redirect('domain_waf_list', domain=domain)
+
+    path_match_type = request.POST.get('pathMatchType', 'prefix')
+    if path_match_type not in ('exact', 'prefix', 'regex'):
+        path_match_type = 'prefix'
+
+    allow_type = request.POST.get('allow_type', 'ip')
+    comment = request.POST.get('comment', '').strip()
+
+    protected_path = {
+        'path': path,
+        'pathMatchType': path_match_type,
+    }
+
+    if allow_type == 'ip':
+        allowed_ip = request.POST.get('allowedIp', '').strip()
+        if not allowed_ip:
+            messages.error(request, "IP address is required when using IP allowlist.")
+            return redirect('domain_waf_list', domain=domain)
+        protected_path['allowedIp'] = allowed_ip
+    else:
+        allowed_countries = request.POST.getlist('allowedCountries')
+        if not allowed_countries:
+            messages.error(request, "At least one country is required when using country allowlist.")
+            return redirect('domain_waf_list', domain=domain)
+        protected_path['allowedCountries'] = [c.strip().upper() for c in allowed_countries if c.strip()]
+
+    if comment:
+        protected_path['comment'] = comment
+
+    try:
+        add_domain_protected_path(domain_obj.namespace, protected_path)
+        messages.success(request, f"Protected path '{path}' added successfully.")
+    except K8sClientError as e:
+        logger.error(f"Failed to add protected path for {domain}: {e}")
+        messages.error(request, f"Failed to add protected path: {e}")
+
+    return redirect('domain_waf_list', domain=domain)
+
+
+@login_required
+def domain_waf_delete_protected_path(request, domain, path_index):
+    """
+    Delete a protected path.
+    """
+    if request.method != 'POST':
+        return redirect('domain_waf_list', domain=domain)
+
+    domain_obj = get_object_or_404(Domain, domain_name=domain)
+
+    access_denied = _check_domain_access(request.user, domain_obj)
+    if access_denied:
+        return access_denied
+
+    try:
+        delete_domain_protected_path(domain_obj.namespace, path_index)
+        messages.success(request, "Protected path deleted successfully.")
+    except K8sClientError as e:
+        logger.error(f"Failed to delete protected path for {domain}: {e}")
+        messages.error(request, f"Failed to delete protected path: {e}")
 
     return redirect('domain_waf_list', domain=domain)

@@ -116,6 +116,11 @@ class DomainWAF:
         return self._raw.get("spec", {}).get("geoBlock")
 
     @property
+    def protected_paths(self) -> list[dict]:
+        """Protected paths from spec."""
+        return self._raw.get("spec", {}).get("protectedPaths", [])
+
+    @property
     def generation(self) -> int:
         return self._raw.get("metadata", {}).get("generation", 0)
 
@@ -290,6 +295,7 @@ def patch_domainwaf(
     enabled: Optional[bool] = None,
     rules: Optional[list] = None,
     geo_block: Optional[dict] = None,
+    protected_paths: Optional[list] = None,
 ) -> DomainWAF:
     """
     Patch DomainWAF CR spec.
@@ -300,6 +306,7 @@ def patch_domainwaf(
         enabled: Whether WAF is enabled (None = don't change)
         rules: Complete list of WAF rules (None = don't change)
         geo_block: Geo-blocking config (None = don't change)
+        protected_paths: Complete list of protected paths (None = don't change)
 
     Returns:
         Updated DomainWAF object
@@ -318,6 +325,8 @@ def patch_domainwaf(
         patch_body["spec"]["rules"] = rules
     if geo_block is not None:
         patch_body["spec"]["geoBlock"] = geo_block
+    if protected_paths is not None:
+        patch_body["spec"]["protectedPaths"] = protected_paths
 
     if not patch_body["spec"]:
         # Nothing to patch
@@ -591,3 +600,133 @@ def remove_blocked_country(
         geo_block["blockedCountries"] = countries
 
     return patch_domainwaf(namespace=namespace, name=name, geo_block=geo_block)
+
+
+# =============================================================================
+# Protected Paths Management
+# =============================================================================
+
+def get_domain_protected_paths(
+    namespace: str,
+    name: str = DEFAULT_DOMAINWAF_NAME,
+) -> list[dict]:
+    """
+    Get all protected paths from DomainWAF CR.
+
+    Args:
+        namespace: The domain namespace
+        name: The CR name
+
+    Returns:
+        List of protected path dicts
+    """
+    domainwaf = get_domainwaf(namespace, name)
+    return domainwaf.protected_paths
+
+
+def get_domain_protected_path(
+    namespace: str,
+    path_index: int,
+    name: str = DEFAULT_DOMAINWAF_NAME,
+) -> Optional[dict]:
+    """
+    Get a single protected path by index.
+
+    Args:
+        namespace: The domain namespace
+        path_index: Index of the protected path
+        name: The CR name
+
+    Returns:
+        Protected path dict or None if index out of range
+    """
+    domainwaf = get_domainwaf(namespace, name)
+    paths = domainwaf.protected_paths
+    if 0 <= path_index < len(paths):
+        return paths[path_index]
+    return None
+
+
+def add_domain_protected_path(
+    namespace: str,
+    protected_path: dict,
+    name: str = DEFAULT_DOMAINWAF_NAME,
+) -> DomainWAF:
+    """
+    Add a protected path to DomainWAF CR.
+
+    Args:
+        namespace: The domain namespace
+        protected_path: Protected path dict with path, pathMatchType, allowedIp, allowedCountries, comment
+        name: The CR name
+
+    Returns:
+        Updated DomainWAF object
+    """
+    domainwaf = get_domainwaf(namespace, name)
+    paths = list(domainwaf.protected_paths)
+    paths.append(protected_path)
+    return patch_domainwaf(namespace=namespace, name=name, protected_paths=paths)
+
+
+def update_domain_protected_path(
+    namespace: str,
+    path_index: int,
+    protected_path: dict,
+    name: str = DEFAULT_DOMAINWAF_NAME,
+) -> DomainWAF:
+    """
+    Update a protected path in DomainWAF CR.
+
+    Args:
+        namespace: The domain namespace
+        path_index: Index of the protected path in spec.protectedPaths
+        protected_path: Updated protected path dict
+        name: The CR name
+
+    Returns:
+        Updated DomainWAF object
+
+    Raises:
+        K8sClientError: If index out of range
+    """
+    domainwaf = get_domainwaf(namespace, name)
+    paths = list(domainwaf.protected_paths)
+
+    if 0 <= path_index < len(paths):
+        paths[path_index] = protected_path
+    else:
+        raise K8sClientError(f"Protected path index {path_index} out of range")
+
+    return patch_domainwaf(namespace=namespace, name=name, protected_paths=paths)
+
+
+def delete_domain_protected_path(
+    namespace: str,
+    path_index: int,
+    name: str = DEFAULT_DOMAINWAF_NAME,
+) -> DomainWAF:
+    """
+    Delete a protected path from DomainWAF CR.
+
+    Args:
+        namespace: The domain namespace
+        path_index: Index of the protected path to delete
+        name: The CR name
+
+    Returns:
+        Updated DomainWAF object
+
+    Raises:
+        K8sClientError: If index out of range
+    """
+    domainwaf = get_domainwaf(namespace, name)
+    paths = list(domainwaf.protected_paths)
+
+    if 0 <= path_index < len(paths):
+        deleted = paths.pop(path_index)
+        logger.info(f"Removing protected path at index {path_index}: {deleted}")
+    else:
+        raise K8sClientError(f"Protected path index {path_index} out of range")
+
+    return patch_domainwaf(namespace=namespace, name=name, protected_paths=paths)

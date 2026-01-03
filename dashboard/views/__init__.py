@@ -142,6 +142,8 @@ from .domain_waf import (
     domain_waf_toggle_geo,
     domain_waf_add_country,
     domain_waf_remove_country,
+    domain_waf_add_protected_path,
+    domain_waf_delete_protected_path,
 )
 
 # Metrics views
@@ -288,6 +290,8 @@ __all__ = [
     'domain_waf_toggle_geo',
     'domain_waf_add_country',
     'domain_waf_remove_country',
+    'domain_waf_add_protected_path',
+    'domain_waf_delete_protected_path',
 
     # Metrics
     'domain_metrics_page',

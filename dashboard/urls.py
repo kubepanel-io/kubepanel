@@ -113,6 +113,9 @@ urlpatterns = [
     path('domains/<str:domain>/waf/geo/toggle/', views.domain_waf_toggle_geo, name='domain_waf_toggle_geo'),
     path('domains/<str:domain>/waf/geo/add/', views.domain_waf_add_country, name='domain_waf_add_country'),
     path('domains/<str:domain>/waf/geo/<str:country_code>/remove/', views.domain_waf_remove_country, name='domain_waf_remove_country'),
+    # Domain WAF protected paths routes
+    path('domains/<str:domain>/waf/protected-paths/add/', views.domain_waf_add_protected_path, name='domain_waf_add_protected_path'),
+    path('domains/<str:domain>/waf/protected-paths/<int:path_index>/delete/', views.domain_waf_delete_protected_path, name='domain_waf_delete_protected_path'),
     # Domain Metrics routes
     path('domains/<str:domain>/metrics/', views.domain_metrics_page, name='domain_metrics_page'),
     path('api/domains/<str:domain>/metrics/', views.domain_metrics_api, name='domain_metrics_api'),
