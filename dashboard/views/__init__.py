@@ -169,6 +169,8 @@ from .smtp_firewall import (
     smtp_firewall_add_rule,
     smtp_firewall_delete_rule,
     smtp_rate_limits,
+    smtp_rate_limit_add,
+    smtp_rate_limit_delete,
     smtp_quick_block,
 )
 
@@ -324,6 +326,8 @@ __all__ = [
     'smtp_firewall_add_rule',
     'smtp_firewall_delete_rule',
     'smtp_rate_limits',
+    'smtp_rate_limit_add',
+    'smtp_rate_limit_delete',
     'smtp_quick_block',
 
     # Utils

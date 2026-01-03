@@ -272,22 +272,112 @@ def smtp_firewall_delete_rule(request, rule_type, value):
 @user_passes_test(is_superuser, login_url='/dashboard/')
 def smtp_rate_limits(request):
     """
-    View and display current rate limit settings.
+    View and manage per-user rate limit settings.
 
-    Note: Rate limit configuration is in rspamd ConfigMap.
-    This view displays the current settings for reference.
+    Global defaults are in rspamd ConfigMap.
+    Per-user overrides are stored in Redis hash 'user_ratelimits'.
     """
-    # Rate limits are defined in rspamd ConfigMap - display for reference
-    rate_limits = {
-        'user': {'rate': '100 / 1h', 'burst': 20, 'description': 'Per authenticated user'},
-        'from_domain': {'rate': '500 / 1h', 'burst': 50, 'description': 'Per sender domain'},
-        'to': {'rate': '200 / 1h', 'burst': 30, 'description': 'Per recipient'},
+    user_limits = []
+    error_message = None
+
+    # Global defaults (from rspamd config)
+    global_defaults = {
+        'user': {'rate': '100 / 1h', 'description': 'Default per-user limit'},
+        'from_domain': {'rate': '500 / 1h', 'description': 'Per sender domain'},
+        'to': {'rate': '200 / 1h', 'description': 'Per recipient'},
     }
+
+    try:
+        r = get_redis_client()
+        # Get all per-user rate limits from Redis hash
+        raw_limits = r.hgetall('user_ratelimits')
+        for user, rate in raw_limits.items():
+            user_limits.append({'user': user, 'rate': rate})
+        # Sort by user
+        user_limits.sort(key=lambda x: x['user'])
+
+    except redis.exceptions.ConnectionError:
+        error_message = "Cannot connect to Redis. Is it running?"
+        logger.warning(f"Redis connection failed: {error_message}")
+    except redis.exceptions.RedisError as e:
+        error_message = f"Redis error: {e}"
+        logger.error(error_message)
 
     context = {
-        'rate_limits': rate_limits,
+        'global_defaults': global_defaults,
+        'user_limits': user_limits,
+        'error_message': error_message,
     }
     return render(request, 'main/smtp_rate_limits.html', context)
+
+
+@login_required
+@user_passes_test(is_superuser, login_url='/dashboard/')
+def smtp_rate_limit_add(request):
+    """
+    Add a per-user rate limit.
+    """
+    if request.method != 'POST':
+        return redirect('smtp_rate_limits')
+
+    user = request.POST.get('user', '').strip().lower()
+    rate = request.POST.get('rate', '').strip()
+    period = request.POST.get('period', '1h').strip()
+
+    if not user or not rate:
+        messages.error(request, "User and rate are required.")
+        return redirect('smtp_rate_limits')
+
+    # Validate rate is a number
+    try:
+        rate_num = int(rate)
+        if rate_num <= 0:
+            raise ValueError("Rate must be positive")
+    except ValueError:
+        messages.error(request, "Rate must be a positive number.")
+        return redirect('smtp_rate_limits')
+
+    # Format: "100 / 1h"
+    rate_string = f"{rate_num} / {period}"
+
+    try:
+        r = get_redis_client()
+        r.hset('user_ratelimits', user, rate_string)
+        messages.success(request, f"Set rate limit for {user}: {rate_string}")
+
+    except redis.exceptions.ConnectionError:
+        messages.error(request, "Cannot connect to Redis. Is it running?")
+    except redis.exceptions.RedisError as e:
+        logger.error(f"Failed to add rate limit: {e}")
+        messages.error(request, f"Failed to add rate limit: {e}")
+
+    return redirect('smtp_rate_limits')
+
+
+@login_required
+@user_passes_test(is_superuser, login_url='/dashboard/')
+def smtp_rate_limit_delete(request, user):
+    """
+    Delete a per-user rate limit.
+    """
+    if request.method != 'POST':
+        return redirect('smtp_rate_limits')
+
+    try:
+        r = get_redis_client()
+        removed = r.hdel('user_ratelimits', user)
+        if removed:
+            messages.success(request, f"Removed rate limit for {user}. User will use default limit.")
+        else:
+            messages.warning(request, f"No custom rate limit found for {user}.")
+
+    except redis.exceptions.ConnectionError:
+        messages.error(request, "Cannot connect to Redis. Is it running?")
+    except redis.exceptions.RedisError as e:
+        logger.error(f"Failed to delete rate limit: {e}")
+        messages.error(request, f"Failed to delete rate limit: {e}")
+
+    return redirect('smtp_rate_limits')
 
 
 # =============================================================================

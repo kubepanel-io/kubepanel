@@ -109,6 +109,8 @@ urlpatterns = [
     path('smtp-firewall/rules/add/', views.smtp_firewall_add_rule, name='smtp_firewall_add_rule'),
     path('smtp-firewall/rules/<str:rule_type>/<path:value>/delete/', views.smtp_firewall_delete_rule, name='smtp_firewall_delete_rule'),
     path('smtp-firewall/rate-limits/', views.smtp_rate_limits, name='smtp_rate_limits'),
+    path('smtp-firewall/rate-limits/add/', views.smtp_rate_limit_add, name='smtp_rate_limit_add'),
+    path('smtp-firewall/rate-limits/<path:user>/delete/', views.smtp_rate_limit_delete, name='smtp_rate_limit_delete'),
     path('smtp-traffic/quick-block/', views.smtp_quick_block, name='smtp_quick_block'),
     # Domain WAF routes (per-domain WAF, accessible by domain owners)
     path('domain-waf/', views.domain_waf_overview, name='domain_waf_overview'),
