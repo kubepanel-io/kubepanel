@@ -133,6 +133,7 @@ from .l3_firewall import (
 
 # DomainWAF views
 from .domain_waf import (
+    domain_waf_overview,
     domain_waf_list,
     domain_waf_toggle,
     domain_waf_add_rule,
@@ -278,6 +279,7 @@ __all__ = [
     'l3_firewall_delete_rule',
 
     # DomainWAF
+    'domain_waf_overview',
     'domain_waf_list',
     'domain_waf_toggle',
     'domain_waf_add_rule',

@@ -28,6 +28,52 @@ from dashboard.k8s import (
 logger = logging.getLogger("django")
 
 
+@login_required
+def domain_waf_overview(request):
+    """
+    Overview of all domains and their WAF status.
+
+    Shows all domains the user owns (or all domains for superusers)
+    with their WAF enabled/disabled status and rule count.
+    """
+    # Get user's domains (or all for superusers)
+    if request.user.is_superuser:
+        domains = Domain.objects.all().order_by('domain_name')
+    else:
+        domains = Domain.objects.filter(owner=request.user).order_by('domain_name')
+
+    # Fetch WAF status for each domain
+    domain_waf_data = []
+    for domain in domains:
+        waf_info = {
+            'domain': domain,
+            'waf_enabled': False,
+            'rule_count': 0,
+            'geo_enabled': False,
+            'geo_count': 0,
+            'phase': 'Not configured',
+        }
+
+        try:
+            waf = get_domainwaf(domain.namespace)
+            if waf:
+                waf_info['waf_enabled'] = waf.enabled
+                waf_info['rule_count'] = len(waf.rules) if waf.rules else 0
+                waf_info['geo_enabled'] = waf.geo_enabled
+                waf_info['geo_count'] = len(waf.blocked_countries) if waf.blocked_countries else 0
+                waf_info['phase'] = waf.status.phase if waf.status else 'Unknown'
+        except K8sNotFoundError:
+            pass  # WAF not configured yet
+        except Exception as e:
+            logger.warning(f"Failed to get WAF status for {domain.domain_name}: {e}")
+
+        domain_waf_data.append(waf_info)
+
+    return render(request, "main/domain_waf_overview.html", {
+        "domain_waf_data": domain_waf_data,
+    })
+
+
 def _check_domain_access(user, domain_obj):
     """
     Check if user has access to manage this domain's WAF.

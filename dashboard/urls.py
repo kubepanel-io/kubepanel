@@ -103,6 +103,7 @@ urlpatterns = [
     path('l3-firewall/rules/<int:rule_index>/edit/', views.l3_firewall_edit_rule, name='l3_firewall_edit_rule'),
     path('l3-firewall/rules/<int:rule_index>/delete/', views.l3_firewall_delete_rule, name='l3_firewall_delete_rule'),
     # Domain WAF routes (per-domain WAF, accessible by domain owners)
+    path('domain-waf/', views.domain_waf_overview, name='domain_waf_overview'),
     path('domains/<str:domain>/waf/', views.domain_waf_list, name='domain_waf_list'),
     path('domains/<str:domain>/waf/toggle/', views.domain_waf_toggle, name='domain_waf_toggle'),
     path('domains/<str:domain>/waf/rules/add/', views.domain_waf_add_rule, name='domain_waf_add_rule'),
