@@ -161,6 +161,17 @@ from .api import (
     get_workload_types,
 )
 
+# SMTP Firewall views
+from .smtp_firewall import (
+    smtp_traffic,
+    smtp_traffic_api,
+    smtp_firewall_list,
+    smtp_firewall_add_rule,
+    smtp_firewall_delete_rule,
+    smtp_rate_limits,
+    smtp_quick_block,
+)
+
 # Utility exports
 from .utils import (
     SuperuserRequiredMixin,
@@ -305,6 +316,15 @@ __all__ = [
     # API
     'get_workload_versions',
     'get_workload_types',
+
+    # SMTP Firewall
+    'smtp_traffic',
+    'smtp_traffic_api',
+    'smtp_firewall_list',
+    'smtp_firewall_add_rule',
+    'smtp_firewall_delete_rule',
+    'smtp_rate_limits',
+    'smtp_quick_block',
 
     # Utils
     'SuperuserRequiredMixin',

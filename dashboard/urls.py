@@ -102,6 +102,14 @@ urlpatterns = [
     path('l3-firewall/rules/add/', views.l3_firewall_add_rule, name='l3_firewall_add_rule'),
     path('l3-firewall/rules/<int:rule_index>/edit/', views.l3_firewall_edit_rule, name='l3_firewall_edit_rule'),
     path('l3-firewall/rules/<int:rule_index>/delete/', views.l3_firewall_delete_rule, name='l3_firewall_delete_rule'),
+    # SMTP Firewall routes (superuser only)
+    path('smtp-traffic/', views.smtp_traffic, name='smtp_traffic'),
+    path('smtp-traffic/api/', views.smtp_traffic_api, name='smtp_traffic_api'),
+    path('smtp-firewall/', views.smtp_firewall_list, name='smtp_firewall_list'),
+    path('smtp-firewall/rules/add/', views.smtp_firewall_add_rule, name='smtp_firewall_add_rule'),
+    path('smtp-firewall/rules/<str:rule_type>/<path:value>/delete/', views.smtp_firewall_delete_rule, name='smtp_firewall_delete_rule'),
+    path('smtp-firewall/rate-limits/', views.smtp_rate_limits, name='smtp_rate_limits'),
+    path('smtp-traffic/quick-block/', views.smtp_quick_block, name='smtp_quick_block'),
     # Domain WAF routes (per-domain WAF, accessible by domain owners)
     path('domain-waf/', views.domain_waf_overview, name='domain_waf_overview'),
     path('domains/<str:domain>/waf/', views.domain_waf_list, name='domain_waf_list'),

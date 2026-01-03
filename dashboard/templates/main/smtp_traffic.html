@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}SMTP Traffic | KubePanel{% endblock %}
+
+{% block page_title %}SMTP Traffic{% endblock %}
+{% block page_subtitle %}Monitor outbound email activity via rspamd{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <!-- Refresh Button -->
+    <button onclick="refreshTraffic()"
+            class="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" id="refresh-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        <span>Refresh</span>
+    </button>
+
+    <!-- Link to Firewall -->
+    <a href="{% url 'smtp_firewall_list' %}"
+       class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+        </svg>
+        <span>SMTP Firewall</span>
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Error Message -->
+{% if error_message %}
+<div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+    <div class="flex">
+        <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+        </div>
+        <div class="ml-3">
+            <p class="text-sm text-red-700">{{ error_message }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Status Overview -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <!-- Total Messages -->
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Total Messages</p>
+                <p class="text-2xl font-semibold text-gray-900" id="stat-total">{{ history|length }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delivered -->
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Delivered</p>
+                <p class="text-2xl font-semibold text-gray-900" id="stat-delivered">{% with delivered=0 %}{% for item in history %}{% if item.action == "no action" or item.action == "add header" %}{% with delivered=delivered|add:1 %}{% endwith %}{% endif %}{% endfor %}{{ delivered }}{% endwith %}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rejected -->
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Rejected</p>
+                <p class="text-2xl font-semibold text-gray-900" id="stat-rejected">{% with rejected=0 %}{% for item in history %}{% if item.action == "reject" %}{% with rejected=rejected|add:1 %}{% endwith %}{% endif %}{% endfor %}{{ rejected }}{% endwith %}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spam Flagged -->
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Spam Flagged</p>
+                <p class="text-2xl font-semibold text-gray-900" id="stat-spam">{% with spam=0 %}{% for item in history %}{% if item.score > 5 %}{% with spam=spam|add:1 %}{% endwith %}{% endif %}{% endfor %}{{ spam }}{% endwith %}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Traffic Table -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                <div class="w-3 h-3 bg-primary-500 rounded-full mr-3"></div>
+                Recent Email Activity
+            </h3>
+            <span class="text-sm text-gray-500">
+                Last 100 messages from rspamd history
+            </span>
+        </div>
+    </div>
+
+    {% if history %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sender</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recipient</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Quick Block</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200" id="traffic-tbody">
+                {% for item in history %}
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {{ item.time_formatted|default:"-" }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                            <span class="text-sm text-gray-900 font-mono">{{ item.sender_smtp|default:item.from|default:"-" }}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="text-sm text-gray-900 font-mono">{{ item.rcpt_smtp|default:"-" }}</span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-sm text-gray-700 truncate max-w-xs block">{{ item.subject|default:"-"|truncatewords:8 }}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if item.score >= 10 %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            {{ item.score|floatformat:1 }}
+                        </span>
+                        {% elif item.score >= 5 %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            {{ item.score|floatformat:1 }}
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {{ item.score|floatformat:1 }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if item.action == "reject" %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            Rejected
+                        </span>
+                        {% elif item.action == "add header" %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            Flagged
+                        </span>
+                        {% elif item.action == "greylist" %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            Greylisted
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Passed
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if item.sender_smtp or item.from %}
+                        <form method="POST" action="{% url 'smtp_quick_block' %}" class="inline-flex">
+                            {% csrf_token %}
+                            <input type="hidden" name="sender" value="{{ item.sender_smtp|default:item.from }}">
+                            <button type="submit"
+                                    class="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                                    onclick="return confirm('Block sender {{ item.sender_smtp|default:item.from }}?')">
+                                Block
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="px-6 py-12 text-center">
+        <div class="flex flex-col items-center">
+            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No email activity yet</h3>
+            <p class="text-gray-500">Email transactions will appear here once messages are processed by rspamd.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Help Section -->
+<div class="mt-8 bg-blue-50 rounded-xl p-6 border border-blue-200">
+    <h4 class="text-lg font-medium text-blue-900 mb-4">Understanding SMTP Traffic</h4>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-blue-800">
+        <div>
+            <h5 class="font-medium mb-2">Score Interpretation</h5>
+            <ul class="list-disc list-inside space-y-1">
+                <li><strong>0-5</strong>: Clean message, passed through</li>
+                <li><strong>5-10</strong>: Suspicious, may be flagged as spam</li>
+                <li><strong>10+</strong>: High spam score, likely rejected</li>
+            </ul>
+        </div>
+        <div>
+            <h5 class="font-medium mb-2">Actions</h5>
+            <ul class="list-disc list-inside space-y-1">
+                <li><strong>Passed</strong>: Message delivered normally</li>
+                <li><strong>Flagged</strong>: Spam header added, still delivered</li>
+                <li><strong>Rejected</strong>: Message blocked by rspamd</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshTraffic() {
+    const icon = document.getElementById('refresh-icon');
+    icon.classList.add('animate-spin');
+
+    fetch('{% url "smtp_traffic_api" %}?limit=100')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update stats
+                let total = data.history.length;
+                let delivered = 0;
+                let rejected = 0;
+                let spam = 0;
+
+                data.history.forEach(item => {
+                    if (item.action === 'no action' || item.action === 'add header') delivered++;
+                    if (item.action === 'reject') rejected++;
+                    if (item.score > 5) spam++;
+                });
+
+                document.getElementById('stat-total').textContent = total;
+                document.getElementById('stat-delivered').textContent = delivered;
+                document.getElementById('stat-rejected').textContent = rejected;
+                document.getElementById('stat-spam').textContent = spam;
+
+                // Reload page to update table (simpler than rebuilding HTML)
+                location.reload();
+            }
+        })
+        .catch(error => {
+            console.error('Error refreshing traffic:', error);
+        })
+        .finally(() => {
+            icon.classList.remove('animate-spin');
+        });
+}
+</script>
+{% endblock %}
