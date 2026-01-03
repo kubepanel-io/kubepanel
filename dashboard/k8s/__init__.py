@@ -129,6 +129,11 @@ from .domain_waf import (
     set_geo_blocking_enabled,
     add_blocked_country,
     remove_blocked_country,
+    get_domain_protected_paths,
+    get_domain_protected_path,
+    add_domain_protected_path,
+    update_domain_protected_path,
+    delete_domain_protected_path,
 )
 
 __all__ = [
@@ -251,4 +256,9 @@ __all__ = [
     'set_geo_blocking_enabled',
     'add_blocked_country',
     'remove_blocked_country',
+    'get_domain_protected_paths',
+    'get_domain_protected_path',
+    'add_domain_protected_path',
+    'update_domain_protected_path',
+    'delete_domain_protected_path',
 ]
