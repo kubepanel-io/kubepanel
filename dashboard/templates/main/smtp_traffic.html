@@ -141,6 +141,7 @@
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Quick Block</th>
                 </tr>
             </thead>
@@ -197,6 +198,13 @@
                         {% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
+                        <button type="button"
+                                onclick="showDetails({{ forloop.counter0 }})"
+                                class="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
+                            View
+                        </button>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
                         {% if item.sender_smtp %}
                         <form method="POST" action="{% url 'smtp_quick_block' %}" class="inline-flex">
                             {% csrf_token %}
@@ -251,7 +259,104 @@
     </div>
 </div>
 
+<!-- Details Modal -->
+<div id="details-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-10 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-xl bg-white">
+        <div class="flex items-center justify-between pb-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Message Details</h3>
+            <button onclick="closeDetails()" class="text-gray-400 hover:text-gray-600">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="details-content" class="mt-4 space-y-4">
+            <!-- Content will be populated by JavaScript -->
+        </div>
+    </div>
+</div>
+
 <script>
+// Store history data for modal access
+const historyData = {{ history_json|safe }};
+
+function showDetails(index) {
+    const item = historyData[index];
+    if (!item) return;
+
+    let symbolsHtml = '';
+    if (item.symbols) {
+        const sortedSymbols = Object.entries(item.symbols).sort((a, b) => b[1].score - a[1].score);
+        symbolsHtml = sortedSymbols.map(([name, sym]) => {
+            const scoreClass = sym.score > 0 ? 'text-red-600' : sym.score < 0 ? 'text-green-600' : 'text-gray-600';
+            const scorePrefix = sym.score > 0 ? '+' : '';
+            return `
+                <div class="flex justify-between items-start py-2 border-b border-gray-100">
+                    <div class="flex-1">
+                        <span class="font-mono text-sm font-medium">${name}</span>
+                        ${sym.description ? `<p class="text-xs text-gray-500 mt-1">${sym.description}</p>` : ''}
+                        ${sym.options ? `<p class="text-xs text-gray-400 mt-1">Options: ${sym.options.join(', ')}</p>` : ''}
+                    </div>
+                    <span class="font-mono text-sm font-medium ${scoreClass}">${scorePrefix}${sym.score.toFixed(2)}</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    const recipients = Array.isArray(item.rcpt_smtp) ? item.rcpt_smtp.join(', ') : item.rcpt_smtp || '-';
+
+    const content = `
+        <div class="grid grid-cols-2 gap-4">
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-sm font-medium text-gray-700 mb-2">Envelope</h4>
+                <div class="space-y-2 text-sm">
+                    <div><span class="text-gray-500">From:</span> <span class="font-mono">${item.sender_smtp || '-'}</span></div>
+                    <div><span class="text-gray-500">To:</span> <span class="font-mono">${recipients}</span></div>
+                    <div><span class="text-gray-500">Subject:</span> ${item.subject || '-'}</div>
+                    <div><span class="text-gray-500">Message-ID:</span> <span class="font-mono text-xs break-all">${item['message-id'] || '-'}</span></div>
+                </div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-sm font-medium text-gray-700 mb-2">Analysis</h4>
+                <div class="space-y-2 text-sm">
+                    <div><span class="text-gray-500">Score:</span> <span class="font-semibold ${item.score >= 5 ? 'text-red-600' : 'text-green-600'}">${item.score?.toFixed(2) || '0'}</span> / ${item.required_score || 15}</div>
+                    <div><span class="text-gray-500">Action:</span> <span class="font-medium">${item.action || '-'}</span></div>
+                    <div><span class="text-gray-500">User:</span> <span class="font-mono">${item.user || '-'}</span></div>
+                    <div><span class="text-gray-500">IP:</span> <span class="font-mono">${item.ip || '-'}</span></div>
+                    <div><span class="text-gray-500">Size:</span> ${item.size ? (item.size / 1024).toFixed(2) + ' KB' : '-'}</div>
+                    <div><span class="text-gray-500">Time:</span> ${item.time_formatted || '-'}</div>
+                </div>
+            </div>
+        </div>
+        <div class="mt-4">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Detection Symbols</h4>
+            <div class="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto">
+                ${symbolsHtml || '<p class="text-gray-500 text-sm">No symbols detected</p>'}
+            </div>
+        </div>
+        <p class="mt-4 text-xs text-gray-400">
+            Note: Message body content is not stored by rspamd for privacy reasons. Only metadata and analysis results are logged.
+        </p>
+    `;
+
+    document.getElementById('details-content').innerHTML = content;
+    document.getElementById('details-modal').classList.remove('hidden');
+}
+
+function closeDetails() {
+    document.getElementById('details-modal').classList.add('hidden');
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeDetails();
+});
+
+// Close modal on backdrop click
+document.getElementById('details-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeDetails();
+});
+
 function refreshTraffic() {
     const icon = document.getElementById('refresh-icon');
     icon.classList.add('animate-spin');

@@ -85,6 +85,7 @@ def smtp_traffic(request):
 
     context = {
         'history': history,
+        'history_json': json.dumps(history),
         'error_message': error_message,
     }
     return render(request, 'main/smtp_traffic.html', context)
