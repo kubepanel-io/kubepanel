@@ -147,10 +147,10 @@ def smtp_firewall_list(request):
     try:
         r = get_redis_client()
 
-        # Get all blocked items from Redis sets
-        blocked_senders = list(r.smembers('blocked_senders'))
-        blocked_domains = list(r.smembers('blocked_domains'))
-        blocked_ips = list(r.smembers('blocked_ips'))
+        # Get all blocked items from Redis hashes (rspamd multimap uses HSET/HGETALL)
+        blocked_senders = list(r.hkeys('blocked_senders'))
+        blocked_domains = list(r.hkeys('blocked_domains'))
+        blocked_ips = list(r.hkeys('blocked_ips'))
 
         # Sort for consistent display
         blocked_senders.sort()
@@ -205,13 +205,13 @@ def smtp_firewall_add_rule(request):
     try:
         r = get_redis_client()
 
-        # Check if already exists
-        if r.sismember(redis_key, value):
+        # Check if already exists (rspamd multimap uses Redis HASH, not SET)
+        if r.hexists(redis_key, value):
             messages.warning(request, f"'{value}' is already blocked.")
             return redirect('smtp_firewall_list')
 
-        # Add to blocklist
-        r.sadd(redis_key, value)
+        # Add to blocklist using HSET (rspamd multimap reads from hash)
+        r.hset(redis_key, value, "1")
         messages.success(request, f"Added '{value}' to blocked {rule_type}s.")
 
     except redis.exceptions.ConnectionError:
@@ -248,8 +248,8 @@ def smtp_firewall_delete_rule(request, rule_type, value):
     try:
         r = get_redis_client()
 
-        # Remove from blocklist
-        removed = r.srem(redis_key, value)
+        # Remove from blocklist using HDEL (rspamd multimap uses Redis HASH)
+        removed = r.hdel(redis_key, value)
         if removed:
             messages.success(request, f"Removed '{value}' from blocked {rule_type}s.")
         else:
@@ -319,13 +319,13 @@ def smtp_quick_block(request):
             # Extract domain from sender
             if '@' in sender:
                 domain = sender.split('@')[1]
-                r.sadd('blocked_domains', domain)
+                r.hset('blocked_domains', domain, "1")
                 messages.success(request, f"Blocked entire domain: @{domain}")
             else:
                 messages.error(request, "Invalid sender address format.")
         else:
-            # Block specific sender
-            r.sadd('blocked_senders', sender)
+            # Block specific sender using HSET (rspamd multimap uses Redis HASH)
+            r.hset('blocked_senders', sender, "1")
             messages.success(request, f"Blocked sender: {sender}")
 
     except redis.exceptions.ConnectionError:
