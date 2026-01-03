@@ -153,11 +153,11 @@
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="flex items-center">
                             <div class="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
-                            <span class="text-sm text-gray-900 font-mono">{{ item.sender_smtp|default:item.from|default:"-" }}</span>
+                            <span class="text-sm text-gray-900 font-mono">{{ item.sender_smtp|default:"-" }}</span>
                         </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="text-sm text-gray-900 font-mono">{{ item.rcpt_smtp|default:"-" }}</span>
+                        <span class="text-sm text-gray-900 font-mono">{{ item.rcpt_smtp|first|default:"-" }}</span>
                     </td>
                     <td class="px-6 py-4">
                         <span class="text-sm text-gray-700 truncate max-w-xs block">{{ item.subject|default:"-"|truncatewords:8 }}</span>
@@ -197,13 +197,13 @@
                         {% endif %}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        {% if item.sender_smtp or item.from %}
+                        {% if item.sender_smtp %}
                         <form method="POST" action="{% url 'smtp_quick_block' %}" class="inline-flex">
                             {% csrf_token %}
-                            <input type="hidden" name="sender" value="{{ item.sender_smtp|default:item.from }}">
+                            <input type="hidden" name="sender" value="{{ item.sender_smtp }}">
                             <button type="submit"
                                     class="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-                                    onclick="return confirm('Block sender {{ item.sender_smtp|default:item.from }}?')">
+                                    onclick="return confirm('Block sender {{ item.sender_smtp }}?')">
                                 Block
                             </button>
                         </form>
