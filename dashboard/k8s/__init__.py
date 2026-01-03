@@ -111,6 +111,26 @@ from .l3_firewall import (
     get_l3_rules,
 )
 
+from .domain_waf import (
+    DomainWAF,
+    DomainWAFStatus,
+    get_domainwaf,
+    domainwaf_exists,
+    create_domainwaf,
+    delete_domainwaf,
+    patch_domainwaf,
+    set_domainwaf_enabled,
+    get_or_create_domainwaf,
+    add_domain_waf_rule,
+    update_domain_waf_rule,
+    delete_domain_waf_rule,
+    get_domain_waf_rule,
+    get_domain_waf_rules,
+    set_geo_blocking_enabled,
+    add_blocked_country,
+    remove_blocked_country,
+)
+
 __all__ = [
     # Exceptions
     'K8sClientError',
@@ -212,4 +232,23 @@ __all__ = [
     'delete_l3_rule',
     'get_l3_rule',
     'get_l3_rules',
+
+    # DomainWAF operations
+    'DomainWAF',
+    'DomainWAFStatus',
+    'get_domainwaf',
+    'domainwaf_exists',
+    'create_domainwaf',
+    'delete_domainwaf',
+    'patch_domainwaf',
+    'set_domainwaf_enabled',
+    'get_or_create_domainwaf',
+    'add_domain_waf_rule',
+    'update_domain_waf_rule',
+    'delete_domain_waf_rule',
+    'get_domain_waf_rule',
+    'get_domain_waf_rules',
+    'set_geo_blocking_enabled',
+    'add_blocked_country',
+    'remove_blocked_country',
 ]

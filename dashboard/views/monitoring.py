@@ -172,3 +172,108 @@ def livetraffic_api(request):
         "stats": stats,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
+
+
+@login_required(login_url="/dashboard/")
+def user_livetraffic(request):
+    """
+    Live traffic view for regular users.
+
+    Shows only traffic for domains owned by the logged-in user.
+    Only offers WAF blocking (no L3 Firewall option).
+    """
+    from dashboard.models import Domain
+
+    # Get user's domains and all their hostnames
+    user_domains = Domain.objects.filter(owner=request.user).prefetch_related('aliases')
+    user_hostnames = set()
+    domain_lookup = {}  # hostname -> domain_name mapping
+
+    for domain in user_domains:
+        for hostname in domain.all_hostnames:
+            user_hostnames.add(hostname)
+            domain_lookup[hostname] = domain.domain_name
+
+    # Get timeframe from query params (default: 5 minutes)
+    since_minutes = int(request.GET.get('since_minutes', 5))
+    since_time = request.GET.get('since_time')  # ISO format datetime
+
+    if since_time:
+        try:
+            since_dt = datetime.fromisoformat(since_time.replace('Z', '+00:00'))
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
+            since_seconds = int((datetime.now(timezone.utc) - since_dt).total_seconds())
+        except (ValueError, TypeError):
+            since_seconds = since_minutes * 60
+    else:
+        since_seconds = since_minutes * 60
+
+    # Fetch all logs and filter by user's hostnames
+    all_logs = fetch_ingress_logs(since_seconds)
+    logs = []
+    for log in all_logs:
+        vhost = log.get('vhost', '')
+        if vhost in user_hostnames:
+            # Add domain_name for WAF linking
+            log['domain_name'] = domain_lookup.get(vhost, vhost)
+            logs.append(log)
+
+    return render(request, "main/user_livetraffic.html", {
+        "logs": logs,
+        "since_minutes": since_minutes,
+        "since_time": since_time,
+        "user_domains": user_domains,
+    })
+
+
+@login_required(login_url="/dashboard/")
+def user_livetraffic_api(request):
+    """
+    AJAX endpoint for user livetraffic auto-refresh.
+
+    Returns JSON with logs filtered to user's domains only.
+    """
+    from dashboard.models import Domain
+
+    # Get user's domains and all their hostnames
+    user_domains = Domain.objects.filter(owner=request.user).prefetch_related('aliases')
+    user_hostnames = set()
+    domain_lookup = {}
+
+    for domain in user_domains:
+        for hostname in domain.all_hostnames:
+            user_hostnames.add(hostname)
+            domain_lookup[hostname] = domain.domain_name
+
+    # Get timeframe from query params (default: 5 minutes)
+    since_minutes = int(request.GET.get('since_minutes', 5))
+    since_time = request.GET.get('since_time')
+
+    if since_time:
+        try:
+            since_dt = datetime.fromisoformat(since_time.replace('Z', '+00:00'))
+            if since_dt.tzinfo is None:
+                since_dt = since_dt.replace(tzinfo=timezone.utc)
+            since_seconds = int((datetime.now(timezone.utc) - since_dt).total_seconds())
+        except (ValueError, TypeError):
+            since_seconds = since_minutes * 60
+    else:
+        since_seconds = since_minutes * 60
+
+    # Fetch all logs and filter by user's hostnames
+    all_logs = fetch_ingress_logs(since_seconds)
+    logs = []
+    for log in all_logs:
+        vhost = log.get('vhost', '')
+        if vhost in user_hostnames:
+            log['domain_name'] = domain_lookup.get(vhost, vhost)
+            logs.append(log)
+
+    stats = calculate_stats(logs)
+
+    return JsonResponse({
+        "logs": logs,
+        "stats": stats,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })

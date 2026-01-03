@@ -106,6 +106,8 @@ from .security import (
 from .monitoring import (
     livetraffic,
     livetraffic_api,
+    user_livetraffic,
+    user_livetraffic_api,
 )
 
 # GlobalWAF views
@@ -127,6 +129,18 @@ from .l3_firewall import (
     l3_firewall_add_rule,
     l3_firewall_edit_rule,
     l3_firewall_delete_rule,
+)
+
+# DomainWAF views
+from .domain_waf import (
+    domain_waf_list,
+    domain_waf_toggle,
+    domain_waf_add_rule,
+    domain_waf_edit_rule,
+    domain_waf_delete_rule,
+    domain_waf_toggle_geo,
+    domain_waf_add_country,
+    domain_waf_remove_country,
 )
 
 # Metrics views
@@ -242,6 +256,9 @@ __all__ = [
 
     # Monitoring
     'livetraffic',
+    'livetraffic_api',
+    'user_livetraffic',
+    'user_livetraffic_api',
 
     # GlobalWAF
     'global_waf_list',
@@ -259,6 +276,16 @@ __all__ = [
     'l3_firewall_add_rule',
     'l3_firewall_edit_rule',
     'l3_firewall_delete_rule',
+
+    # DomainWAF
+    'domain_waf_list',
+    'domain_waf_toggle',
+    'domain_waf_add_rule',
+    'domain_waf_edit_rule',
+    'domain_waf_delete_rule',
+    'domain_waf_toggle_geo',
+    'domain_waf_add_country',
+    'domain_waf_remove_country',
 
     # Metrics
     'domain_metrics_page',

@@ -32,6 +32,8 @@ urlpatterns = [
     path("settings", views.settings, name="settings"),
     path("livetraffic", views.livetraffic, name="livetraffic"),
     path("livetraffic/api", views.livetraffic_api, name="livetraffic_api"),
+    path("my-traffic", views.user_livetraffic, name="user_livetraffic"),
+    path("my-traffic/api", views.user_livetraffic_api, name="user_livetraffic_api"),
     path("delete_domain/<str:domain>", views.delete_domain, name="delete_domain"),
     path("startstop_domain/<str:domain>/<str:action>", views.startstop_domain, name="startstop_domain"),
     path('pods-status/', views.get_pods_status, name='pods_status'),
@@ -100,6 +102,16 @@ urlpatterns = [
     path('l3-firewall/rules/add/', views.l3_firewall_add_rule, name='l3_firewall_add_rule'),
     path('l3-firewall/rules/<int:rule_index>/edit/', views.l3_firewall_edit_rule, name='l3_firewall_edit_rule'),
     path('l3-firewall/rules/<int:rule_index>/delete/', views.l3_firewall_delete_rule, name='l3_firewall_delete_rule'),
+    # Domain WAF routes (per-domain WAF, accessible by domain owners)
+    path('domains/<str:domain>/waf/', views.domain_waf_list, name='domain_waf_list'),
+    path('domains/<str:domain>/waf/toggle/', views.domain_waf_toggle, name='domain_waf_toggle'),
+    path('domains/<str:domain>/waf/rules/add/', views.domain_waf_add_rule, name='domain_waf_add_rule'),
+    path('domains/<str:domain>/waf/rules/<int:rule_index>/edit/', views.domain_waf_edit_rule, name='domain_waf_edit_rule'),
+    path('domains/<str:domain>/waf/rules/<int:rule_index>/delete/', views.domain_waf_delete_rule, name='domain_waf_delete_rule'),
+    # Domain WAF geo-blocking routes
+    path('domains/<str:domain>/waf/geo/toggle/', views.domain_waf_toggle_geo, name='domain_waf_toggle_geo'),
+    path('domains/<str:domain>/waf/geo/add/', views.domain_waf_add_country, name='domain_waf_add_country'),
+    path('domains/<str:domain>/waf/geo/<str:country_code>/remove/', views.domain_waf_remove_country, name='domain_waf_remove_country'),
     # Domain Metrics routes
     path('domains/<str:domain>/metrics/', views.domain_metrics_page, name='domain_metrics_page'),
     path('api/domains/<str:domain>/metrics/', views.domain_metrics_api, name='domain_metrics_api'),
