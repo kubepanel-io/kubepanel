@@ -26,7 +26,7 @@ from dashboard.k8s import (
     K8sClientError,
     K8sNotFoundError,
 )
-from .utils import get_country_info
+from .utils import get_countries_list
 
 logger = logging.getLogger("django")
 
@@ -110,7 +110,7 @@ def domain_waf_list(request, domain):
         domainwaf = None
 
     # Get country list for dropdowns
-    countries = get_country_info()
+    countries = get_countries_list()
 
     context = {
         'domain': domain_obj,
@@ -165,7 +165,7 @@ def domain_waf_add_rule(request, domain):
         return access_denied
 
     # Get country list for dropdown
-    countries = get_country_info()
+    countries = get_countries_list()
 
     if request.method == 'POST':
         # Build rule from form data
@@ -231,7 +231,7 @@ def domain_waf_edit_rule(request, domain, rule_index):
         return access_denied
 
     # Get country list for dropdown
-    countries = get_country_info()
+    countries = get_countries_list()
 
     try:
         existing_rule = get_domain_waf_rule(domain_obj.namespace, rule_index)
