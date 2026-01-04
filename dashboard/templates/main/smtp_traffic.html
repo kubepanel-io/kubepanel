@@ -46,7 +46,7 @@
 {% endif %}
 
 <!-- Status Overview -->
-<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+<div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
     <!-- Total Messages -->
     <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
         <div class="flex items-center">
@@ -94,6 +94,23 @@
             <div class="ml-4">
                 <p class="text-sm font-medium text-gray-600">Rejected</p>
                 <p class="text-2xl font-semibold text-gray-900" id="stat-rejected">{% with rejected=0 %}{% for item in history %}{% if item.action == "reject" %}{% with rejected=rejected|add:1 %}{% endwith %}{% endif %}{% endfor %}{{ rejected }}{% endwith %}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rate Limited -->
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Rate Limited</p>
+                <p class="text-2xl font-semibold text-gray-900" id="stat-ratelimited">{% with ratelimited=0 %}{% for item in history %}{% if item.action == "soft reject" %}{% with ratelimited=ratelimited|add:1 %}{% endwith %}{% endif %}{% endfor %}{{ ratelimited }}{% endwith %}</p>
             </div>
         </div>
     </div>
@@ -183,6 +200,10 @@
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                             Rejected
                         </span>
+                        {% elif item.action == "soft reject" %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                            Rate Limited
+                        </span>
                         {% elif item.action == "add header" %}
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                             Flagged
@@ -253,6 +274,7 @@
             <ul class="list-disc list-inside space-y-1">
                 <li><strong>Passed</strong>: Message delivered normally</li>
                 <li><strong>Flagged</strong>: Spam header added, still delivered</li>
+                <li><strong>Rate Limited</strong>: Soft reject due to rate limit exceeded</li>
                 <li><strong>Rejected</strong>: Message blocked by rspamd</li>
             </ul>
         </div>
@@ -320,7 +342,8 @@ function showDetails(index) {
                 <h4 class="text-sm font-medium text-gray-700 mb-2">Analysis</h4>
                 <div class="space-y-2 text-sm">
                     <div><span class="text-gray-500">Score:</span> <span class="font-semibold ${item.score >= 5 ? 'text-red-600' : 'text-green-600'}">${item.score?.toFixed(2) || '0'}</span> / ${item.required_score || 15}</div>
-                    <div><span class="text-gray-500">Action:</span> <span class="font-medium">${item.action || '-'}</span></div>
+                    <div><span class="text-gray-500">Action:</span> <span class="font-medium ${item.action === 'soft reject' ? 'text-orange-600' : item.action === 'reject' ? 'text-red-600' : ''}">${item.action || '-'}${item.action === 'soft reject' ? ' (Rate Limited)' : ''}</span></div>
+                    ${item.passthrough_module ? `<div><span class="text-gray-500">Module:</span> <span class="font-medium text-orange-600">${item.passthrough_module}</span></div>` : ''}
                     <div><span class="text-gray-500">User:</span> <span class="font-mono">${item.user || '-'}</span></div>
                     <div><span class="text-gray-500">IP:</span> <span class="font-mono">${item.ip || '-'}</span></div>
                     <div><span class="text-gray-500">Size:</span> ${item.size ? (item.size / 1024).toFixed(2) + ' KB' : '-'}</div>
@@ -369,17 +392,20 @@ function refreshTraffic() {
                 let total = data.history.length;
                 let delivered = 0;
                 let rejected = 0;
+                let ratelimited = 0;
                 let spam = 0;
 
                 data.history.forEach(item => {
                     if (item.action === 'no action' || item.action === 'add header') delivered++;
                     if (item.action === 'reject') rejected++;
+                    if (item.action === 'soft reject') ratelimited++;
                     if (item.score > 5) spam++;
                 });
 
                 document.getElementById('stat-total').textContent = total;
                 document.getElementById('stat-delivered').textContent = delivered;
                 document.getElementById('stat-rejected').textContent = rejected;
+                document.getElementById('stat-ratelimited').textContent = ratelimited;
                 document.getElementById('stat-spam').textContent = spam;
 
                 // Reload page to update table (simpler than rebuilding HTML)
