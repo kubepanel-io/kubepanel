@@ -76,13 +76,49 @@ def kpmain(request):
         logger.warning(f"Failed to fetch K8s domains: {e}")
         k8s_domains = {}
 
-    # Annotate each Django domain with K8s status
+    # Fetch latest storage metrics for all domains
+    from dashboard.models import DomainMetric
+    storage_metrics = {}
+    try:
+        # Get the latest 5min metric for each domain
+        from django.db.models import Max
+        latest_timestamps = DomainMetric.objects.filter(
+            domain__in=domains,
+            period='5min'
+        ).values('domain').annotate(latest=Max('timestamp'))
+
+        for item in latest_timestamps:
+            metric = DomainMetric.objects.filter(
+                domain_id=item['domain'],
+                period='5min',
+                timestamp=item['latest']
+            ).first()
+            if metric:
+                storage_metrics[item['domain']] = {
+                    'storage_bytes': metric.storage_bytes or 0,
+                    'storage_gb': metric.storage_gb,
+                    'storage_limit_gb': metric.storage_limit_gb,
+                    'storage_percent': metric.storage_percent,
+                }
+    except Exception as e:
+        logger.warning(f"Failed to fetch storage metrics: {e}")
+
+    # Annotate each Django domain with K8s status and storage
     for domain in domains:
         k8s_domain = k8s_domains.get(domain.domain_name)
         if k8s_domain and k8s_domain.status:
             domain.k8s_status = k8s_domain.status.phase or 'Unknown'
         else:
             domain.k8s_status = 'NotFound'
+
+        # Add storage info
+        storage = storage_metrics.get(domain.pk)
+        if storage:
+            domain.storage_used_gb = storage['storage_gb']
+            domain.storage_percent = storage['storage_percent']
+        else:
+            domain.storage_used_gb = None
+            domain.storage_percent = None
 
     pkg = getattr(request.user.profile, 'package', None)
     totals = Domain.objects.filter(
@@ -98,10 +134,16 @@ def kpmain(request):
     total_mail_users = MailUser.objects.filter(domain__owner=request.user).count()
     total_domain_aliases = sum(d.aliases.count() for d in domains)
 
+    # Calculate total actual storage used
+    total_storage_used_gb = sum(
+        d.storage_used_gb for d in domains if d.storage_used_gb is not None
+    )
+
     return render(request, 'main/domain.html', {
         'domains': domains,
         'pkg': pkg,
         'total_storage': total_storage,
+        'total_storage_used_gb': round(total_storage_used_gb, 2),
         'total_cpu': total_cpu,
         'total_mem': total_mem,
         'total_mail_users': total_mail_users,
