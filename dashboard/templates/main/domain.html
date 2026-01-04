@@ -206,18 +206,14 @@
                 <td class="px-6 py-4 whitespace-nowrap">
                     {% if domain.storage_used_gb is not None %}
                     <div class="w-24">
-                        <div class="flex items-center justify-between mb-1">
-                            <span class="text-sm font-medium text-gray-900">{{ domain.storage_used_gb }} GB</span>
-                        </div>
+                        <div class="text-sm font-medium text-gray-900 mb-1">{{ domain.storage_used_gb }} / {{ domain.storage_size }} GB</div>
                         <div class="w-full bg-gray-200 rounded-full h-2">
                             <div class="h-2 rounded-full {% if domain.storage_percent >= 90 %}bg-red-500{% elif domain.storage_percent >= 75 %}bg-amber-500{% else %}bg-green-500{% endif %}"
                                  style="width: {{ domain.storage_percent|default:0 }}%"></div>
                         </div>
-                        <div class="text-xs text-gray-500 mt-1">/ {{ domain.storage_size }} GB</div>
                     </div>
                     {% else %}
-                    <div class="text-sm text-gray-400">--</div>
-                    <div class="text-xs text-gray-400">/ {{ domain.storage_size }} GB</div>
+                    <div class="text-sm text-gray-400">-- / {{ domain.storage_size }} GB</div>
                     {% endif %}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
