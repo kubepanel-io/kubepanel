@@ -56,10 +56,17 @@ def smtp_traffic(request):
     history = []
     error_message = None
 
+    # Get limit from query param (default 100, max 1000)
+    try:
+        limit = int(request.GET.get('limit', 100))
+        limit = min(max(limit, 1), 1000)
+    except (ValueError, TypeError):
+        limit = 100
+
     try:
         response = requests.get(
             f"http://{RSPAMD_HOST}:{RSPAMD_PORT}/history",
-            params={'limit': 100},
+            params={'limit': limit},
             timeout=10
         )
         response.raise_for_status()
@@ -92,6 +99,7 @@ def smtp_traffic(request):
         'history': history,
         'history_json': json.dumps(history),
         'error_message': error_message,
+        'limit': limit,
     }
     return render(request, 'main/smtp_traffic.html', context)
 
@@ -106,7 +114,7 @@ def smtp_traffic_api(request):
     """
     try:
         limit = int(request.GET.get('limit', 100))
-        limit = min(limit, 500)  # Cap at 500
+        limit = min(limit, 1000)  # Cap at 1000
 
         response = requests.get(
             f"http://{RSPAMD_HOST}:{RSPAMD_PORT}/history",
