@@ -195,14 +195,15 @@
                         </span>
                         {% endif %}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
+                    <td class="px-6 py-4 whitespace-nowrap action-cell" data-index="{{ forloop.counter0 }}">
                         {% if item.action == "reject" %}
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                             Rejected
                         </span>
                         {% elif item.action == "soft reject" %}
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                            Rate Limited
+                        <!-- Will be updated by JS to show actual module (Rate Limited / Greylisted) -->
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 soft-reject-badge">
+                            Soft Reject
                         </span>
                         {% elif item.action == "add header" %}
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -419,5 +420,55 @@ function refreshTraffic() {
             icon.classList.remove('animate-spin');
         });
 }
+
+// Detect the module that caused a soft reject from symbols
+function detectSoftRejectModule(item) {
+    if (!item.symbols) return 'Soft Reject';
+
+    const symbolNames = Object.keys(item.symbols);
+
+    // Check for greylist symbols
+    if (symbolNames.some(s => s.toUpperCase().includes('GREYLIST'))) {
+        return 'Greylisted';
+    }
+
+    // Check for ratelimit symbols
+    if (symbolNames.some(s => s.toUpperCase().includes('RATELIMIT') || s.toUpperCase().includes('RATE_LIMIT'))) {
+        return 'Rate Limited';
+    }
+
+    // Check passthrough_module field if available
+    if (item.passthrough_module) {
+        if (item.passthrough_module.toLowerCase().includes('greylist')) {
+            return 'Greylisted';
+        }
+        if (item.passthrough_module.toLowerCase().includes('ratelimit') || item.passthrough_module.toLowerCase().includes('rate')) {
+            return 'Rate Limited';
+        }
+    }
+
+    return 'Soft Reject';
+}
+
+// Update soft reject badges on page load
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.action-cell').forEach(cell => {
+        const badge = cell.querySelector('.soft-reject-badge');
+        if (badge) {
+            const index = parseInt(cell.dataset.index);
+            const item = historyData[index];
+            if (item) {
+                const module = detectSoftRejectModule(item);
+                badge.textContent = module;
+
+                // Update badge color based on module
+                if (module === 'Greylisted') {
+                    badge.classList.remove('bg-orange-100', 'text-orange-800');
+                    badge.classList.add('bg-gray-100', 'text-gray-800');
+                }
+            }
+        }
+    });
+});
 </script>
 {% endblock %}
