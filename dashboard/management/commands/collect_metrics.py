@@ -335,7 +335,7 @@ class Command(BaseCommand):
             # Find running pod in namespace
             pods = core_v1.list_namespaced_pod(
                 namespace=namespace,
-                label_selector="app.kubernetes.io/managed-by=kubepanel"
+                label_selector="app.kubernetes.io/managed-by=kubepanel-operator"
             ).items
 
             running_pod = None

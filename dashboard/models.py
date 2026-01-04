@@ -596,10 +596,12 @@ class DomainMetric(models.Model):
 
     # Storage metrics (from pod exec + du)
     storage_bytes = models.BigIntegerField(
+        null=True,
         default=0,
         help_text="Actual storage usage in bytes"
     )
     storage_limit_bytes = models.BigIntegerField(
+        null=True,
         default=0,
         help_text="Storage limit (PVC size) in bytes"
     )
