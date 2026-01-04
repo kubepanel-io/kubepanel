@@ -545,11 +545,44 @@ def view_domain(request, domain):
         k8s_credentials['error'] = 'Unexpected error fetching domain status'
         k8s_credentials['phase'] = 'Error'
 
+    # Get latest storage metrics from DomainMetric
+    storage_info = {
+        'storage_bytes': 0,
+        'storage_gb': 0,
+        'storage_limit_gb': domain_model.storage_size,
+        'storage_percent': 0,
+        'storage_available_gb': domain_model.storage_size,
+        'has_data': False,
+        'last_updated': None,
+    }
+
+    try:
+        from dashboard.models import DomainMetric
+        latest_metric = DomainMetric.objects.filter(
+            domain=domain_model,
+            period='5min'
+        ).order_by('-timestamp').first()
+
+        if latest_metric and latest_metric.storage_bytes > 0:
+            storage_info['storage_bytes'] = latest_metric.storage_bytes
+            storage_info['storage_gb'] = latest_metric.storage_gb
+            storage_info['storage_limit_bytes'] = latest_metric.storage_limit_bytes
+            storage_info['storage_limit_gb'] = latest_metric.storage_limit_gb
+            storage_info['storage_percent'] = latest_metric.storage_percent
+            storage_info['storage_available_gb'] = round(
+                storage_info['storage_limit_gb'] - latest_metric.storage_gb, 2
+            )
+            storage_info['has_data'] = True
+            storage_info['last_updated'] = latest_metric.timestamp
+    except Exception as e:
+        logger.warning(f"Failed to get storage metrics for {domain}: {e}")
+
     return render(request, "main/view_domain.html", {
         "domain": domain_model,
         "form": form,
         "config_form": config_form,
         "k8s": k8s_credentials,
+        "storage": storage_info,
     })
 
 

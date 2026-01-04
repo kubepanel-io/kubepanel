@@ -7,6 +7,7 @@ Run this command every 5 minutes via a Kubernetes CronJob:
 Data sources:
 - CPU/Memory: Kubernetes metrics-server API
 - HTTP metrics: Ingress-nginx JSON logs
+- Storage: Pod exec + du command
 """
 import os
 import json
@@ -15,6 +16,10 @@ from datetime import datetime, timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 import requests
+
+from kubernetes import client, config
+from kubernetes.stream import stream
+from kubernetes.client.rest import ApiException
 
 from dashboard.models import Domain, DomainMetric
 
@@ -91,6 +96,9 @@ class Command(BaseCommand):
         # Get HTTP metrics from ingress logs
         http_metrics = self.get_http_metrics(domain.domain_name)
 
+        # Get storage usage via pod exec
+        storage_metrics = self.get_storage_usage(namespace, domain.storage_size)
+
         return {
             'domain': domain,
             'timestamp': timestamp,
@@ -109,6 +117,9 @@ class Command(BaseCommand):
             'avg_latency_ms': http_metrics.get('avg_latency_ms', 0),
             'bytes_in': http_metrics.get('bytes_in', 0),
             'bytes_out': http_metrics.get('bytes_out', 0),
+            # Storage
+            'storage_bytes': storage_metrics.get('storage_bytes', 0),
+            'storage_limit_bytes': storage_metrics.get('storage_limit_bytes', 0),
         }
 
     def get_pod_metrics(self, namespace):
@@ -292,3 +303,95 @@ class Command(BaseCommand):
             '.svg', '.woff', '.woff2', '.ttf', '.eot', '.map'
         )
         return uri.lower().endswith(static_extensions)
+
+    def get_storage_usage(self, namespace, storage_limit_gb):
+        """
+        Get storage usage via pod exec + du command.
+
+        Executes 'du -sb /usr/share/nginx/html' in the app container
+        and parses the output to get bytes used.
+
+        Args:
+            namespace: Domain namespace (e.g., 'dom-example-com')
+            storage_limit_gb: Storage limit in GB from domain model
+
+        Returns:
+            dict with 'storage_bytes' and 'storage_limit_bytes'
+        """
+        storage_limit_bytes = int(storage_limit_gb * 1024 * 1024 * 1024)
+
+        if not self.k8s_token:
+            return {'storage_bytes': 0, 'storage_limit_bytes': storage_limit_bytes}
+
+        try:
+            # Load K8s config
+            try:
+                config.load_incluster_config()
+            except config.ConfigException:
+                config.load_kube_config()
+
+            core_v1 = client.CoreV1Api()
+
+            # Find running pod in namespace
+            pods = core_v1.list_namespaced_pod(
+                namespace=namespace,
+                label_selector="app.kubernetes.io/managed-by=kubepanel"
+            ).items
+
+            running_pod = None
+            for pod in pods:
+                if pod.status.phase == 'Running':
+                    running_pod = pod
+                    break
+
+            if not running_pod:
+                logger.debug(f"No running pod found in {namespace}")
+                return {'storage_bytes': 0, 'storage_limit_bytes': storage_limit_bytes}
+
+            pod_name = running_pod.metadata.name
+
+            # Execute du command in app container (has the data mount)
+            cmd = ['du', '-sb', '/usr/share/nginx/html']
+
+            # Try app container first, then nginx as fallback
+            for container_name in ['app', 'nginx']:
+                try:
+                    result = stream(
+                        core_v1.connect_get_namespaced_pod_exec,
+                        name=pod_name,
+                        namespace=namespace,
+                        container=container_name,
+                        command=cmd,
+                        stderr=True,
+                        stdin=False,
+                        stdout=True,
+                        tty=False,
+                        _preload_content=True
+                    )
+
+                    # Parse du output: "12345678\t/usr/share/nginx/html"
+                    if result:
+                        output = result.strip()
+                        if output:
+                            parts = output.split()
+                            if parts and parts[0].isdigit():
+                                storage_bytes = int(parts[0])
+                                return {
+                                    'storage_bytes': storage_bytes,
+                                    'storage_limit_bytes': storage_limit_bytes
+                                }
+                    break  # Exit loop if exec succeeded (even if output was empty)
+
+                except ApiException as e:
+                    if e.status == 404:
+                        # Container doesn't exist, try next one
+                        continue
+                    else:
+                        logger.debug(f"Exec failed for {container_name}: {e}")
+                        continue
+
+            return {'storage_bytes': 0, 'storage_limit_bytes': storage_limit_bytes}
+
+        except Exception as e:
+            logger.warning(f"Failed to get storage usage for {namespace}: {e}")
+            return {'storage_bytes': 0, 'storage_limit_bytes': storage_limit_bytes}

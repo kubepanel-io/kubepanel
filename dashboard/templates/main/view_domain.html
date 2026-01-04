@@ -431,6 +431,119 @@
                 </div>
             </div>
 
+            <!-- Storage Usage -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Storage Usage</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-4">
+                        <!-- Usage Bar -->
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium text-gray-700">Disk Space</span>
+                                <span class="text-sm text-gray-500">
+                                    {% if storage.has_data %}
+                                        {{ storage.storage_gb }} GB / {{ storage.storage_limit_gb }} GB
+                                    {% else %}
+                                        -- / {{ storage.storage_limit_gb }} GB
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-3">
+                                {% if storage.has_data %}
+                                    <div class="h-3 rounded-full transition-all duration-300
+                                        {% if storage.storage_percent >= 90 %}
+                                            bg-red-500
+                                        {% elif storage.storage_percent >= 75 %}
+                                            bg-amber-500
+                                        {% else %}
+                                            bg-green-500
+                                        {% endif %}"
+                                        style="width: {{ storage.storage_percent|default:0 }}%">
+                                    </div>
+                                {% else %}
+                                    <div class="h-3 rounded-full bg-gray-300" style="width: 0%"></div>
+                                {% endif %}
+                            </div>
+                            <div class="flex items-center justify-between mt-2">
+                                <span class="text-xs text-gray-500">
+                                    {% if storage.has_data %}
+                                        {{ storage.storage_percent }}% used
+                                    {% else %}
+                                        No usage data yet
+                                    {% endif %}
+                                </span>
+                                {% if storage.last_updated %}
+                                    <span class="text-xs text-gray-400">
+                                        Updated {{ storage.last_updated|timesince }} ago
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Storage Details -->
+                        <div class="pt-4 border-t border-gray-100">
+                            <div class="flex items-center justify-between py-2">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm font-medium text-gray-700">Allocated</span>
+                                </div>
+                                <span class="text-sm text-gray-900">{{ storage.storage_limit_gb }} GB</span>
+                            </div>
+                            {% if storage.has_data %}
+                            <div class="flex items-center justify-between py-2">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                                        <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm font-medium text-gray-700">Used</span>
+                                </div>
+                                <span class="text-sm text-gray-900">{{ storage.storage_gb }} GB</span>
+                            </div>
+                            <div class="flex items-center justify-between py-2">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
+                                        <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm font-medium text-gray-700">Available</span>
+                                </div>
+                                <span class="text-sm text-gray-900">{{ storage.storage_available_gb }} GB</span>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        {% if storage.storage_percent >= 90 %}
+                        <div class="mt-4 p-3 bg-red-50 rounded-lg">
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                <span class="text-sm text-red-700 font-medium">Storage nearly full. Consider increasing storage allocation.</span>
+                            </div>
+                        </div>
+                        {% elif storage.storage_percent >= 75 %}
+                        <div class="mt-4 p-3 bg-amber-50 rounded-lg">
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-amber-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                <span class="text-sm text-amber-700 font-medium">Storage usage is high. Monitor disk space.</span>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
             <!-- Workload Configuration -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-200">
                 <div class="px-6 py-4 border-b border-gray-200">

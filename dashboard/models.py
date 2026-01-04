@@ -594,6 +594,16 @@ class DomainMetric(models.Model):
         help_text="Bytes sent to clients"
     )
 
+    # Storage metrics (from pod exec + du)
+    storage_bytes = models.BigIntegerField(
+        default=0,
+        help_text="Actual storage usage in bytes"
+    )
+    storage_limit_bytes = models.BigIntegerField(
+        default=0,
+        help_text="Storage limit (PVC size) in bytes"
+    )
+
     class Meta:
         ordering = ['-timestamp']
         indexes = [
@@ -627,3 +637,20 @@ class DomainMetric(models.Model):
     def memory_limit_mb(self):
         """Memory limit in MB."""
         return round(self.memory_limit_bytes / (1024 * 1024), 1)
+
+    @property
+    def storage_percent(self):
+        """Storage usage as percentage of limit."""
+        if self.storage_limit_bytes > 0:
+            return round(100 * self.storage_bytes / self.storage_limit_bytes, 1)
+        return 0
+
+    @property
+    def storage_gb(self):
+        """Storage usage in GB."""
+        return round(self.storage_bytes / (1024 * 1024 * 1024), 2)
+
+    @property
+    def storage_limit_gb(self):
+        """Storage limit in GB."""
+        return round(self.storage_limit_bytes / (1024 * 1024 * 1024), 2)
