@@ -136,6 +136,28 @@ from .domain_waf import (
     delete_domain_protected_path,
 )
 
+from .smtp_firewall import (
+    SMTPFirewall,
+    SMTPFirewallStatus,
+    RateLimit,
+    get_smtp_firewall,
+    smtp_firewall_exists,
+    create_smtp_firewall,
+    delete_smtp_firewall,
+    patch_smtp_firewall,
+    get_or_create_smtp_firewall,
+    add_blocked_sender,
+    remove_blocked_sender,
+    add_blocked_domain,
+    remove_blocked_domain,
+    add_blocked_ip,
+    remove_blocked_ip,
+    add_rate_limit,
+    remove_rate_limit,
+    get_rate_limit,
+    get_all_rate_limits,
+)
+
 __all__ = [
     # Exceptions
     'K8sClientError',
@@ -261,4 +283,25 @@ __all__ = [
     'add_domain_protected_path',
     'update_domain_protected_path',
     'delete_domain_protected_path',
+
+    # SMTPFirewall operations
+    'SMTPFirewall',
+    'SMTPFirewallStatus',
+    'RateLimit',
+    'get_smtp_firewall',
+    'smtp_firewall_exists',
+    'create_smtp_firewall',
+    'delete_smtp_firewall',
+    'patch_smtp_firewall',
+    'get_or_create_smtp_firewall',
+    'add_blocked_sender',
+    'remove_blocked_sender',
+    'add_blocked_domain',
+    'remove_blocked_domain',
+    'add_blocked_ip',
+    'remove_blocked_ip',
+    'add_rate_limit',
+    'remove_rate_limit',
+    'get_rate_limit',
+    'get_all_rate_limits',
 ]

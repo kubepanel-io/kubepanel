@@ -2,7 +2,7 @@
 SMTP Firewall views
 
 Admin-only views for monitoring SMTP traffic and managing sender blocklists
-via rspamd and Redis.
+via rspamd and Kubernetes SMTPFirewall CRD.
 """
 import logging
 import json
@@ -13,14 +13,24 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.http import JsonResponse
 
-import redis
 import requests
+
+from dashboard.k8s import (
+    get_or_create_smtp_firewall,
+    add_blocked_sender,
+    remove_blocked_sender,
+    add_blocked_domain,
+    remove_blocked_domain,
+    add_blocked_ip,
+    remove_blocked_ip,
+    add_rate_limit,
+    remove_rate_limit,
+    K8sClientError,
+)
 
 logger = logging.getLogger("django")
 
-# Redis and rspamd connection settings
-REDIS_HOST = "redis.kubepanel.svc.cluster.local"
-REDIS_PORT = 6379
+# rspamd connection settings (for traffic history only)
 RSPAMD_HOST = "rspamd.kubepanel.svc.cluster.local"
 RSPAMD_PORT = 11334
 
@@ -28,11 +38,6 @@ RSPAMD_PORT = 11334
 def is_superuser(user):
     """Check if user is superuser (admin)."""
     return user.is_superuser
-
-
-def get_redis_client():
-    """Get Redis client connection."""
-    return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 
 # =============================================================================
@@ -138,6 +143,7 @@ def smtp_firewall_list(request):
     Display SMTP firewall blocklist and rate limit settings.
 
     Admin only - shows blocked senders, domains, and IPs.
+    Reads from SMTPFirewall CRD via K8s API.
     """
     blocked_senders = []
     blocked_domains = []
@@ -145,23 +151,18 @@ def smtp_firewall_list(request):
     error_message = None
 
     try:
-        r = get_redis_client()
+        fw = get_or_create_smtp_firewall()
 
-        # Get all blocked items from Redis hashes (rspamd multimap uses HSET/HGETALL)
-        blocked_senders = list(r.hkeys('blocked_senders'))
-        blocked_domains = list(r.hkeys('blocked_domains'))
-        blocked_ips = list(r.hkeys('blocked_ips'))
+        # Get all blocked items from CRD
+        blocked_senders = sorted(fw.blocked_senders)
+        blocked_domains = sorted(fw.blocked_domains)
+        blocked_ips = sorted(fw.blocked_ips)
 
-        # Sort for consistent display
-        blocked_senders.sort()
-        blocked_domains.sort()
-        blocked_ips.sort()
-
-    except redis.exceptions.ConnectionError:
-        error_message = "Cannot connect to Redis. Is it running?"
-        logger.warning(f"Redis connection failed: {error_message}")
-    except redis.exceptions.RedisError as e:
-        error_message = f"Redis error: {e}"
+    except K8sClientError as e:
+        error_message = f"Cannot connect to Kubernetes: {e}"
+        logger.warning(f"K8s connection failed: {error_message}")
+    except Exception as e:
+        error_message = f"Error: {e}"
         logger.error(error_message)
 
     context = {
@@ -178,6 +179,7 @@ def smtp_firewall_list(request):
 def smtp_firewall_add_rule(request):
     """
     Add a sender, domain, or IP to the SMTP blocklist.
+    Updates SMTPFirewall CRD.
     """
     if request.method != 'POST':
         return redirect('smtp_firewall_list')
@@ -194,29 +196,20 @@ def smtp_firewall_add_rule(request):
         messages.error(request, "Invalid rule type.")
         return redirect('smtp_firewall_list')
 
-    # Map rule type to Redis key
-    redis_key_map = {
-        'sender': 'blocked_senders',
-        'domain': 'blocked_domains',
-        'ip': 'blocked_ips',
-    }
-    redis_key = redis_key_map[rule_type]
-
     try:
-        r = get_redis_client()
+        if rule_type == 'sender':
+            add_blocked_sender(value)
+        elif rule_type == 'domain':
+            add_blocked_domain(value)
+        elif rule_type == 'ip':
+            add_blocked_ip(value)
 
-        # Check if already exists (rspamd multimap uses Redis HASH, not SET)
-        if r.hexists(redis_key, value):
-            messages.warning(request, f"'{value}' is already blocked.")
-            return redirect('smtp_firewall_list')
-
-        # Add to blocklist using HSET (rspamd multimap reads from hash)
-        r.hset(redis_key, value, "1")
         messages.success(request, f"Added '{value}' to blocked {rule_type}s.")
 
-    except redis.exceptions.ConnectionError:
-        messages.error(request, "Cannot connect to Redis. Is it running?")
-    except redis.exceptions.RedisError as e:
+    except K8sClientError as e:
+        logger.error(f"Failed to add SMTP block rule: {e}")
+        messages.error(request, f"Failed to add rule: {e}")
+    except Exception as e:
         logger.error(f"Failed to add SMTP block rule: {e}")
         messages.error(request, f"Failed to add rule: {e}")
 
@@ -228,6 +221,7 @@ def smtp_firewall_add_rule(request):
 def smtp_firewall_delete_rule(request, rule_type, value):
     """
     Remove a sender, domain, or IP from the SMTP blocklist.
+    Updates SMTPFirewall CRD.
     """
     if request.method != 'POST':
         return redirect('smtp_firewall_list')
@@ -237,27 +231,20 @@ def smtp_firewall_delete_rule(request, rule_type, value):
         messages.error(request, "Invalid rule type.")
         return redirect('smtp_firewall_list')
 
-    # Map rule type to Redis key
-    redis_key_map = {
-        'sender': 'blocked_senders',
-        'domain': 'blocked_domains',
-        'ip': 'blocked_ips',
-    }
-    redis_key = redis_key_map[rule_type]
-
     try:
-        r = get_redis_client()
+        if rule_type == 'sender':
+            remove_blocked_sender(value)
+        elif rule_type == 'domain':
+            remove_blocked_domain(value)
+        elif rule_type == 'ip':
+            remove_blocked_ip(value)
 
-        # Remove from blocklist using HDEL (rspamd multimap uses Redis HASH)
-        removed = r.hdel(redis_key, value)
-        if removed:
-            messages.success(request, f"Removed '{value}' from blocked {rule_type}s.")
-        else:
-            messages.warning(request, f"'{value}' was not in the blocklist.")
+        messages.success(request, f"Removed '{value}' from blocked {rule_type}s.")
 
-    except redis.exceptions.ConnectionError:
-        messages.error(request, "Cannot connect to Redis. Is it running?")
-    except redis.exceptions.RedisError as e:
+    except K8sClientError as e:
+        logger.error(f"Failed to delete SMTP block rule: {e}")
+        messages.error(request, f"Failed to delete rule: {e}")
+    except Exception as e:
         logger.error(f"Failed to delete SMTP block rule: {e}")
         messages.error(request, f"Failed to delete rule: {e}")
 
@@ -275,7 +262,7 @@ def smtp_rate_limits(request):
     View and manage per-user rate limit settings.
 
     Global defaults are in rspamd ConfigMap.
-    Per-user overrides are stored in Redis hash 'user_ratelimits'.
+    Per-user overrides are stored in SMTPFirewall CRD.
     """
     user_limits = []
     error_message = None
@@ -288,19 +275,20 @@ def smtp_rate_limits(request):
     }
 
     try:
-        r = get_redis_client()
-        # Get all per-user rate limits from Redis hash
-        raw_limits = r.hgetall('user_ratelimits')
-        for user, rate in raw_limits.items():
-            user_limits.append({'user': user, 'rate': rate})
+        fw = get_or_create_smtp_firewall()
+
+        # Get all per-user rate limits from CRD
+        for rl in fw.rate_limits:
+            user_limits.append({'user': rl.user, 'rate': rl.rate})
+
         # Sort by user
         user_limits.sort(key=lambda x: x['user'])
 
-    except redis.exceptions.ConnectionError:
-        error_message = "Cannot connect to Redis. Is it running?"
-        logger.warning(f"Redis connection failed: {error_message}")
-    except redis.exceptions.RedisError as e:
-        error_message = f"Redis error: {e}"
+    except K8sClientError as e:
+        error_message = f"Cannot connect to Kubernetes: {e}"
+        logger.warning(f"K8s connection failed: {error_message}")
+    except Exception as e:
+        error_message = f"Error: {e}"
         logger.error(error_message)
 
     context = {
@@ -316,6 +304,7 @@ def smtp_rate_limits(request):
 def smtp_rate_limit_add(request):
     """
     Add a per-user rate limit.
+    Updates SMTPFirewall CRD.
     """
     if request.method != 'POST':
         return redirect('smtp_rate_limits')
@@ -341,13 +330,13 @@ def smtp_rate_limit_add(request):
     rate_string = f"{rate_num} / {period}"
 
     try:
-        r = get_redis_client()
-        r.hset('user_ratelimits', user, rate_string)
+        add_rate_limit(user, rate_string)
         messages.success(request, f"Set rate limit for {user}: {rate_string}")
 
-    except redis.exceptions.ConnectionError:
-        messages.error(request, "Cannot connect to Redis. Is it running?")
-    except redis.exceptions.RedisError as e:
+    except K8sClientError as e:
+        logger.error(f"Failed to add rate limit: {e}")
+        messages.error(request, f"Failed to add rate limit: {e}")
+    except Exception as e:
         logger.error(f"Failed to add rate limit: {e}")
         messages.error(request, f"Failed to add rate limit: {e}")
 
@@ -359,21 +348,19 @@ def smtp_rate_limit_add(request):
 def smtp_rate_limit_delete(request, user):
     """
     Delete a per-user rate limit.
+    Updates SMTPFirewall CRD.
     """
     if request.method != 'POST':
         return redirect('smtp_rate_limits')
 
     try:
-        r = get_redis_client()
-        removed = r.hdel('user_ratelimits', user)
-        if removed:
-            messages.success(request, f"Removed rate limit for {user}. User will use default limit.")
-        else:
-            messages.warning(request, f"No custom rate limit found for {user}.")
+        remove_rate_limit(user)
+        messages.success(request, f"Removed rate limit for {user}. User will use default limit.")
 
-    except redis.exceptions.ConnectionError:
-        messages.error(request, "Cannot connect to Redis. Is it running?")
-    except redis.exceptions.RedisError as e:
+    except K8sClientError as e:
+        logger.error(f"Failed to delete rate limit: {e}")
+        messages.error(request, f"Failed to delete rate limit: {e}")
+    except Exception as e:
         logger.error(f"Failed to delete rate limit: {e}")
         messages.error(request, f"Failed to delete rate limit: {e}")
 
@@ -391,6 +378,7 @@ def smtp_quick_block(request):
     Quick block action from traffic view - add sender or domain to blocklist.
 
     Accepts POST with 'sender' parameter and optionally 'block_domain' checkbox.
+    Updates SMTPFirewall CRD.
     """
     if request.method != 'POST':
         return redirect('smtp_traffic')
@@ -403,24 +391,23 @@ def smtp_quick_block(request):
         return redirect('smtp_traffic')
 
     try:
-        r = get_redis_client()
-
         if block_domain:
             # Extract domain from sender
             if '@' in sender:
                 domain = sender.split('@')[1]
-                r.hset('blocked_domains', domain, "1")
+                add_blocked_domain(domain)
                 messages.success(request, f"Blocked entire domain: @{domain}")
             else:
                 messages.error(request, "Invalid sender address format.")
         else:
-            # Block specific sender using HSET (rspamd multimap uses Redis HASH)
-            r.hset('blocked_senders', sender, "1")
+            # Block specific sender
+            add_blocked_sender(sender)
             messages.success(request, f"Blocked sender: {sender}")
 
-    except redis.exceptions.ConnectionError:
-        messages.error(request, "Cannot connect to Redis. Is it running?")
-    except redis.exceptions.RedisError as e:
+    except K8sClientError as e:
+        logger.error(f"Failed to quick block: {e}")
+        messages.error(request, f"Failed to block sender: {e}")
+    except Exception as e:
         logger.error(f"Failed to quick block: {e}")
         messages.error(request, f"Failed to block sender: {e}")
 
