@@ -38,7 +38,7 @@ def storage_list(request):
     # 3. Get all domains from Django (single query)
     domains = list(Domain.objects.all())
 
-    # 4. Build domain-grouped storage data
+    # 4. Build domain-grouped storage data (consolidated by PVC)
     storage_data = build_storage_data(linstor_resources, pv_list, domains)
 
     return render(request, 'main/storage_list.html', {
@@ -85,22 +85,18 @@ def fetch_all_pvs():
 
 def build_storage_data(linstor_resources, pv_list, domains):
     """
-    Combine Linstor, K8s PV, and Domain data - all logic done in Python.
+    Combine Linstor, K8s PV, and Domain data - consolidated by PVC.
 
-    Data flow:
-    1. Build PV lookup: volume_handle -> {pv_name, pvc_name, namespace, capacity}
-    2. Build domain lookup: namespace -> domain
-    3. For each Linstor resource, look up PV info and domain
-    4. Group by domain
+    Since Linstor replicates volumes across nodes, we get multiple entries
+    per PVC. This function consolidates them to show one row per PVC with
+    all node placements listed together.
     """
-    # Step 1: Build PV lookup (resource_name -> PV info)
-    # Only include Linstor CSI volumes
+    # Step 1: Build PV lookup (volume_handle -> PV info)
     pv_lookup = {}
     for pv in pv_list:
         spec = pv.get('spec', {})
         csi = spec.get('csi', {})
 
-        # Only process Linstor CSI volumes
         if csi.get('driver') != 'linstor.csi.linbit.com':
             continue
 
@@ -119,14 +115,15 @@ def build_storage_data(linstor_resources, pv_list, domains):
     # Step 2: Build domain lookup (namespace -> domain)
     domain_lookup = {d.namespace: d for d in domains}
 
-    # Step 3: Process Linstor resources and group by domain
-    domain_storage = {}  # domain_name -> {domain: Domain, volumes: []}
+    # Step 3: Consolidate Linstor resources by resource_name (PVC)
+    # resource_name -> {nodes: [{node, state}], pv_info, domain_name, domain}
+    consolidated = {}
 
     for resource in linstor_resources:
         resource_name = resource.get('name', '')
         node_name = resource.get('node_name', 'Unknown')
 
-        # Get volume state and allocated size from Linstor
+        # Get volume state from Linstor
         volumes = resource.get('volumes', [])
         state = 'Unknown'
         size_kib = 0
@@ -144,27 +141,65 @@ def build_storage_data(linstor_resources, pv_list, domains):
         if domain:
             domain_name = domain.domain_name
         elif namespace:
-            domain_name = namespace  # Show namespace if no matching domain
+            domain_name = namespace
         else:
             domain_name = 'System/Unknown'
 
-        # Build volume entry
-        entry = {
-            'resource_name': resource_name,
-            'pvc_name': pv_info.get('pvc_name', 'N/A'),
-            'pv_name': pv_info.get('pv_name', 'N/A'),
-            'size': pv_info.get('capacity') or format_size_kib(size_kib),
-            'node': node_name,
+        # Consolidate by resource_name
+        if resource_name not in consolidated:
+            consolidated[resource_name] = {
+                'resource_name': resource_name,
+                'pvc_name': pv_info.get('pvc_name', 'N/A'),
+                'pv_name': pv_info.get('pv_name', 'N/A'),
+                'size': pv_info.get('capacity') or format_size_kib(size_kib),
+                'domain_name': domain_name,
+                'domain': domain,
+                'nodes': [],
+            }
+
+        # Add this node placement
+        consolidated[resource_name]['nodes'].append({
+            'name': node_name,
             'state': state,
+        })
+
+    # Step 4: Group consolidated entries by domain
+    domain_storage = {}
+
+    for entry in consolidated.values():
+        domain_name = entry['domain_name']
+
+        # Calculate overall health
+        nodes = entry['nodes']
+        healthy_states = {'UpToDate', 'Diskless', 'TieBreaker'}
+        healthy_count = sum(1 for n in nodes if n['state'] in healthy_states)
+        total_count = len(nodes)
+
+        # Determine overall status
+        if healthy_count == total_count:
+            overall_status = 'healthy'
+        elif healthy_count > 0:
+            overall_status = 'degraded'
+        else:
+            overall_status = 'error'
+
+        volume_entry = {
+            'resource_name': entry['resource_name'],
+            'pvc_name': entry['pvc_name'],
+            'pv_name': entry['pv_name'],
+            'size': entry['size'],
+            'nodes': sorted(nodes, key=lambda x: x['name']),
+            'healthy_count': healthy_count,
+            'total_count': total_count,
+            'overall_status': overall_status,
         }
 
-        # Group by domain
         if domain_name not in domain_storage:
             domain_storage[domain_name] = {
-                'domain': domain,
+                'domain': entry['domain'],
                 'volumes': [],
             }
-        domain_storage[domain_name]['volumes'].append(entry)
+        domain_storage[domain_name]['volumes'].append(volume_entry)
 
     # Sort by domain name
     return dict(sorted(domain_storage.items()))

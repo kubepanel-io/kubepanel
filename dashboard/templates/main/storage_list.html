@@ -6,6 +6,20 @@
 {% block page_title %}Storage{% endblock %}
 {% block page_subtitle %}Linstor volume placement by domain{% endblock %}
 
+{% block header_search %}
+<div class="relative">
+    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+    </div>
+    <input type="text"
+           class="pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg w-80 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+           placeholder="Search domains, PVCs, nodes..."
+           id="storage-search">
+</div>
+{% endblock %}
+
 {% block content %}
 {% if error_message %}
 <div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
@@ -60,13 +74,8 @@
                 </div>
             </div>
             <div class="ml-4">
-                <p class="text-sm font-medium text-gray-600">Total Volumes</p>
-                {% with total=0 %}
-                {% for domain_name, data in storage_data.items %}
-                {% with total=total|add:data.volumes|length %}{% endwith %}
-                {% endfor %}
-                <p class="text-2xl font-semibold text-gray-900" id="total-volumes">-</p>
-                {% endwith %}
+                <p class="text-sm font-medium text-gray-600">Total PVCs</p>
+                <p class="text-2xl font-semibold text-gray-900" id="total-pvcs">-</p>
             </div>
         </div>
     </div>
@@ -82,15 +91,26 @@
             </div>
             <div class="ml-4">
                 <p class="text-sm font-medium text-gray-600">Healthy</p>
-                <p class="text-2xl font-semibold text-gray-900" id="healthy-volumes">-</p>
+                <p class="text-2xl font-semibold text-gray-900" id="healthy-pvcs">-</p>
             </div>
         </div>
     </div>
 </div>
 
+<!-- No results message (hidden by default) -->
+<div id="no-results" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center mb-6">
+    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+    </svg>
+    <h3 class="mt-2 text-sm font-medium text-gray-900">No results found</h3>
+    <p class="mt-1 text-sm text-gray-500">Try adjusting your search terms.</p>
+</div>
+
 <!-- Storage Cards by Domain -->
 {% for domain_name, data in storage_data.items %}
-<div class="mb-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+<div class="mb-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden domain-card"
+     data-domain="{{ domain_name|lower }}"
+     data-search-text="{{ domain_name|lower }} {% for vol in data.volumes %}{{ vol.pvc_name|lower }} {{ vol.pv_name|lower }} {% for node in vol.nodes %}{{ node.name|lower }} {% endfor %}{% endfor %}">
     <!-- Domain Header -->
     <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
         <div class="flex items-center justify-between">
@@ -100,7 +120,7 @@
                 </svg>
                 <h3 class="text-lg font-medium text-gray-900">{{ domain_name }}</h3>
             </div>
-            <span class="text-sm text-gray-500">{{ data.volumes|length }} volume{{ data.volumes|pluralize }}</span>
+            <span class="text-sm text-gray-500">{{ data.volumes|length }} PVC{{ data.volumes|length|pluralize }}</span>
         </div>
     </div>
 
@@ -111,37 +131,66 @@
                 <tr>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PVC Name</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Node</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">State</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Node Placement</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 {% for vol in data.volumes %}
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap">
+                <tr class="hover:bg-gray-50 volume-row" data-status="{{ vol.overall_status }}">
+                    <td class="px-6 py-4">
                         <div class="text-sm font-medium text-gray-900">{{ vol.pvc_name }}</div>
-                        <div class="text-xs text-gray-400 font-mono">{{ vol.pv_name }}</div>
+                        <div class="text-xs text-gray-400 font-mono truncate max-w-xs" title="{{ vol.pv_name }}">{{ vol.pv_name }}</div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {{ vol.size }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {{ vol.node }}
-                        </span>
+                    <td class="px-6 py-4">
+                        <div class="flex flex-wrap gap-1.5">
+                            {% for node in vol.nodes %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                {% if node.state == 'UpToDate' or node.state == 'Diskless' or node.state == 'TieBreaker' %}
+                                bg-green-100 text-green-800
+                                {% elif node.state == 'Unknown' %}
+                                bg-gray-100 text-gray-800
+                                {% else %}
+                                bg-red-100 text-red-800
+                                {% endif %}"
+                                title="{{ node.state }}">
+                                <span class="w-1.5 h-1.5 rounded-full mr-1.5
+                                    {% if node.state == 'UpToDate' or node.state == 'Diskless' or node.state == 'TieBreaker' %}
+                                    bg-green-500
+                                    {% elif node.state == 'Unknown' %}
+                                    bg-gray-500
+                                    {% else %}
+                                    bg-red-500
+                                    {% endif %}"></span>
+                                {{ node.name }}
+                            </span>
+                            {% endfor %}
+                        </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap volume-state" data-state="{{ vol.state }}">
-                        {% if vol.state == 'UpToDate' or vol.state == 'Diskless' or vol.state == 'TieBreaker' %}
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if vol.overall_status == 'healthy' %}
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {{ vol.state }}
+                            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                            </svg>
+                            {{ vol.healthy_count }}/{{ vol.total_count }} Healthy
                         </span>
-                        {% elif vol.state == 'Unknown' %}
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                            {{ vol.state }}
+                        {% elif vol.overall_status == 'degraded' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            </svg>
+                            {{ vol.healthy_count }}/{{ vol.total_count }} Degraded
                         </span>
                         {% else %}
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                            {{ vol.state }}
+                            <svg class="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                            </svg>
+                            {{ vol.healthy_count }}/{{ vol.total_count }} Error
                         </span>
                         {% endif %}
                     </td>
@@ -159,23 +208,55 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Count total and healthy volumes
-    const volumeStates = document.querySelectorAll('.volume-state');
-    let total = volumeStates.length;
+    // Count total and healthy PVCs
+    const volumeRows = document.querySelectorAll('.volume-row');
+    let total = volumeRows.length;
     let healthy = 0;
 
-    volumeStates.forEach(function(el) {
-        const state = el.dataset.state;
-        if (state === 'UpToDate' || state === 'Diskless' || state === 'TieBreaker') {
+    volumeRows.forEach(function(row) {
+        if (row.dataset.status === 'healthy') {
             healthy++;
         }
     });
 
-    const totalEl = document.getElementById('total-volumes');
-    const healthyEl = document.getElementById('healthy-volumes');
+    const totalEl = document.getElementById('total-pvcs');
+    const healthyEl = document.getElementById('healthy-pvcs');
 
     if (totalEl) totalEl.textContent = total;
     if (healthyEl) healthyEl.textContent = healthy;
+
+    // Search functionality
+    const searchInput = document.getElementById('storage-search');
+    const domainCards = document.querySelectorAll('.domain-card');
+    const noResults = document.getElementById('no-results');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+            let visibleCount = 0;
+
+            domainCards.forEach(function(card) {
+                const searchText = card.dataset.searchText || '';
+                const matches = searchTerm === '' || searchText.includes(searchTerm);
+
+                if (matches) {
+                    card.classList.remove('hidden');
+                    visibleCount++;
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+
+            // Show/hide no results message
+            if (noResults) {
+                if (visibleCount === 0 && searchTerm !== '') {
+                    noResults.classList.remove('hidden');
+                } else {
+                    noResults.classList.add('hidden');
+                }
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
