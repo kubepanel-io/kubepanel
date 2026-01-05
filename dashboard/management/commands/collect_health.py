@@ -51,6 +51,7 @@ class Command(BaseCommand):
         self.dry_run = options.get('dry_run', False)
         self.verbose = options.get('verbose', False)
         specific_component = options.get('component')
+        self.db_available = True
 
         # Load K8s config
         try:
@@ -63,7 +64,22 @@ class Command(BaseCommand):
                 return
 
         self.core_v1 = client.CoreV1Api()
-        self.system_settings = SystemSettings.get_settings()
+
+        # Try to load settings from DB, use defaults if DB unavailable
+        try:
+            self.system_settings = SystemSettings.get_settings()
+        except Exception as e:
+            self.db_available = False
+            self.stdout.write(self.style.WARNING(
+                f"Database unavailable, using defaults (results won't be saved)"
+            ))
+            logger.warning(f"Database unavailable, using default settings: {e}")
+            # Create a mock settings object with defaults
+            self.system_settings = type('MockSettings', (), {
+                'mail_queue_warning_threshold': 50,
+                'mail_queue_error_threshold': 100,
+                'health_check_email_enabled': False,
+            })()
 
         # Components to check
         components = ['linstor', 'mail_queue', 'mariadb']
@@ -350,29 +366,40 @@ class Command(BaseCommand):
 
     def save_status(self, result):
         """Save health status to database."""
-        # Get or create status record for this component
-        status_obj, created = SystemHealthStatus.objects.get_or_create(
-            component=result['component'],
-            defaults={
-                'status': result['status'],
-                'message': result['message'],
-                'details': result.get('details', {}),
-            }
-        )
+        if not self.db_available:
+            logger.warning(f"Cannot save {result['component']} status: database unavailable")
+            return
 
-        if not created:
-            # Check if status changed from unhealthy to healthy
-            if status_obj.status in ('warning', 'error') and result['status'] == 'healthy':
-                status_obj.alert_sent = False  # Reset alert flag
+        try:
+            # Get or create status record for this component
+            status_obj, created = SystemHealthStatus.objects.get_or_create(
+                component=result['component'],
+                defaults={
+                    'status': result['status'],
+                    'message': result['message'],
+                    'details': result.get('details', {}),
+                }
+            )
 
-            status_obj.status = result['status']
-            status_obj.message = result['message']
-            status_obj.details = result.get('details', {})
-            status_obj.save()
+            if not created:
+                # Check if status changed from unhealthy to healthy
+                if status_obj.status in ('warning', 'error') and result['status'] == 'healthy':
+                    status_obj.alert_sent = False  # Reset alert flag
+
+                status_obj.status = result['status']
+                status_obj.message = result['message']
+                status_obj.details = result.get('details', {})
+                status_obj.save()
+        except Exception as e:
+            logger.error(f"Failed to save {result['component']} status: {e}")
 
     def process_alerts(self, results):
         """Send email alerts for warning/error statuses."""
         if not self.system_settings.health_check_email_enabled:
+            return
+
+        if not self.db_available:
+            logger.warning("Cannot process alerts: database unavailable")
             return
 
         # Collect components that need alerts
@@ -388,6 +415,8 @@ class Command(BaseCommand):
                         status_obj.save()
                 except SystemHealthStatus.DoesNotExist:
                     pass
+                except Exception as e:
+                    logger.error(f"Error checking alert status for {result['component']}: {e}")
 
         if not alert_components:
             return
