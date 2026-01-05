@@ -174,21 +174,31 @@ class Command(BaseCommand):
             self.stdout.write(f"Total lines: {len(lines)}")
 
         for line in lines:
-            # Skip header/border lines - look for data rows with box drawing chars
-            # Data rows contain the box char and have actual content
-            if '┊' not in line:
+            # Handle both ASCII (|) and Unicode (┊) table formats
+            # Determine separator character
+            if '┊' in line:
+                separator = '┊'
+            elif '|' in line:
+                separator = '|'
+            else:
                 continue
+
             # Skip header row
             if 'Resource' in line or 'Node' in line:
                 continue
-            # Skip border rows (they have ╭, ╰, ╞, etc.)
+            # Skip border rows
             if '╭' in line or '╰' in line or '╞' in line or '═' in line:
                 continue
+            if line.startswith('+') or '===' in line or '---' in line:
+                continue
 
-            # Parse table row - split by the box drawing character
-            parts = [p.strip() for p in line.split('┊')]
+            # Parse table row - split by separator
+            parts = [p.strip() for p in line.split(separator)]
             # Filter out empty parts
             parts = [p for p in parts if p]
+
+            if self.verbose and parts:
+                self.stdout.write(f"Parsed {len(parts)} parts: {parts[:3]}...{parts[-2:] if len(parts) > 3 else ''}")
 
             if len(parts) >= 9:
                 total_volumes += 1
