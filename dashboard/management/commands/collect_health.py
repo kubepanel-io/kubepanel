@@ -502,9 +502,11 @@ class Command(BaseCommand):
         msg['To'] = ', '.join(recipient_emails)
 
         try:
+            # Use headless service (smtp-internal) to bypass kube-proxy SNAT
+            # This ensures direct pod-to-pod communication, preserving source IP
             if self.verbose:
-                self.stdout.write(f"[Alerts] Connecting to smtp.kubepanel.svc.cluster.local:25")
-            with smtplib.SMTP('smtp.kubepanel.svc.cluster.local', 25, timeout=30) as server:
+                self.stdout.write(f"[Alerts] Connecting to smtp-internal.kubepanel.svc.cluster.local:25")
+            with smtplib.SMTP('smtp-internal.kubepanel.svc.cluster.local', 25, timeout=30) as server:
                 server.sendmail(from_email, recipient_emails, msg.as_string())
             logger.info(f'Health alert sent to {len(recipient_emails)} recipients')
             if self.verbose:
