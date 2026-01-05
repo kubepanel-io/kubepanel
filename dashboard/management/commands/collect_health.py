@@ -41,9 +41,15 @@ class Command(BaseCommand):
             choices=['linstor', 'mail_queue', 'mariadb'],
             help='Check only a specific component',
         )
+        parser.add_argument(
+            '--verbose',
+            action='store_true',
+            help='Show detailed output for debugging',
+        )
 
     def handle(self, *args, **options):
         self.dry_run = options.get('dry_run', False)
+        self.verbose = options.get('verbose', False)
         specific_component = options.get('component')
 
         # Load K8s config
@@ -140,6 +146,11 @@ class Command(BaseCommand):
                 _preload_content=True
             )
 
+            if self.verbose:
+                self.stdout.write(f"Linstor pod: {pod_name}")
+                self.stdout.write(f"Raw output length: {len(result)} chars")
+                self.stdout.write(f"Raw output:\n{result[:2000]}")
+
             return self.parse_linstor_output(result)
 
         except ApiException as e:
@@ -158,6 +169,10 @@ class Command(BaseCommand):
         healthy_volumes = 0
 
         lines = output.strip().split('\n')
+
+        if self.verbose:
+            self.stdout.write(f"Total lines: {len(lines)}")
+
         for line in lines:
             # Skip header/border lines - look for data rows with box drawing chars
             # Data rows contain the box char and have actual content
