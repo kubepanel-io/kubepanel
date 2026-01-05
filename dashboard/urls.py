@@ -3,7 +3,8 @@ import re
 from .views import (
     UserProfilePackageUpdateView, PackageListView, PackageCreateView, PackageUpdateView,
     UserProfileListView, UserProfileCreateView, UserProfileUpdateView,
-    UserCreateView, DownloadSnapshotView, DownloadSqlDumpView, UploadRestoreFilesView
+    UserCreateView, DownloadSnapshotView, DownloadSqlDumpView, UploadRestoreFilesView,
+    system_settings,
 )
 from dashboard.k8s import (
     DomainSpec,
@@ -64,6 +65,7 @@ urlpatterns = [
     path('nodes/<str:name>/drain/', views.node_drain,  name='node_drain'),
     path('nodes/<str:name>/cordon/', views.node_cordon, name='node_cordon'),
     path('nodes/<str:name>/uncordon/',views.node_uncordon, name='node_uncordon'),
+    path('system-settings/', system_settings, name='system_settings'),
     path('pods/<str:namespace>/<str:name>/logs/',views.pod_logs,name='pod_logs'),
     path('domains/<str:domain>/backup/<str:jobid>/logs/',views.backup_logs,name='backup_logs'),
     path('domains/<str:domain>/logs/', views.domain_logs, name='domain_logs'),

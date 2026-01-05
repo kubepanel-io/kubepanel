@@ -16,7 +16,7 @@ import os
 import time
 import subprocess
 
-from dashboard.models import Package, UserProfile, Domain
+from dashboard.models import Package, UserProfile, Domain, SystemSettings
 from dashboard.forms import UserProfilePackageForm, UserForm, PackageForm, UserProfileForm
 from dashboard.k8s import get_backup, K8sNotFoundError
 from .utils import SuperuserRequiredMixin
@@ -394,3 +394,33 @@ class UploadRestoreFilesView(View):
 
 # Need to import render for UploadRestoreFilesView
 from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
+
+
+@login_required
+def system_settings(request):
+    """View and edit system-wide settings (superuser only)."""
+    if not request.user.is_superuser:
+        return redirect('kpmain')
+
+    settings_obj = SystemSettings.get_settings()
+
+    if request.method == 'POST':
+        try:
+            settings_obj.mail_queue_warning_threshold = int(
+                request.POST.get('mail_queue_warning', 50)
+            )
+            settings_obj.mail_queue_error_threshold = int(
+                request.POST.get('mail_queue_error', 100)
+            )
+            settings_obj.health_check_email_enabled = 'email_enabled' in request.POST
+            settings_obj.save()
+            messages.success(request, 'Settings saved successfully.')
+        except (ValueError, TypeError) as e:
+            messages.error(request, f'Invalid value: {e}')
+        return redirect('system_settings')
+
+    return render(request, 'main/system_settings.html', {
+        'settings': settings_obj,
+    })

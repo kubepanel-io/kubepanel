@@ -152,7 +152,7 @@
                                 </div>
                             </div>
                             <div class="ml-4">
-                                <div class="text-sm font-medium text-gray-900">{{ node.name }}</div>
+                                <a href="{% url 'node_detail' node.name %}" class="text-sm font-medium text-primary-600 hover:text-primary-800 hover:underline">{{ node.name }}</a>
                                 <div class="text-sm text-gray-500">Kubernetes Node</div>
                             </div>
                         </div>
@@ -219,53 +219,6 @@
                                 </button>
                             </form>
                             {% endif %}
-                            
-                            <!-- Actions Dropdown -->
-                            <div class="relative dropdown">
-                                <button class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
-                                    </svg>
-                                    <span>Actions</span>
-                                </button>
-                                <div class="dropdown-menu absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                                    <a href="{% url 'node_detail' node.name %}"
-                                       class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                        </svg>
-                                        <span>View Details</span>
-                                    </a>
-                                    <a href="#"
-                                       class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                                        </svg>
-                                        <span>View Metrics</span>
-                                    </a>
-                                    <a href="#"
-                                       class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                        </svg>
-                                        <span>View Logs</span>
-                                    </a>
-                                    <hr class="my-1 border-gray-200">
-                                    <form method="post" 
-                                          action="{% url 'node_drain' node.name %}" 
-                                          class="block"
-                                          onsubmit="return confirm('Drain node {{ node.name }}? All pods will be evicted and rescheduled to other nodes.')">
-                                        {% csrf_token %}
-                                        <button type="submit"
-                                                class="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 text-left">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                            </svg>
-                                            <span>Drain Node</span>
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
                         </div>
                     </td>
                 </tr>
@@ -289,6 +242,125 @@
         </div>
     </div>
     {% endif %}
+</div>
+
+<!-- System Health Section -->
+<div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900 flex items-center">
+            <svg class="w-5 h-5 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+            </svg>
+            System Health
+        </h3>
+    </div>
+
+    <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Linstor Storage -->
+        <div class="border rounded-lg p-4 {% if health_status.linstor.status == 'healthy' %}border-green-200 bg-green-50{% elif health_status.linstor.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.linstor.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
+            <div class="flex items-center justify-between mb-2">
+                <h4 class="font-medium text-gray-900">Linstor Storage</h4>
+                {% if health_status.linstor.status == 'healthy' %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                    Healthy
+                </span>
+                {% elif health_status.linstor.status == 'warning' %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
+                    Warning
+                </span>
+                {% elif health_status.linstor.status == 'error' %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                    Error
+                </span>
+                {% else %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                    Unknown
+                </span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-gray-600">{{ health_status.linstor.message|default:"No data available" }}</p>
+            {% if health_status.linstor.checked_at %}
+            <p class="text-xs text-gray-400 mt-2">Last checked: {{ health_status.linstor.checked_at|timesince }} ago</p>
+            {% endif %}
+        </div>
+
+        <!-- Mail Queue -->
+        <div class="border rounded-lg p-4 {% if health_status.mail_queue.status == 'healthy' %}border-green-200 bg-green-50{% elif health_status.mail_queue.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.mail_queue.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
+            <div class="flex items-center justify-between mb-2">
+                <h4 class="font-medium text-gray-900">Mail Queue</h4>
+                {% if health_status.mail_queue.status == 'healthy' %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                    Healthy
+                </span>
+                {% elif health_status.mail_queue.status == 'warning' %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
+                    Warning
+                </span>
+                {% elif health_status.mail_queue.status == 'error' %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                    Error
+                </span>
+                {% else %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                    Unknown
+                </span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-gray-600">
+                {% if health_status.mail_queue.details.queue_count is not None %}
+                {{ health_status.mail_queue.details.queue_count }} messages in queue
+                {% else %}
+                {{ health_status.mail_queue.message|default:"No data available" }}
+                {% endif %}
+            </p>
+            {% if sys_settings %}
+            <p class="text-xs text-gray-400 mt-1">Threshold: {{ sys_settings.mail_queue_warning_threshold }}</p>
+            {% endif %}
+            {% if health_status.mail_queue.checked_at %}
+            <p class="text-xs text-gray-400 mt-1">Last checked: {{ health_status.mail_queue.checked_at|timesince }} ago</p>
+            {% endif %}
+        </div>
+
+        <!-- MariaDB -->
+        <div class="border rounded-lg p-4 {% if health_status.mariadb.status == 'healthy' %}border-green-200 bg-green-50{% elif health_status.mariadb.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.mariadb.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
+            <div class="flex items-center justify-between mb-2">
+                <h4 class="font-medium text-gray-900">MariaDB</h4>
+                {% if health_status.mariadb.status == 'healthy' %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                    Healthy
+                </span>
+                {% elif health_status.mariadb.status == 'warning' %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
+                    Warning
+                </span>
+                {% elif health_status.mariadb.status == 'error' %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                    Error
+                </span>
+                {% else %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                    Unknown
+                </span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-gray-600">{{ health_status.mariadb.message|default:"No data available" }}</p>
+            {% if health_status.mariadb.checked_at %}
+            <p class="text-xs text-gray-400 mt-2">Last checked: {{ health_status.mariadb.checked_at|timesince }} ago</p>
+            {% endif %}
+        </div>
+    </div>
 </div>
 
 {% block extra_js %}
@@ -401,60 +473,6 @@
         function updateVisibleStats() {
             updateStats();
         }
-        
-        // Dropdown functionality
-        const dropdowns = document.querySelectorAll('.dropdown');
-
-        dropdowns.forEach(dropdown => {
-            const button = dropdown.querySelector('button');
-            const menu = dropdown.querySelector('.dropdown-menu');
-
-            if (button && menu) {
-                // Set initial state
-                menu.style.transform = 'translateY(-5px)';
-                menu.style.opacity = '0';
-                menu.style.visibility = 'hidden';
-                menu.style.transition = 'all 0.2s ease-in-out';
-
-                let isClickOpen = false;
-                let hoverTimeout;
-
-                // Show dropdown function
-                function showDropdown() {
-                    // Close all other dropdowns first
-                    dropdowns.forEach(otherDropdown => {
-                        if (otherDropdown !== dropdown) {
-                            const otherMenu = otherDropdown.querySelector('.dropdown-menu');
-                            if (otherMenu) {
-                                otherMenu.style.transform = 'translateY(-5px)';
-                                otherMenu.style.opacity = '0';
-                                otherMenu.style.visibility = 'hidden';
-                                otherDropdown.isClickOpen = false;
-                            }
-                        }
-                    });
-
-                    menu.style.transform = 'translateY(0)';
-                    menu.style.opacity = '1';
-                    menu.style.visibility = 'visible';
-                }
-
-                // Hide dropdown function
-                function hideDropdown() {
-                    if (!isClickOpen) {
-                        menu.style.transform = 'translateY(-5px)';
-                    menu.style.opacity = '0';
-                    menu.style.visibility = 'hidden';
-                    dropdown.isClickOpen = false;
-                }
-            });
-        });
-        
-        // Export functionality
-        window.exportNodes = function() {
-            // In a real implementation, this would export the filtered node data
-            alert('Export functionality would be implemented here');
-        };
         
         // Enhanced action confirmations
         const actionForms = document.querySelectorAll('form[method="post"]');

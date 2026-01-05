@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}System Settings | KubePanel{% endblock %}
+
+{% block page_title %}System Settings{% endblock %}
+{% block page_subtitle %}Configure system-wide health monitoring and alerts{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'node_list' %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Nodes</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">System Settings</h3>
+                    <p class="text-sm text-gray-600">Configure health monitoring thresholds and email alerts</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="POST" novalidate>
+                {% csrf_token %}
+
+                <!-- Mail Queue Settings Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        Mail Queue Thresholds
+                    </h4>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Warning Threshold -->
+                        <div>
+                            <label for="mail_queue_warning" class="block text-sm font-medium text-gray-700 mb-2">
+                                Warning Threshold
+                            </label>
+                            <div class="relative">
+                                <input type="number"
+                                       name="mail_queue_warning"
+                                       id="mail_queue_warning"
+                                       value="{{ settings.mail_queue_warning_threshold }}"
+                                       min="1"
+                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
+                                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                    <span class="text-gray-400 text-sm">messages</span>
+                                </div>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Trigger warning when queue exceeds this count</p>
+                        </div>
+
+                        <!-- Error Threshold -->
+                        <div>
+                            <label for="mail_queue_error" class="block text-sm font-medium text-gray-700 mb-2">
+                                Error Threshold
+                            </label>
+                            <div class="relative">
+                                <input type="number"
+                                       name="mail_queue_error"
+                                       id="mail_queue_error"
+                                       value="{{ settings.mail_queue_error_threshold }}"
+                                       min="1"
+                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
+                                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                    <span class="text-gray-400 text-sm">messages</span>
+                                </div>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Trigger error when queue exceeds this count</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Email Alerts Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                        </svg>
+                        Email Alerts
+                    </h4>
+
+                    <div class="flex items-center">
+                        <input type="checkbox"
+                               name="email_enabled"
+                               id="email_enabled"
+                               {% if settings.health_check_email_enabled %}checked{% endif %}
+                               class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                        <label for="email_enabled" class="ml-3 block text-sm text-gray-700">
+                            Enable email alerts for health issues
+                        </label>
+                    </div>
+                    <p class="mt-2 text-xs text-gray-500">
+                        When enabled, superusers will receive email notifications when system health issues are detected
+                    </p>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex justify-end pt-4 border-t border-gray-200">
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Save Settings</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

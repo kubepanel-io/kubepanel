@@ -93,6 +93,7 @@ from .admin import (
     DownloadSnapshotView,
     DownloadSqlDumpView,
     UploadRestoreFilesView,
+    system_settings,
 )
 
 # Security views

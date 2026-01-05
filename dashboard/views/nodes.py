@@ -10,7 +10,7 @@ import os
 import requests
 import logging
 
-from dashboard.models import Domain
+from dashboard.models import Domain, SystemHealthStatus, SystemSettings
 from .utils import _load_k8s_auth
 
 logger = logging.getLogger("django")
@@ -50,7 +50,22 @@ def node_list(request):
             "status": status,
         })
 
-    return render(request, "main/node_list.html", {"nodes": nodes})
+    # Get latest health status for each component
+    health_status = {}
+    for component in ['linstor', 'mail_queue', 'mariadb']:
+        latest = SystemHealthStatus.objects.filter(
+            component=component
+        ).order_by('-checked_at').first()
+        health_status[component] = latest
+
+    # Get settings for thresholds display
+    sys_settings = SystemSettings.get_settings()
+
+    return render(request, "main/node_list.html", {
+        "nodes": nodes,
+        "health_status": health_status,
+        "sys_settings": sys_settings,
+    })
 
 
 @login_required

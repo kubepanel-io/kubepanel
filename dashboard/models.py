@@ -656,3 +656,72 @@ class DomainMetric(models.Model):
     def storage_limit_gb(self):
         """Storage limit in GB."""
         return round(self.storage_limit_bytes / (1024 * 1024 * 1024), 2)
+
+
+class SystemHealthStatus(models.Model):
+    """Stores periodic health check results for system components."""
+
+    COMPONENT_CHOICES = [
+        ('linstor', 'Linstor Storage'),
+        ('mail_queue', 'Mail Queue'),
+        ('mariadb', 'MariaDB'),
+    ]
+
+    STATUS_CHOICES = [
+        ('healthy', 'Healthy'),
+        ('warning', 'Warning'),
+        ('error', 'Error'),
+        ('unknown', 'Unknown'),
+    ]
+
+    component = models.CharField(max_length=50, choices=COMPONENT_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='unknown')
+    message = models.TextField(blank=True)
+    details = models.JSONField(default=dict, blank=True)
+    checked_at = models.DateTimeField(auto_now=True)
+    alert_sent = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "System Health Status"
+        verbose_name_plural = "System Health Statuses"
+        ordering = ['-checked_at']
+        indexes = [
+            models.Index(fields=['component', '-checked_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_component_display()}: {self.status} @ {self.checked_at:%Y-%m-%d %H:%M}"
+
+
+class SystemSettings(models.Model):
+    """Singleton model for system-wide settings."""
+
+    mail_queue_warning_threshold = models.IntegerField(
+        default=50,
+        help_text="Warn when mail queue exceeds this count"
+    )
+    mail_queue_error_threshold = models.IntegerField(
+        default=100,
+        help_text="Error when mail queue exceeds this count"
+    )
+    health_check_email_enabled = models.BooleanField(
+        default=True,
+        help_text="Send email alerts for health issues"
+    )
+
+    class Meta:
+        verbose_name = "System Settings"
+        verbose_name_plural = "System Settings"
+
+    def save(self, *args, **kwargs):
+        # Ensure only one instance exists
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_settings(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return "System Settings"
