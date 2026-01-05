@@ -13,7 +13,6 @@ import os
 import re
 import logging
 from django.core.management.base import BaseCommand
-from django.core.mail import send_mail
 from django.conf import settings
 from django.contrib.auth.models import User
 
@@ -484,16 +483,29 @@ class Command(BaseCommand):
                 self.stdout.write("[Alerts] No recipients - skipping email")
             return
 
+        # Get KUBEPANEL_DOMAIN from settings (ALLOWED_HOSTS)
+        kubepanel_domain = settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else 'localhost'
+        from_email = f'noreply@{kubepanel_domain}'
+        from_name = 'KubePanel'
+        formatted_from = f'{from_name} <{from_email}>'
+
+        if self.verbose:
+            self.stdout.write(f"[Alerts] From address: {formatted_from}")
+
+        # Send using internal SMTP (no auth needed - kubepanel pods are in trusted mynetworks)
+        import smtplib
+        from email.mime.text import MIMEText
+
+        msg = MIMEText(body)
+        msg['Subject'] = subject
+        msg['From'] = formatted_from
+        msg['To'] = ', '.join(recipient_emails)
+
         try:
             if self.verbose:
-                self.stdout.write(f"[Alerts] Sending email to: {recipient_emails}")
-            send_mail(
-                subject=subject,
-                message=body,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=recipient_emails,
-                fail_silently=False,
-            )
+                self.stdout.write(f"[Alerts] Connecting to smtp.kubepanel.svc.cluster.local:25")
+            with smtplib.SMTP('smtp.kubepanel.svc.cluster.local', 25, timeout=30) as server:
+                server.sendmail(from_email, recipient_emails, msg.as_string())
             logger.info(f'Health alert sent to {len(recipient_emails)} recipients')
             if self.verbose:
                 self.stdout.write(f"[Alerts] Email sent successfully to {len(recipient_emails)} recipients")
