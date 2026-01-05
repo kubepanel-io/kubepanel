@@ -395,30 +395,49 @@ class Command(BaseCommand):
 
     def process_alerts(self, results):
         """Send email alerts for warning/error statuses."""
-        if not self.system_settings.health_check_email_enabled:
-            return
+        # Check if alerts are enabled (use env var as fallback when DB unavailable)
+        alerts_enabled = self.system_settings.health_check_email_enabled
+        env_alert_email = os.environ.get('KUBEPANEL_ALERT_EMAIL', '')
 
-        if not self.db_available:
-            logger.warning("Cannot process alerts: database unavailable")
+        if self.verbose:
+            self.stdout.write(f"[Alerts] DB available: {self.db_available}")
+            self.stdout.write(f"[Alerts] alerts_enabled (from settings): {alerts_enabled}")
+            self.stdout.write(f"[Alerts] KUBEPANEL_ALERT_EMAIL env var: '{env_alert_email}'")
+
+        if not alerts_enabled and not env_alert_email:
+            if self.verbose:
+                self.stdout.write("[Alerts] Skipping - alerts disabled and no env var set")
             return
 
         # Collect components that need alerts
         alert_components = []
         for result in results:
             if result['status'] in ('warning', 'error'):
-                # Check if alert already sent
-                try:
-                    status_obj = SystemHealthStatus.objects.get(component=result['component'])
-                    if not status_obj.alert_sent:
+                if self.db_available:
+                    # Check if alert already sent (only when DB available)
+                    try:
+                        status_obj = SystemHealthStatus.objects.get(component=result['component'])
+                        if not status_obj.alert_sent:
+                            alert_components.append(result)
+                            status_obj.alert_sent = True
+                            status_obj.save()
+                    except SystemHealthStatus.DoesNotExist:
                         alert_components.append(result)
-                        status_obj.alert_sent = True
-                        status_obj.save()
-                except SystemHealthStatus.DoesNotExist:
-                    pass
-                except Exception as e:
-                    logger.error(f"Error checking alert status for {result['component']}: {e}")
+                    except Exception as e:
+                        logger.error(f"Error checking alert status for {result['component']}: {e}")
+                        alert_components.append(result)
+                else:
+                    # DB unavailable - always send alert (can't track if already sent)
+                    alert_components.append(result)
+
+        if self.verbose:
+            self.stdout.write(f"[Alerts] Components needing alerts: {len(alert_components)}")
+            for comp in alert_components:
+                self.stdout.write(f"  - {comp['component']}: {comp['status']}")
 
         if not alert_components:
+            if self.verbose:
+                self.stdout.write("[Alerts] No components need alerting")
             return
 
         # Build email content
@@ -437,15 +456,37 @@ class Command(BaseCommand):
 
         body = '\n'.join(body_lines)
 
-        # Get superuser emails
-        superusers = User.objects.filter(is_superuser=True, is_active=True)
-        recipient_emails = [u.email for u in superusers if u.email]
+        # Get recipient emails
+        recipient_emails = []
+
+        # Try to get superuser emails from DB
+        if self.db_available:
+            try:
+                superusers = User.objects.filter(is_superuser=True, is_active=True)
+                recipient_emails = [u.email for u in superusers if u.email]
+            except Exception as e:
+                logger.error(f"Failed to fetch superuser emails: {e}")
+
+        # Fallback to environment variable (or use as additional recipients)
+        fallback_emails = os.environ.get('KUBEPANEL_ALERT_EMAIL', '')
+        if fallback_emails:
+            for email in fallback_emails.split(','):
+                email = email.strip()
+                if email and email not in recipient_emails:
+                    recipient_emails.append(email)
+
+        if self.verbose:
+            self.stdout.write(f"[Alerts] Recipient emails: {recipient_emails}")
 
         if not recipient_emails:
-            logger.warning('No superuser emails configured for health alerts')
+            logger.warning('No recipient emails configured for health alerts')
+            if self.verbose:
+                self.stdout.write("[Alerts] No recipients - skipping email")
             return
 
         try:
+            if self.verbose:
+                self.stdout.write(f"[Alerts] Sending email to: {recipient_emails}")
             send_mail(
                 subject=subject,
                 message=body,
@@ -454,5 +495,9 @@ class Command(BaseCommand):
                 fail_silently=False,
             )
             logger.info(f'Health alert sent to {len(recipient_emails)} recipients')
+            if self.verbose:
+                self.stdout.write(f"[Alerts] Email sent successfully to {len(recipient_emails)} recipients")
         except Exception as e:
             logger.error(f'Failed to send health alert email: {e}')
+            if self.verbose:
+                self.stdout.write(f"[Alerts] Failed to send email: {e}")
