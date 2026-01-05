@@ -109,109 +109,72 @@ class Command(BaseCommand):
 
     def check_linstor(self):
         """
-        Check Linstor volume integrity.
+        Check Linstor volume integrity via REST API.
 
-        Runs 'linstor volume list' in linstor-controller pod and parses the State column.
+        Fetches /v1/view/resources from Linstor controller and checks disk_state.
         Valid states: UpToDate, Diskless, TieBreaker
         """
-        namespace = 'piraeus-datastore'
-        label_selector = 'app.kubernetes.io/component=linstor-controller'
+        import urllib.request
+        import json
+
+        api_url = 'http://linstor-controller.piraeus-datastore.svc.cluster.local:3370/v1/view/resources'
 
         try:
-            pods = self.core_v1.list_namespaced_pod(
-                namespace=namespace,
-                label_selector=label_selector
-            ).items
-
-            if not pods:
-                return {
-                    'component': 'linstor',
-                    'status': 'error',
-                    'message': 'Linstor controller pod not found',
-                    'details': {'namespace': namespace, 'selector': label_selector},
-                }
-
-            pod_name = pods[0].metadata.name
-
-            # Execute linstor volume list
-            result = stream(
-                self.core_v1.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=namespace,
-                command=['linstor', 'volume', 'list'],
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
-                _preload_content=True
-            )
+            req = urllib.request.Request(api_url, headers={'Accept': 'application/json'})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.loads(response.read().decode('utf-8'))
 
             if self.verbose:
-                self.stdout.write(f"Linstor pod: {pod_name}")
-                self.stdout.write(f"Raw output length: {len(result)} chars")
-                self.stdout.write(f"Raw output:\n{result[:2000]}")
+                self.stdout.write(f"Linstor API returned {len(data)} resources")
 
-            return self.parse_linstor_output(result)
+            return self.parse_linstor_api_response(data)
 
-        except ApiException as e:
+        except urllib.error.URLError as e:
             return {
                 'component': 'linstor',
                 'status': 'error',
-                'message': f'API error: {e.reason}',
-                'details': {'status': e.status},
+                'message': f'Cannot reach Linstor API: {e.reason}',
+                'details': {'url': api_url, 'error': str(e)},
+            }
+        except json.JSONDecodeError as e:
+            return {
+                'component': 'linstor',
+                'status': 'error',
+                'message': f'Invalid JSON from Linstor API: {e}',
+                'details': {'url': api_url},
+            }
+        except Exception as e:
+            return {
+                'component': 'linstor',
+                'status': 'error',
+                'message': f'Linstor check failed: {e}',
+                'details': {'error': str(e)},
             }
 
-    def parse_linstor_output(self, output):
-        """Parse linstor volume list output and check State column."""
+    def parse_linstor_api_response(self, data):
+        """Parse Linstor REST API response and check volume states."""
         valid_states = {'UpToDate', 'Diskless', 'TieBreaker'}
         error_states = []
         total_volumes = 0
         healthy_volumes = 0
 
-        lines = output.strip().split('\n')
+        for resource in data:
+            resource_name = resource.get('name', 'unknown')
+            node_name = resource.get('node_name', 'unknown')
+            volumes = resource.get('volumes', [])
 
-        if self.verbose:
-            self.stdout.write(f"Total lines: {len(lines)}")
-
-        for line in lines:
-            # Handle both ASCII (|) and Unicode (┊) table formats
-            # Determine separator character
-            if '┊' in line:
-                separator = '┊'
-            elif '|' in line:
-                separator = '|'
-            else:
-                continue
-
-            # Skip header row
-            if 'Resource' in line or 'Node' in line:
-                continue
-            # Skip border rows
-            if '╭' in line or '╰' in line or '╞' in line or '═' in line:
-                continue
-            if line.startswith('+') or '===' in line or '---' in line:
-                continue
-
-            # Parse table row - split by separator
-            parts = [p.strip() for p in line.split(separator)]
-            # Filter out empty parts
-            parts = [p for p in parts if p]
-
-            if self.verbose and parts:
-                self.stdout.write(f"Parsed {len(parts)} parts: {parts[:3]}...{parts[-2:] if len(parts) > 3 else ''}")
-
-            if len(parts) >= 9:
+            for volume in volumes:
                 total_volumes += 1
-                # State is the 9th column (index 8) based on the table structure:
-                # Resource, Node, StoragePool, VolNr, MinorNr, DeviceName, Allocated, InUse, State, Repl
-                state = parts[8].strip() if len(parts) > 8 else ''
+                state_info = volume.get('state', {})
+                disk_state = state_info.get('disk_state', 'Unknown')
 
-                if state in valid_states:
+                if self.verbose:
+                    self.stdout.write(f"  {resource_name}@{node_name}: {disk_state}")
+
+                if disk_state in valid_states:
                     healthy_volumes += 1
-                elif state:
-                    resource = parts[0] if parts else 'unknown'
-                    node = parts[1] if len(parts) > 1 else 'unknown'
-                    error_states.append(f"{resource}@{node}: {state}")
+                else:
+                    error_states.append(f"{resource_name}@{node_name}: {disk_state}")
 
         if total_volumes == 0:
             return {
