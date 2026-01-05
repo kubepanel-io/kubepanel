@@ -123,6 +123,10 @@ def build_storage_data(linstor_resources, pv_list, domains):
         resource_name = resource.get('name', '')
         node_name = resource.get('node_name', 'Unknown')
 
+        # Get resource-level state (includes in_use)
+        resource_state = resource.get('state', {})
+        in_use = resource_state.get('in_use', False)
+
         # Get volume state from Linstor
         volumes = resource.get('volumes', [])
         state = 'Unknown'
@@ -161,6 +165,7 @@ def build_storage_data(linstor_resources, pv_list, domains):
         consolidated[resource_name]['nodes'].append({
             'name': node_name,
             'state': state,
+            'in_use': in_use,
         })
 
     # Step 4: Group consolidated entries by domain
