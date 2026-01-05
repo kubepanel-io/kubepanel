@@ -162,6 +162,11 @@ from .api import (
     get_workload_types,
 )
 
+# Storage views
+from .storage import (
+    storage_list,
+)
+
 # SMTP Firewall views
 from .smtp_firewall import (
     smtp_traffic,
@@ -319,6 +324,9 @@ __all__ = [
     # API
     'get_workload_versions',
     'get_workload_types',
+
+    # Storage
+    'storage_list',
 
     # SMTP Firewall
     'smtp_traffic',
