@@ -159,20 +159,34 @@ class Command(BaseCommand):
 
         lines = output.strip().split('\n')
         for line in lines:
-            # Skip header/border lines
-            if '┊' not in line or 'Resource' in line or 'State' in line:
+            # Skip header/border lines - look for data rows with box drawing chars
+            # Data rows contain the box char and have actual content
+            if '┊' not in line:
+                continue
+            # Skip header row
+            if 'Resource' in line or 'Node' in line:
+                continue
+            # Skip border rows (they have ╭, ╰, ╞, etc.)
+            if '╭' in line or '╰' in line or '╞' in line or '═' in line:
                 continue
 
-            # Parse table row - State is typically the 10th column
-            parts = [p.strip() for p in line.split('┊') if p.strip()]
-            if len(parts) >= 10:
+            # Parse table row - split by the box drawing character
+            parts = [p.strip() for p in line.split('┊')]
+            # Filter out empty parts
+            parts = [p for p in parts if p]
+
+            if len(parts) >= 9:
                 total_volumes += 1
-                state = parts[9].strip() if len(parts) > 9 else ''
+                # State is the 9th column (index 8) based on the table structure:
+                # Resource, Node, StoragePool, VolNr, MinorNr, DeviceName, Allocated, InUse, State, Repl
+                state = parts[8].strip() if len(parts) > 8 else ''
 
                 if state in valid_states:
                     healthy_volumes += 1
                 elif state:
-                    error_states.append(f"{parts[0]}@{parts[1]}: {state}")
+                    resource = parts[0] if parts else 'unknown'
+                    node = parts[1] if len(parts) > 1 else 'unknown'
+                    error_states.append(f"{resource}@{node}: {state}")
 
         if total_volumes == 0:
             return {
@@ -292,63 +306,58 @@ class Command(BaseCommand):
         """
         Check MariaDB health.
 
-        Runs 'mariadb-admin ping' in mariadb pod.
-        Output: "mysqld is alive" on success.
+        Tests TCP connectivity to mariadb service on port 3306.
+        This doesn't require authentication credentials.
         """
-        namespace = 'kubepanel'
-        label_selector = 'app=mariadb'
+        import socket
+
+        # MariaDB service in kubepanel namespace
+        host = 'mariadb.kubepanel.svc.cluster.local'
+        port = 3306
+        timeout = 5
 
         try:
-            pods = self.core_v1.list_namespaced_pod(
-                namespace=namespace,
-                label_selector=label_selector
-            ).items
+            # Try TCP connection to MariaDB service
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            result = sock.connect_ex((host, port))
+            sock.close()
 
-            running_pods = [p for p in pods if p.status.phase == 'Running']
-            if not running_pods:
-                return {
-                    'component': 'mariadb',
-                    'status': 'error',
-                    'message': 'MariaDB pod not running',
-                    'details': {'namespace': namespace, 'selector': label_selector},
-                }
-
-            pod_name = running_pods[0].metadata.name
-
-            # Execute mariadb-admin ping
-            result = stream(
-                self.core_v1.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=namespace,
-                command=['mariadb-admin', 'ping'],
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
-                _preload_content=True
-            )
-
-            if 'alive' in result.lower():
+            if result == 0:
                 return {
                     'component': 'mariadb',
                     'status': 'healthy',
-                    'message': 'MariaDB is responding',
-                    'details': {'response': result.strip()},
+                    'message': 'MariaDB is responding on port 3306',
+                    'details': {'host': host, 'port': port},
                 }
             else:
                 return {
                     'component': 'mariadb',
                     'status': 'error',
-                    'message': f'Unexpected response: {result.strip()[:100]}',
-                    'details': {'response': result.strip()},
+                    'message': f'Cannot connect to MariaDB (error code: {result})',
+                    'details': {'host': host, 'port': port, 'error_code': result},
                 }
 
-        except ApiException as e:
+        except socket.timeout:
             return {
                 'component': 'mariadb',
                 'status': 'error',
-                'message': f'API error: {e.reason}',
-                'details': {'status': e.status},
+                'message': 'Connection to MariaDB timed out',
+                'details': {'host': host, 'port': port, 'timeout': timeout},
+            }
+        except socket.gaierror as e:
+            return {
+                'component': 'mariadb',
+                'status': 'error',
+                'message': f'DNS resolution failed: {e}',
+                'details': {'host': host, 'error': str(e)},
+            }
+        except Exception as e:
+            return {
+                'component': 'mariadb',
+                'status': 'error',
+                'message': f'Connection error: {e}',
+                'details': {'host': host, 'error': str(e)},
             }
 
     def save_status(self, result):
