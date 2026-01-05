@@ -5,9 +5,9 @@ import logging
 import urllib.request
 import json
 
+import requests
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-from kubernetes import client
 
 from dashboard.models import Domain
 from dashboard.views.utils import _load_k8s_auth
@@ -23,29 +23,32 @@ def storage_list(request):
     if not request.user.is_superuser:
         return redirect('kpmain')
 
-    error_message = None
+    errors = []
 
-    # 1. Get Linstor resources
-    linstor_resources, linstor_error = get_linstor_resources()
+    # 1. Get Linstor resources (single API call)
+    linstor_resources, linstor_error = fetch_linstor_resources()
     if linstor_error:
-        error_message = linstor_error
+        errors.append(linstor_error)
 
-    # 2. Get PV -> PVC mappings
-    pv_mappings, pv_error = get_pv_mappings()
+    # 2. Get all PVs from Kubernetes (single API call)
+    pv_list, pv_error = fetch_all_pvs()
     if pv_error:
-        error_message = error_message or pv_error
+        errors.append(pv_error)
 
-    # 3. Build domain-grouped data
-    storage_data = build_storage_data(linstor_resources, pv_mappings)
+    # 3. Get all domains from Django (single query)
+    domains = list(Domain.objects.all())
+
+    # 4. Build domain-grouped storage data
+    storage_data = build_storage_data(linstor_resources, pv_list, domains)
 
     return render(request, 'main/storage_list.html', {
         'storage_data': storage_data,
-        'error_message': error_message,
+        'error_message': '; '.join(errors) if errors else None,
     })
 
 
-def get_linstor_resources():
-    """Fetch resources from Linstor REST API."""
+def fetch_linstor_resources():
+    """Fetch all resources from Linstor REST API in one call."""
     try:
         api_url = f"{LINSTOR_API_URL}/v1/view/resources"
         req = urllib.request.Request(api_url, headers={'Accept': 'application/json'})
@@ -57,74 +60,73 @@ def get_linstor_resources():
         return [], f"Cannot reach Linstor API: {e.reason}"
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON from Linstor API: {e}")
-        return [], f"Invalid response from Linstor API"
+        return [], "Invalid response from Linstor API"
     except Exception as e:
         logger.error(f"Failed to fetch Linstor resources: {e}")
         return [], f"Failed to fetch Linstor resources: {e}"
 
 
-def get_pv_mappings():
-    """Get PV to PVC/namespace mappings from Kubernetes."""
-    mappings = {}  # resource_name -> {pv_name, pvc_name, namespace, capacity}
-
+def fetch_all_pvs():
+    """Fetch all PersistentVolumes from Kubernetes API in one call."""
     try:
-        _load_k8s_auth()
-        v1 = client.CoreV1Api()
-
-        pvs = v1.list_persistent_volume()
-        for pv in pvs.items:
-            # Only process Linstor CSI volumes
-            if not pv.spec.csi:
-                continue
-            if pv.spec.csi.driver != "linstor.csi.linbit.com":
-                continue
-
-            resource_name = pv.spec.csi.volume_handle
-            claim_ref = pv.spec.claim_ref
-
-            if claim_ref:
-                capacity = pv.spec.capacity.get('storage', 'Unknown') if pv.spec.capacity else 'Unknown'
-                mappings[resource_name] = {
-                    'pv_name': pv.metadata.name,
-                    'pvc_name': claim_ref.name,
-                    'namespace': claim_ref.namespace,
-                    'capacity': capacity,
-                }
-
-        return mappings, None
+        base, headers, verify = _load_k8s_auth()
+        resp = requests.get(
+            f"{base}/api/v1/persistentvolumes",
+            headers=headers,
+            verify=verify,
+            timeout=10
+        )
+        resp.raise_for_status()
+        return resp.json().get('items', []), None
     except Exception as e:
         logger.error(f"Failed to list PVs: {e}")
-        return {}, f"Failed to list Kubernetes PVs: {e}"
+        return [], f"Failed to list Kubernetes PVs: {e}"
 
 
-def build_storage_data(linstor_resources, pv_mappings):
-    """Combine Linstor and K8s data, grouped by domain."""
-    # Build namespace -> domain lookup
-    domains = {d.namespace: d for d in Domain.objects.all()}
+def build_storage_data(linstor_resources, pv_list, domains):
+    """
+    Combine Linstor, K8s PV, and Domain data - all logic done in Python.
 
-    # Group by domain
+    Data flow:
+    1. Build PV lookup: volume_handle -> {pv_name, pvc_name, namespace, capacity}
+    2. Build domain lookup: namespace -> domain
+    3. For each Linstor resource, look up PV info and domain
+    4. Group by domain
+    """
+    # Step 1: Build PV lookup (resource_name -> PV info)
+    # Only include Linstor CSI volumes
+    pv_lookup = {}
+    for pv in pv_list:
+        spec = pv.get('spec', {})
+        csi = spec.get('csi', {})
+
+        # Only process Linstor CSI volumes
+        if csi.get('driver') != 'linstor.csi.linbit.com':
+            continue
+
+        volume_handle = csi.get('volumeHandle', '')
+        claim_ref = spec.get('claimRef', {})
+        capacity = spec.get('capacity', {}).get('storage', 'Unknown')
+
+        if volume_handle:
+            pv_lookup[volume_handle] = {
+                'pv_name': pv.get('metadata', {}).get('name', 'Unknown'),
+                'pvc_name': claim_ref.get('name', 'N/A'),
+                'namespace': claim_ref.get('namespace', ''),
+                'capacity': capacity,
+            }
+
+    # Step 2: Build domain lookup (namespace -> domain)
+    domain_lookup = {d.namespace: d for d in domains}
+
+    # Step 3: Process Linstor resources and group by domain
     domain_storage = {}  # domain_name -> {domain: Domain, volumes: []}
 
     for resource in linstor_resources:
         resource_name = resource.get('name', '')
-
-        # Get PV mapping
-        pv_info = pv_mappings.get(resource_name, {})
-        namespace = pv_info.get('namespace', '')
-
-        # Find domain
-        domain = domains.get(namespace)
-        if domain:
-            domain_name = domain.domain_name
-        elif namespace:
-            domain_name = namespace  # Show namespace if no domain match
-        else:
-            domain_name = 'Unknown'
-
-        # Extract node info from resource
         node_name = resource.get('node_name', 'Unknown')
 
-        # Get volume state and size
+        # Get volume state and allocated size from Linstor
         volumes = resource.get('volumes', [])
         state = 'Unknown'
         size_kib = 0
@@ -133,16 +135,30 @@ def build_storage_data(linstor_resources, pv_mappings):
             state = state_info.get('disk_state', 'Unknown')
             size_kib = vol.get('allocated_size_kib', 0)
 
-        # Build entry
+        # Look up PV info
+        pv_info = pv_lookup.get(resource_name, {})
+        namespace = pv_info.get('namespace', '')
+
+        # Look up domain
+        domain = domain_lookup.get(namespace)
+        if domain:
+            domain_name = domain.domain_name
+        elif namespace:
+            domain_name = namespace  # Show namespace if no matching domain
+        else:
+            domain_name = 'System/Unknown'
+
+        # Build volume entry
         entry = {
             'resource_name': resource_name,
             'pvc_name': pv_info.get('pvc_name', 'N/A'),
             'pv_name': pv_info.get('pv_name', 'N/A'),
-            'size': pv_info.get('capacity', format_size_kib(size_kib)),
+            'size': pv_info.get('capacity') or format_size_kib(size_kib),
             'node': node_name,
             'state': state,
         }
 
+        # Group by domain
         if domain_name not in domain_storage:
             domain_storage[domain_name] = {
                 'domain': domain,
