@@ -280,7 +280,8 @@ def parse_df_output(output: str) -> dict:
 @login_required
 def node_list(request):
     if not request.user.is_superuser:
-        return redirect("node_list")
+        # Redirect non-superusers to the pods status page where they can see their own pods
+        return redirect("pods_status")
 
     try:
         base, headers, verify = _load_k8s_auth()
@@ -668,31 +669,23 @@ def get_pods_status(request):
         else:
             label_selector = f"group in ({','.join(slugs)})"
 
-    host = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
-    port = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
-    token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-    ca_cert_path = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-
     try:
-        token = open(token_path).read().strip()
-    except FileNotFoundError:
-        return JsonResponse({"error": "Kubernetes token file not found."}, status=500)
+        base, headers, verify = _load_k8s_auth()
+    except Exception as e:
+        messages.error(request, f"Failed to load Kubernetes credentials: {e}")
+        return render(request, "main/pods_status.html", {"pods": []})
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
-
-    url = f"https://{host}:{port}/api/v1/pods"
+    url = f"{base}/api/v1/pods"
     if label_selector:
         url += f"?labelSelector={label_selector}"
 
     try:
-        resp = requests.get(url, headers=headers, verify=ca_cert_path)
+        resp = requests.get(url, headers=headers, verify=verify, timeout=10)
         resp.raise_for_status()
         items = resp.json().get("items", [])
     except requests.exceptions.RequestException as e:
-        return JsonResponse({"error": str(e)}, status=500)
+        messages.error(request, f"Failed to fetch pods: {e}")
+        return render(request, "main/pods_status.html", {"pods": []})
 
     pods_info = []
     for pod in items:

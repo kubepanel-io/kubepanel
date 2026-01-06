@@ -295,10 +295,7 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Right Column -->
-        <div class="space-y-8">
             <!-- DKIM Details -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-200">
                 <div class="px-6 py-4 border-b border-gray-200">
@@ -324,107 +321,6 @@
                                     </svg>
                                 </button>
                                 {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- DNS Status -->
-            {% if k8s.dns_enabled %}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <div class="flex items-center justify-between">
-                        <h3 class="text-lg font-medium text-gray-900">DNS Management</h3>
-                        <a href="{% url 'domain_dns_records' domain=domain.domain_name %}"
-                           class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                            <span>Manage Records</span>
-                        </a>
-                    </div>
-                </div>
-                <div class="p-6">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center">
-                            <div class="w-8 h-8 {% if k8s.dns_phase == 'Ready' %}bg-green-100{% elif k8s.dns_phase == 'Failed' %}bg-red-100{% else %}bg-yellow-100{% endif %} rounded-lg flex items-center justify-center mr-3">
-                                <svg class="w-4 h-4 {% if k8s.dns_phase == 'Ready' %}text-green-600{% elif k8s.dns_phase == 'Failed' %}text-red-600{% else %}text-yellow-600{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-gray-900">Status: {{ k8s.dns_phase|default:"Not configured" }}</p>
-                                <p class="text-xs text-gray-500">{{ k8s.dns_record_count|default:0 }} DNS records</p>
-                            </div>
-                        </div>
-                        {% if k8s.dns_phase == 'Ready' %}
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
-                            Active
-                        </span>
-                        {% elif k8s.dns_phase == 'Failed' %}
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                            <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
-                            Failed
-                        </span>
-                        {% endif %}
-                    </div>
-                    {% if k8s.dns_zone_id %}
-                    <div class="text-xs text-gray-500">
-                        Zone ID: <code class="bg-gray-100 px-1 rounded">{{ k8s.dns_zone_id }}</code>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Domain WAF -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <div class="flex items-center justify-between">
-                        <h3 class="text-lg font-medium text-gray-900">Web Application Firewall</h3>
-                        <a href="{% url 'domain_waf_list' domain=domain.domain_name %}"
-                           class="text-sm bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
-                            </svg>
-                            <span>Manage WAF</span>
-                        </a>
-                    </div>
-                </div>
-                <div class="p-6">
-                    <div class="flex items-center">
-                        <div class="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
-                            <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
-                            </svg>
-                        </div>
-                        <div>
-                            <p class="text-sm font-medium text-gray-900">Per-Domain Firewall</p>
-                            <p class="text-xs text-gray-500">Block IPs, paths, and user agents. Enable geo-blocking.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Resource Limits -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
-                <div class="px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-medium text-gray-900">Resource Limits</h3>
-                </div>
-                <div class="p-6">
-                    <div class="space-y-6">
-                        <!-- CPU and Memory -->
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">CPU Limit (mCPU)</label>
-                                {{ form.cpu_limit }}
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Memory Limit (MB)</label>
-                                {{ form.mem_limit }}
                             </div>
                         </div>
                     </div>
@@ -634,6 +530,110 @@
                             </div>
                         </div>
                         {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="space-y-8">
+            <!-- DNS Status -->
+            {% if k8s.dns_enabled %}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">DNS Management</h3>
+                        <a href="{% url 'domain_dns_records' domain=domain.domain_name %}"
+                           class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            <span>Manage Records</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 {% if k8s.dns_phase == 'Ready' %}bg-green-100{% elif k8s.dns_phase == 'Failed' %}bg-red-100{% else %}bg-yellow-100{% endif %} rounded-lg flex items-center justify-center mr-3">
+                                <svg class="w-4 h-4 {% if k8s.dns_phase == 'Ready' %}text-green-600{% elif k8s.dns_phase == 'Failed' %}text-red-600{% else %}text-yellow-600{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-gray-900">Status: {{ k8s.dns_phase|default:"Not configured" }}</p>
+                                <p class="text-xs text-gray-500">{{ k8s.dns_record_count|default:0 }} DNS records</p>
+                            </div>
+                        </div>
+                        {% if k8s.dns_phase == 'Ready' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                            Active
+                        </span>
+                        {% elif k8s.dns_phase == 'Failed' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                            Failed
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% if k8s.dns_zone_id %}
+                    <div class="text-xs text-gray-500">
+                        Zone ID: <code class="bg-gray-100 px-1 rounded">{{ k8s.dns_zone_id }}</code>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Domain WAF -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">Web Application Firewall</h3>
+                        <a href="{% url 'domain_waf_list' domain=domain.domain_name %}"
+                           class="text-sm bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                            <span>Manage WAF</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
+                            <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">Per-Domain Firewall</p>
+                            <p class="text-xs text-gray-500">Block IPs, paths, and user agents. Enable geo-blocking.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resource Limits -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Resource Limits</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-6">
+                        <!-- CPU and Memory -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">CPU Limit (mCPU)</label>
+                                {{ form.cpu_limit }}
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Memory Limit (MB)</label>
+                                {{ form.mem_limit }}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
