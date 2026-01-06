@@ -100,16 +100,18 @@ def get_node_stats_via_exec():
     Returns a dict mapping node_name -> {uptime, load_avg, disk_usage, disk_percent}
     """
     if not K8S_CLIENT_AVAILABLE:
-        logger.warning("kubernetes client not available, skipping node exec stats")
+        logger.warning("kubernetes python client not available - install with: pip install kubernetes")
         return {}
 
     try:
         k8s_config.load_incluster_config()
-    except Exception:
+        logger.debug("Loaded in-cluster k8s config for exec")
+    except Exception as e1:
         try:
             k8s_config.load_kube_config()
-        except Exception as e:
-            logger.warning(f"Failed to load k8s config for exec: {e}")
+            logger.debug("Loaded kube config file for exec")
+        except Exception as e2:
+            logger.warning(f"Failed to load k8s config for exec: in-cluster={e1}, kubeconfig={e2}")
             return {}
 
     v1 = k8s_client.CoreV1Api()
@@ -117,26 +119,35 @@ def get_node_stats_via_exec():
 
     # Find nginx-ingress-controller pods (DaemonSet runs on all nodes)
     try:
-        # Try common namespaces for ingress-nginx
-        namespaces_to_try = ['ingress-nginx', 'ingress', 'kube-system', 'nginx-ingress']
+        # Try different namespace/label combinations for various nginx-ingress installations
+        search_configs = [
+            # MicroK8s ingress addon
+            {'namespace': 'ingress', 'label_selector': 'name=nginx-ingress-microk8s'},
+            # Standard ingress-nginx
+            {'namespace': 'ingress-nginx', 'label_selector': 'app.kubernetes.io/name=ingress-nginx'},
+            {'namespace': 'ingress', 'label_selector': 'app.kubernetes.io/name=ingress-nginx'},
+            {'namespace': 'kube-system', 'label_selector': 'app.kubernetes.io/name=ingress-nginx'},
+        ]
         pods = []
 
-        for ns in namespaces_to_try:
+        for config in search_configs:
             try:
                 pod_list = v1.list_namespaced_pod(
-                    namespace=ns,
-                    label_selector='app.kubernetes.io/name=ingress-nginx'
+                    namespace=config['namespace'],
+                    label_selector=config['label_selector']
                 )
                 if pod_list.items:
                     pods = pod_list.items
+                    logger.info(f"Found {len(pods)} nginx-ingress pods in {config['namespace']} with {config['label_selector']}")
                     break
             except Exception:
                 continue
 
         if not pods:
-            logger.warning("No nginx-ingress pods found for exec stats")
+            logger.warning("No nginx-ingress pods found for exec stats. Tried configs: %s", search_configs)
             return {}
 
+        logger.info(f"Processing {len(pods)} nginx-ingress pods for exec stats")
         for pod in pods:
             if pod.status.phase != 'Running':
                 continue
@@ -178,11 +189,11 @@ def get_node_stats_via_exec():
                 }
 
             except Exception as e:
-                logger.warning(f"Failed to exec into pod {pod_name} on node {node_name}: {e}")
+                logger.error(f"Failed to exec into pod {pod_name} on node {node_name}: {type(e).__name__}: {e}")
                 continue
 
     except Exception as e:
-        logger.warning(f"Failed to get node stats via exec: {e}")
+        logger.error(f"Failed to get node stats via exec: {type(e).__name__}: {e}")
 
     return node_stats
 
