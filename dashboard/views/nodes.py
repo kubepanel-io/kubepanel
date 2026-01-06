@@ -576,11 +576,11 @@ def pod_logs(request, namespace, name):
 
     pod_json = pod_resp.json()
     labels = pod_json.get('metadata', {}).get('labels', {})
-    group_label = labels.get('group')
+    domain_label = labels.get('kubepanel.io/domain')
 
     if not is_super:
-        user_slugs = [d.replace('.', '-') for d in Domain.objects.filter(owner=request.user).values_list('domain_name', flat=True)]
-        if not group_label or group_label not in user_slugs:
+        user_domain_cr_names = [d.replace('.', '-') for d in Domain.objects.filter(owner=request.user).values_list('domain_name', flat=True)]
+        if not domain_label or domain_label not in user_domain_cr_names:
             messages.error(request, "You are not authorized to view logs for this pod.")
             return redirect('pods_status')
 
@@ -696,6 +696,12 @@ def get_pods_status(request):
 
         phase = "Terminating" if md.get("deletionTimestamp") else st.get("phase", "Unknown")
 
+        # Calculate container ready status
+        container_specs = spec.get("containers", [])
+        container_statuses = st.get("containerStatuses", [])
+        total_containers = len(container_specs)
+        ready_containers = sum(1 for cs in container_statuses if cs.get("ready", False))
+
         pods_info.append({
             "name": md.get("name"),
             "namespace": md.get("namespace"),
@@ -703,7 +709,9 @@ def get_pods_status(request):
             "status": phase,
             "ip": st.get("podIP", "N/A"),
             "host_ip": st.get("hostIP", "N/A"),
-            "containers": len(spec.get("containers", [])),
+            "containers_ready": ready_containers,
+            "containers_total": total_containers,
+            "containers_display": f"{ready_containers}/{total_containers}",
         })
 
     return render(request, "main/pods_status.html", {"pods": pods_info})
