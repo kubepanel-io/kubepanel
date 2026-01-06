@@ -7,13 +7,263 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 
 import os
+import re
 import requests
 import logging
 
 from dashboard.models import Domain, SystemHealthStatus, SystemSettings
 from .utils import _load_k8s_auth
 
+# Try to import kubernetes client for exec functionality
+try:
+    from kubernetes import client as k8s_client, config as k8s_config
+    from kubernetes.stream import stream as k8s_stream
+    K8S_CLIENT_AVAILABLE = True
+except ImportError:
+    K8S_CLIENT_AVAILABLE = False
+
 logger = logging.getLogger("django")
+
+
+def parse_cpu(cpu_str: str) -> int:
+    """Parse CPU string to millicores (int).
+
+    Examples:
+        "500m" -> 500
+        "2" -> 2000
+        "100n" -> 0 (nanocores, too small)
+    """
+    if not cpu_str:
+        return 0
+    cpu_str = str(cpu_str).strip()
+    if cpu_str.endswith('n'):
+        # nanocores to millicores
+        return int(cpu_str[:-1]) // 1_000_000
+    elif cpu_str.endswith('m'):
+        return int(cpu_str[:-1])
+    else:
+        # whole cores to millicores
+        return int(float(cpu_str) * 1000)
+
+
+def parse_memory(mem_str: str) -> int:
+    """Parse memory string to bytes (int).
+
+    Examples:
+        "1Gi" -> 1073741824
+        "512Mi" -> 536870912
+        "1024Ki" -> 1048576
+        "1000000" -> 1000000 (already bytes)
+    """
+    if not mem_str:
+        return 0
+    mem_str = str(mem_str).strip()
+
+    suffixes = {
+        'Ki': 1024,
+        'Mi': 1024 ** 2,
+        'Gi': 1024 ** 3,
+        'Ti': 1024 ** 4,
+        'K': 1000,
+        'M': 1000 ** 2,
+        'G': 1000 ** 3,
+        'T': 1000 ** 4,
+    }
+
+    for suffix, multiplier in suffixes.items():
+        if mem_str.endswith(suffix):
+            return int(float(mem_str[:-len(suffix)]) * multiplier)
+
+    return int(mem_str)
+
+
+def format_memory_human(bytes_val: int) -> str:
+    """Format bytes to human-readable string."""
+    if bytes_val <= 0:
+        return "0 B"
+
+    for unit in ['B', 'Ki', 'Mi', 'Gi', 'Ti']:
+        if bytes_val < 1024:
+            if unit == 'B':
+                return f"{bytes_val} {unit}"
+            return f"{bytes_val:.1f} {unit}"
+        bytes_val /= 1024
+
+    return f"{bytes_val:.1f} Pi"
+
+
+def get_node_stats_via_exec():
+    """
+    Get node stats (uptime, load average, disk usage) by exec'ing into
+    nginx-ingress-controller pods running on each node.
+
+    Returns a dict mapping node_name -> {uptime, load_avg, disk_usage, disk_percent}
+    """
+    if not K8S_CLIENT_AVAILABLE:
+        logger.warning("kubernetes client not available, skipping node exec stats")
+        return {}
+
+    try:
+        k8s_config.load_incluster_config()
+    except Exception:
+        try:
+            k8s_config.load_kube_config()
+        except Exception as e:
+            logger.warning(f"Failed to load k8s config for exec: {e}")
+            return {}
+
+    v1 = k8s_client.CoreV1Api()
+    node_stats = {}
+
+    # Find nginx-ingress-controller pods (DaemonSet runs on all nodes)
+    try:
+        # Try common namespaces for ingress-nginx
+        namespaces_to_try = ['ingress-nginx', 'ingress', 'kube-system', 'nginx-ingress']
+        pods = []
+
+        for ns in namespaces_to_try:
+            try:
+                pod_list = v1.list_namespaced_pod(
+                    namespace=ns,
+                    label_selector='app.kubernetes.io/name=ingress-nginx'
+                )
+                if pod_list.items:
+                    pods = pod_list.items
+                    break
+            except Exception:
+                continue
+
+        if not pods:
+            logger.warning("No nginx-ingress pods found for exec stats")
+            return {}
+
+        for pod in pods:
+            if pod.status.phase != 'Running':
+                continue
+
+            node_name = pod.spec.node_name
+            pod_name = pod.metadata.name
+            namespace = pod.metadata.namespace
+
+            try:
+                # Get uptime and load average
+                uptime_output = k8s_stream(
+                    v1.connect_get_namespaced_pod_exec,
+                    pod_name,
+                    namespace,
+                    command=['uptime'],
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False
+                )
+                uptime_data = parse_uptime_output(uptime_output)
+
+                # Get disk usage
+                df_output = k8s_stream(
+                    v1.connect_get_namespaced_pod_exec,
+                    pod_name,
+                    namespace,
+                    command=['df', '-hT', '/'],
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False
+                )
+                disk_data = parse_df_output(df_output)
+
+                node_stats[node_name] = {
+                    **uptime_data,
+                    **disk_data,
+                }
+
+            except Exception as e:
+                logger.warning(f"Failed to exec into pod {pod_name} on node {node_name}: {e}")
+                continue
+
+    except Exception as e:
+        logger.warning(f"Failed to get node stats via exec: {e}")
+
+    return node_stats
+
+
+def parse_uptime_output(output: str) -> dict:
+    """
+    Parse uptime command output.
+
+    Example outputs:
+     16:42:01 up 45 days,  3:22,  0 users,  load average: 0.52, 0.58, 0.59
+     16:42:01 up 2:30,  0 users,  load average: 1.00, 0.80, 0.75
+     16:42:01 up 10 min,  0 users,  load average: 0.00, 0.01, 0.05
+    """
+    result = {
+        'uptime': 'N/A',
+        'load_1': 0.0,
+        'load_5': 0.0,
+        'load_15': 0.0,
+        'load_avg': 'N/A',
+    }
+
+    if not output:
+        return result
+
+    output = output.strip()
+
+    # Extract uptime part - between "up " and the first comma before "user"
+    uptime_match = re.search(r'up\s+(.+?),\s*\d+\s*user', output)
+    if uptime_match:
+        result['uptime'] = uptime_match.group(1).strip()
+
+    # Extract load averages
+    load_match = re.search(r'load average[s]?:\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)', output)
+    if load_match:
+        result['load_1'] = float(load_match.group(1))
+        result['load_5'] = float(load_match.group(2))
+        result['load_15'] = float(load_match.group(3))
+        result['load_avg'] = f"{result['load_1']:.2f}, {result['load_5']:.2f}, {result['load_15']:.2f}"
+
+    return result
+
+
+def parse_df_output(output: str) -> dict:
+    """
+    Parse df -hT / command output.
+
+    Example output:
+    Filesystem     Type  Size  Used Avail Use% Mounted on
+    /dev/sda1      ext4  100G   45G   55G  45% /
+    """
+    result = {
+        'disk_total': 'N/A',
+        'disk_used': 'N/A',
+        'disk_avail': 'N/A',
+        'disk_percent': 0,
+        'disk_type': 'N/A',
+    }
+
+    if not output:
+        return result
+
+    lines = output.strip().split('\n')
+    if len(lines) < 2:
+        return result
+
+    # Parse the data line (skip header)
+    # Filesystem Type Size Used Avail Use% Mounted
+    parts = lines[1].split()
+    if len(parts) >= 6:
+        result['disk_type'] = parts[1]
+        result['disk_total'] = parts[2]
+        result['disk_used'] = parts[3]
+        result['disk_avail'] = parts[4]
+        # Parse percentage (remove %)
+        pct_str = parts[5].replace('%', '')
+        try:
+            result['disk_percent'] = int(pct_str)
+        except ValueError:
+            pass
+
+    return result
 
 
 @login_required
@@ -30,6 +280,29 @@ def node_list(request):
         messages.error(request, f"Failed to list nodes: {e}")
         items = []
 
+    # Fetch node metrics from metrics-server
+    node_metrics = {}
+    try:
+        metrics_resp = requests.get(
+            f"{base}/apis/metrics.k8s.io/v1beta1/nodes",
+            headers=headers,
+            verify=verify,
+            timeout=5
+        )
+        if metrics_resp.ok:
+            for metric in metrics_resp.json().get("items", []):
+                name = metric["metadata"]["name"]
+                usage = metric.get("usage", {})
+                node_metrics[name] = {
+                    "cpu": usage.get("cpu", "0"),
+                    "memory": usage.get("memory", "0"),
+                }
+    except Exception as e:
+        logger.warning(f"Failed to fetch node metrics: {e}")
+
+    # Fetch node stats via exec (uptime, load average, disk usage)
+    node_exec_stats = get_node_stats_via_exec()
+
     nodes = []
     for item in items:
         addrs = item["status"].get("addresses", [])
@@ -43,11 +316,54 @@ def node_list(request):
         status = "Ready" if ready and not unsched else (
             "Unschedulable" if unsched else "NotReady"
         )
+
+        # Get allocatable resources (capacity)
+        allocatable = item["status"].get("allocatable", {})
+        capacity_cpu = allocatable.get("cpu", "0")
+        capacity_memory = allocatable.get("memory", "0")
+
+        # Get current usage from metrics
+        name = item["metadata"]["name"]
+        metrics = node_metrics.get(name, {})
+        cpu_usage = metrics.get("cpu", "0")
+        memory_usage = metrics.get("memory", "0")
+
+        # Parse and calculate percentages
+        cpu_used_millicores = parse_cpu(cpu_usage)
+        cpu_capacity_millicores = parse_cpu(capacity_cpu)
+        cpu_percent = round(cpu_used_millicores / cpu_capacity_millicores * 100, 1) if cpu_capacity_millicores > 0 else 0
+
+        memory_used_bytes = parse_memory(memory_usage)
+        memory_capacity_bytes = parse_memory(capacity_memory)
+        memory_percent = round(memory_used_bytes / memory_capacity_bytes * 100, 1) if memory_capacity_bytes > 0 else 0
+
+        # Get exec-based stats (uptime, load average, disk)
+        exec_stats = node_exec_stats.get(name, {})
+
         nodes.append({
-            "name": item["metadata"]["name"],
+            "name": name,
             "ip": ip,
             "start_time": item["metadata"]["creationTimestamp"],
             "status": status,
+            # Resource capacity
+            "cpu_capacity": capacity_cpu,
+            "memory_capacity": format_memory_human(memory_capacity_bytes),
+            # Resource usage
+            "cpu_used": f"{cpu_used_millicores}m",
+            "cpu_percent": cpu_percent,
+            "memory_used": format_memory_human(memory_used_bytes),
+            "memory_percent": memory_percent,
+            # Exec-based stats
+            "uptime": exec_stats.get("uptime", "N/A"),
+            "load_avg": exec_stats.get("load_avg", "N/A"),
+            "load_1": exec_stats.get("load_1", 0),
+            "load_5": exec_stats.get("load_5", 0),
+            "load_15": exec_stats.get("load_15", 0),
+            "disk_total": exec_stats.get("disk_total", "N/A"),
+            "disk_used": exec_stats.get("disk_used", "N/A"),
+            "disk_avail": exec_stats.get("disk_avail", "N/A"),
+            "disk_percent": exec_stats.get("disk_percent", 0),
+            "disk_type": exec_stats.get("disk_type", "N/A"),
         })
 
     # Get latest health status for each component
