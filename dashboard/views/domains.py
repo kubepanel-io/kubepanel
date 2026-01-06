@@ -17,7 +17,7 @@ import base64
 import re
 import pymysql
 
-from dashboard.models import Domain, DomainAlias, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry, WorkloadVersion
+from dashboard.models import Domain, DomainAlias, DomainStorageUsage, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry, WorkloadVersion
 from dashboard.forms import DomainForm, DomainConfigForm, DomainAddForm, DomainAliasForm
 from dashboard.services.dkim import generate_dkim_keypair
 from dashboard.k8s import (
@@ -619,12 +619,41 @@ def view_domain(request, domain):
     except Exception as e:
         logger.warning(f"Failed to get storage metrics for {domain}: {e}")
 
+    # Get email and database storage usage
+    external_storage = {
+        'email_bytes': 0,
+        'email_display': '0 B',
+        'database_bytes': 0,
+        'database_display': '0 B',
+        'total_bytes': 0,
+        'total_display': '0 B',
+        'email_checked_at': None,
+        'database_checked_at': None,
+        'has_data': False,
+    }
+
+    try:
+        storage_usage = DomainStorageUsage.objects.filter(domain=domain_model).first()
+        if storage_usage:
+            external_storage['email_bytes'] = storage_usage.email_bytes
+            external_storage['email_display'] = storage_usage.email_display
+            external_storage['database_bytes'] = storage_usage.database_bytes
+            external_storage['database_display'] = storage_usage.database_display
+            external_storage['total_bytes'] = storage_usage.total_bytes
+            external_storage['total_display'] = storage_usage.total_display
+            external_storage['email_checked_at'] = storage_usage.email_checked_at
+            external_storage['database_checked_at'] = storage_usage.database_checked_at
+            external_storage['has_data'] = storage_usage.email_bytes > 0 or storage_usage.database_bytes > 0
+    except Exception as e:
+        logger.warning(f"Failed to get external storage for {domain}: {e}")
+
     return render(request, "main/view_domain.html", {
         "domain": domain_model,
         "form": form,
         "config_form": config_form,
         "k8s": k8s_credentials,
         "storage": storage_info,
+        "external_storage": external_storage,
     })
 
 

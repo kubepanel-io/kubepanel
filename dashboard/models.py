@@ -665,6 +665,8 @@ class SystemHealthStatus(models.Model):
         ('linstor', 'Linstor Storage'),
         ('mail_queue', 'Mail Queue'),
         ('mariadb', 'MariaDB'),
+        ('smtp_storage', 'SMTP Storage'),
+        ('mariadb_storage', 'MariaDB Storage'),
     ]
 
     STATUS_CHOICES = [
@@ -691,6 +693,75 @@ class SystemHealthStatus(models.Model):
 
     def __str__(self):
         return f"{self.get_component_display()}: {self.status} @ {self.checked_at:%Y-%m-%d %H:%M}"
+
+
+class DomainStorageUsage(models.Model):
+    """
+    Stores per-domain storage usage collected from SMTP and MariaDB pods.
+
+    Updated periodically by collect_health management command.
+    Storage sizes are stored in bytes for precision.
+    """
+    domain = models.OneToOneField(
+        Domain,
+        on_delete=models.CASCADE,
+        related_name='storage_usage'
+    )
+
+    # Email storage (from /var/mail/vmail/<domain>)
+    email_bytes = models.BigIntegerField(default=0, help_text="Email storage in bytes")
+
+    # Database storage (from /var/lib/mysql/<db_name>)
+    database_bytes = models.BigIntegerField(default=0, help_text="Database storage in bytes")
+
+    # Timestamps
+    email_checked_at = models.DateTimeField(null=True, blank=True)
+    database_checked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Domain Storage Usage"
+        verbose_name_plural = "Domain Storage Usage"
+
+    def __str__(self):
+        return f"{self.domain.domain_name}: {self.email_display} email, {self.database_display} DB"
+
+    @property
+    def email_display(self) -> str:
+        """Human-readable email storage size."""
+        return self._format_bytes(self.email_bytes)
+
+    @property
+    def database_display(self) -> str:
+        """Human-readable database storage size."""
+        return self._format_bytes(self.database_bytes)
+
+    @property
+    def total_bytes(self) -> int:
+        """Total storage usage in bytes."""
+        return self.email_bytes + self.database_bytes
+
+    @property
+    def total_display(self) -> str:
+        """Human-readable total storage size."""
+        return self._format_bytes(self.total_bytes)
+
+    @staticmethod
+    def _format_bytes(size_bytes: int) -> str:
+        """Format bytes to human-readable string."""
+        if size_bytes == 0:
+            return "0 B"
+
+        units = ['B', 'KB', 'MB', 'GB', 'TB']
+        unit_index = 0
+        size = float(size_bytes)
+
+        while size >= 1024 and unit_index < len(units) - 1:
+            size /= 1024
+            unit_index += 1
+
+        if unit_index == 0:
+            return f"{int(size)} {units[unit_index]}"
+        return f"{size:.1f} {units[unit_index]}"
 
 
 class SystemSettings(models.Model):

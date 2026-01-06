@@ -255,110 +255,186 @@
         </h3>
     </div>
 
-    <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- Linstor Storage -->
-        <div class="border rounded-lg p-4 {% if health_status.linstor.status == 'healthy' %}border-green-200 bg-green-50{% elif health_status.linstor.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.linstor.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
-            <div class="flex items-center justify-between mb-2">
-                <h4 class="font-medium text-gray-900">Linstor Storage</h4>
-                {% if health_status.linstor.status == 'healthy' %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
-                    Healthy
-                </span>
-                {% elif health_status.linstor.status == 'warning' %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                    <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
-                    Warning
-                </span>
-                {% elif health_status.linstor.status == 'error' %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
-                    Error
-                </span>
-                {% else %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
-                    Unknown
-                </span>
+    <div class="p-6">
+        <!-- Service Health Row -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <!-- Linstor Storage -->
+            <div class="border rounded-lg p-4 {% if health_status.linstor.status == 'healthy' %}border-green-200 bg-green-50{% elif health_status.linstor.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.linstor.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="font-medium text-gray-900">Linstor Storage</h4>
+                    {% if health_status.linstor.status == 'healthy' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                        Healthy
+                    </span>
+                    {% elif health_status.linstor.status == 'warning' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
+                        Warning
+                    </span>
+                    {% elif health_status.linstor.status == 'error' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                        Error
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                        Unknown
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-gray-600">{{ health_status.linstor.message|default:"No data available" }}</p>
+                {% if health_status.linstor.checked_at %}
+                <p class="text-xs text-gray-400 mt-2">Last checked: {{ health_status.linstor.checked_at|timesince }} ago</p>
                 {% endif %}
             </div>
-            <p class="text-sm text-gray-600">{{ health_status.linstor.message|default:"No data available" }}</p>
-            {% if health_status.linstor.checked_at %}
-            <p class="text-xs text-gray-400 mt-2">Last checked: {{ health_status.linstor.checked_at|timesince }} ago</p>
-            {% endif %}
+
+            <!-- Mail Queue -->
+            <div class="border rounded-lg p-4 {% if health_status.mail_queue.status == 'healthy' %}border-green-200 bg-green-50{% elif health_status.mail_queue.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.mail_queue.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="font-medium text-gray-900">Mail Queue</h4>
+                    {% if health_status.mail_queue.status == 'healthy' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                        Healthy
+                    </span>
+                    {% elif health_status.mail_queue.status == 'warning' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
+                        Warning
+                    </span>
+                    {% elif health_status.mail_queue.status == 'error' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                        Error
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                        Unknown
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-gray-600">
+                    {% if health_status.mail_queue.details.queue_count is not None %}
+                    {{ health_status.mail_queue.details.queue_count }} messages in queue
+                    {% else %}
+                    {{ health_status.mail_queue.message|default:"No data available" }}
+                    {% endif %}
+                </p>
+                {% if sys_settings %}
+                <p class="text-xs text-gray-400 mt-1">Threshold: {{ sys_settings.mail_queue_warning_threshold }}</p>
+                {% endif %}
+                {% if health_status.mail_queue.checked_at %}
+                <p class="text-xs text-gray-400 mt-1">Last checked: {{ health_status.mail_queue.checked_at|timesince }} ago</p>
+                {% endif %}
+            </div>
+
+            <!-- MariaDB -->
+            <div class="border rounded-lg p-4 {% if health_status.mariadb.status == 'healthy' %}border-green-200 bg-green-50{% elif health_status.mariadb.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.mariadb.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="font-medium text-gray-900">MariaDB</h4>
+                    {% if health_status.mariadb.status == 'healthy' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                        Healthy
+                    </span>
+                    {% elif health_status.mariadb.status == 'warning' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
+                        Warning
+                    </span>
+                    {% elif health_status.mariadb.status == 'error' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                        Error
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                        Unknown
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-gray-600">{{ health_status.mariadb.message|default:"No data available" }}</p>
+                {% if health_status.mariadb.checked_at %}
+                <p class="text-xs text-gray-400 mt-2">Last checked: {{ health_status.mariadb.checked_at|timesince }} ago</p>
+                {% endif %}
+            </div>
         </div>
 
-        <!-- Mail Queue -->
-        <div class="border rounded-lg p-4 {% if health_status.mail_queue.status == 'healthy' %}border-green-200 bg-green-50{% elif health_status.mail_queue.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.mail_queue.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
-            <div class="flex items-center justify-between mb-2">
-                <h4 class="font-medium text-gray-900">Mail Queue</h4>
-                {% if health_status.mail_queue.status == 'healthy' %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
-                    Healthy
-                </span>
-                {% elif health_status.mail_queue.status == 'warning' %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                    <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
-                    Warning
-                </span>
-                {% elif health_status.mail_queue.status == 'error' %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
-                    Error
-                </span>
-                {% else %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
-                    Unknown
-                </span>
+        <!-- Storage Usage Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- SMTP Storage -->
+            <div class="border rounded-lg p-4 {% if health_status.smtp_storage.status == 'healthy' %}border-blue-200 bg-blue-50{% elif health_status.smtp_storage.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.smtp_storage.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="font-medium text-gray-900 flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        Email Storage
+                    </h4>
+                    {% if health_status.smtp_storage.status == 'healthy' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        <span class="w-1.5 h-1.5 bg-blue-500 rounded-full mr-1.5"></span>
+                        OK
+                    </span>
+                    {% elif health_status.smtp_storage.status == 'error' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                        Error
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                        Unknown
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-gray-600">{{ health_status.smtp_storage.message|default:"No data available" }}</p>
+                {% if health_status.smtp_storage.details.domain_count %}
+                <p class="text-xs text-gray-400 mt-1">{{ health_status.smtp_storage.details.domain_count }} domain{{ health_status.smtp_storage.details.domain_count|pluralize }} with email</p>
+                {% endif %}
+                {% if health_status.smtp_storage.checked_at %}
+                <p class="text-xs text-gray-400 mt-1">Last checked: {{ health_status.smtp_storage.checked_at|timesince }} ago</p>
                 {% endif %}
             </div>
-            <p class="text-sm text-gray-600">
-                {% if health_status.mail_queue.details.queue_count is not None %}
-                {{ health_status.mail_queue.details.queue_count }} messages in queue
-                {% else %}
-                {{ health_status.mail_queue.message|default:"No data available" }}
-                {% endif %}
-            </p>
-            {% if sys_settings %}
-            <p class="text-xs text-gray-400 mt-1">Threshold: {{ sys_settings.mail_queue_warning_threshold }}</p>
-            {% endif %}
-            {% if health_status.mail_queue.checked_at %}
-            <p class="text-xs text-gray-400 mt-1">Last checked: {{ health_status.mail_queue.checked_at|timesince }} ago</p>
-            {% endif %}
-        </div>
 
-        <!-- MariaDB -->
-        <div class="border rounded-lg p-4 {% if health_status.mariadb.status == 'healthy' %}border-green-200 bg-green-50{% elif health_status.mariadb.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.mariadb.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
-            <div class="flex items-center justify-between mb-2">
-                <h4 class="font-medium text-gray-900">MariaDB</h4>
-                {% if health_status.mariadb.status == 'healthy' %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
-                    Healthy
-                </span>
-                {% elif health_status.mariadb.status == 'warning' %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                    <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
-                    Warning
-                </span>
-                {% elif health_status.mariadb.status == 'error' %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
-                    Error
-                </span>
-                {% else %}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
-                    Unknown
-                </span>
+            <!-- MariaDB Storage -->
+            <div class="border rounded-lg p-4 {% if health_status.mariadb_storage.status == 'healthy' %}border-blue-200 bg-blue-50{% elif health_status.mariadb_storage.status == 'warning' %}border-yellow-200 bg-yellow-50{% elif health_status.mariadb_storage.status == 'error' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="font-medium text-gray-900 flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                        </svg>
+                        Database Storage
+                    </h4>
+                    {% if health_status.mariadb_storage.status == 'healthy' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        <span class="w-1.5 h-1.5 bg-blue-500 rounded-full mr-1.5"></span>
+                        OK
+                    </span>
+                    {% elif health_status.mariadb_storage.status == 'error' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                        Error
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                        Unknown
+                    </span>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-gray-600">{{ health_status.mariadb_storage.message|default:"No data available" }}</p>
+                {% if health_status.mariadb_storage.details.domain_count %}
+                <p class="text-xs text-gray-400 mt-1">{{ health_status.mariadb_storage.details.domain_count }} domain{{ health_status.mariadb_storage.details.domain_count|pluralize }} with database</p>
+                {% endif %}
+                {% if health_status.mariadb_storage.checked_at %}
+                <p class="text-xs text-gray-400 mt-1">Last checked: {{ health_status.mariadb_storage.checked_at|timesince }} ago</p>
                 {% endif %}
             </div>
-            <p class="text-sm text-gray-600">{{ health_status.mariadb.message|default:"No data available" }}</p>
-            {% if health_status.mariadb.checked_at %}
-            <p class="text-xs text-gray-400 mt-2">Last checked: {{ health_status.mariadb.checked_at|timesince }} ago</p>
-            {% endif %}
         </div>
     </div>
 </div>

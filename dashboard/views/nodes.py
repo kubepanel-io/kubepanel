@@ -52,7 +52,7 @@ def node_list(request):
 
     # Get latest health status for each component
     health_status = {}
-    for component in ['linstor', 'mail_queue', 'mariadb']:
+    for component in ['linstor', 'mail_queue', 'mariadb', 'smtp_storage', 'mariadb_storage']:
         latest = SystemHealthStatus.objects.filter(
             component=component
         ).order_by('-checked_at').first()

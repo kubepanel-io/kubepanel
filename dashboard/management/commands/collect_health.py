@@ -5,9 +5,11 @@ Run this command every 5 minutes via a sidecar container:
     while true; do python manage.py collect_health; sleep 300; done
 
 Components checked:
-- Linstor: Volume integrity via 'linstor volume list'
+- Linstor: Volume integrity via REST API
 - Mail Queue: Postfix queue size via 'postqueue -p'
-- MariaDB: Database health via 'mysqladmin ping'
+- MariaDB: Database health via TCP connection
+- SMTP Storage: Per-domain email storage usage
+- MariaDB Storage: Per-domain database storage usage
 """
 import os
 import re
@@ -20,7 +22,9 @@ from kubernetes import client, config
 from kubernetes.stream import stream
 from kubernetes.client.rest import ApiException
 
-from dashboard.models import SystemHealthStatus, SystemSettings
+from django.utils import timezone
+
+from dashboard.models import Domain, DomainStorageUsage, SystemHealthStatus, SystemSettings
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +41,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--component',
             type=str,
-            choices=['linstor', 'mail_queue', 'mariadb'],
+            choices=['linstor', 'mail_queue', 'mariadb', 'smtp_storage', 'mariadb_storage'],
             help='Check only a specific component',
         )
         parser.add_argument(
@@ -81,7 +85,7 @@ class Command(BaseCommand):
             })()
 
         # Components to check
-        components = ['linstor', 'mail_queue', 'mariadb']
+        components = ['linstor', 'mail_queue', 'mariadb', 'smtp_storage', 'mariadb_storage']
         if specific_component:
             components = [specific_component]
 
@@ -94,6 +98,10 @@ class Command(BaseCommand):
                     result = self.check_mail_queue()
                 elif component == 'mariadb':
                     result = self.check_mariadb()
+                elif component == 'smtp_storage':
+                    result = self.check_smtp_storage()
+                elif component == 'mariadb_storage':
+                    result = self.check_mariadb_storage()
 
                 results.append(result)
 
@@ -515,3 +523,334 @@ class Command(BaseCommand):
             logger.error(f'Failed to send health alert email: {e}')
             if self.verbose:
                 self.stdout.write(f"[Alerts] Failed to send email: {e}")
+
+    def check_smtp_storage(self):
+        """
+        Collect storage usage from SMTP pod for all domains.
+
+        Runs 'du -sb /var/mail/vmail/*' and parses per-domain sizes.
+        Also collects PVC total size for summary.
+        """
+        namespace = 'kubepanel'
+        label_selector = 'app=smtp'
+
+        try:
+            pods = self.core_v1.list_namespaced_pod(
+                namespace=namespace,
+                label_selector=label_selector
+            ).items
+
+            running_pods = [p for p in pods if p.status.phase == 'Running']
+            if not running_pods:
+                return {
+                    'component': 'smtp_storage',
+                    'status': 'error',
+                    'message': 'SMTP pod not running',
+                    'details': {'namespace': namespace, 'selector': label_selector},
+                }
+
+            pod_name = running_pods[0].metadata.name
+
+            # Get per-domain storage usage
+            result = stream(
+                self.core_v1.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=namespace,
+                command=['sh', '-c', 'du -sb /var/mail/vmail/*/ 2>/dev/null || echo "0\t/var/mail/vmail/empty"'],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+                _preload_content=True
+            )
+
+            # Parse du output and update per-domain storage
+            domain_storage = self._parse_du_output(result, 'email')
+
+            # Get total consumed space
+            total_result = stream(
+                self.core_v1.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=namespace,
+                command=['sh', '-c', 'du -sb /var/mail/vmail 2>/dev/null | cut -f1'],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+                _preload_content=True
+            )
+            total_bytes = int(total_result.strip()) if total_result.strip().isdigit() else 0
+
+            # Get PVC size
+            pvc_bytes = self._get_pvc_size(namespace, 'mail-data')
+
+            return {
+                'component': 'smtp_storage',
+                'status': 'healthy',
+                'message': f'{self._format_bytes(total_bytes)} used of {self._format_bytes(pvc_bytes)}',
+                'details': {
+                    'total_bytes': total_bytes,
+                    'pvc_bytes': pvc_bytes,
+                    'domain_count': len(domain_storage),
+                },
+            }
+
+        except ApiException as e:
+            return {
+                'component': 'smtp_storage',
+                'status': 'error',
+                'message': f'API error: {e.reason}',
+                'details': {'status': e.status},
+            }
+        except Exception as e:
+            return {
+                'component': 'smtp_storage',
+                'status': 'error',
+                'message': f'Storage check failed: {e}',
+                'details': {'error': str(e)},
+            }
+
+    def check_mariadb_storage(self):
+        """
+        Collect storage usage from MariaDB pod for all domains.
+
+        Runs 'du -sb /var/lib/mysql/*' and parses per-database sizes.
+        Database names use underscores instead of dots (e.g., zilda_hu for zilda.hu).
+        Also collects PVC total size for summary.
+        """
+        namespace = 'kubepanel'
+        label_selector = 'app=mariadb'
+
+        try:
+            pods = self.core_v1.list_namespaced_pod(
+                namespace=namespace,
+                label_selector=label_selector
+            ).items
+
+            running_pods = [p for p in pods if p.status.phase == 'Running']
+            if not running_pods:
+                return {
+                    'component': 'mariadb_storage',
+                    'status': 'error',
+                    'message': 'MariaDB pod not running',
+                    'details': {'namespace': namespace, 'selector': label_selector},
+                }
+
+            pod_name = running_pods[0].metadata.name
+
+            # Get per-database storage usage
+            result = stream(
+                self.core_v1.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=namespace,
+                command=['sh', '-c', 'du -sb /var/lib/mysql/*/ 2>/dev/null || echo "0\t/var/lib/mysql/empty"'],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+                _preload_content=True
+            )
+
+            # Parse du output and update per-domain storage
+            domain_storage = self._parse_du_output(result, 'database')
+
+            # Get total consumed space
+            total_result = stream(
+                self.core_v1.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=namespace,
+                command=['sh', '-c', 'du -sb /var/lib/mysql 2>/dev/null | cut -f1'],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+                _preload_content=True
+            )
+            total_bytes = int(total_result.strip()) if total_result.strip().isdigit() else 0
+
+            # Get PVC size
+            pvc_bytes = self._get_pvc_size(namespace, 'mariadb-data')
+
+            return {
+                'component': 'mariadb_storage',
+                'status': 'healthy',
+                'message': f'{self._format_bytes(total_bytes)} used of {self._format_bytes(pvc_bytes)}',
+                'details': {
+                    'total_bytes': total_bytes,
+                    'pvc_bytes': pvc_bytes,
+                    'domain_count': len(domain_storage),
+                },
+            }
+
+        except ApiException as e:
+            return {
+                'component': 'mariadb_storage',
+                'status': 'error',
+                'message': f'API error: {e.reason}',
+                'details': {'status': e.status},
+            }
+        except Exception as e:
+            return {
+                'component': 'mariadb_storage',
+                'status': 'error',
+                'message': f'Storage check failed: {e}',
+                'details': {'error': str(e)},
+            }
+
+    def _parse_du_output(self, output, storage_type):
+        """
+        Parse 'du -sb' output and update DomainStorageUsage records.
+
+        Args:
+            output: Output from du command (format: "SIZE\tPATH\n")
+            storage_type: 'email' or 'database'
+
+        Returns:
+            dict: domain_name -> bytes
+        """
+        domain_storage = {}
+
+        if not self.db_available:
+            return domain_storage
+
+        # Build domain lookup
+        # For email: folder name is domain_name (e.g., zilda.hu)
+        # For database: folder name is domain_name with dots replaced by underscores (e.g., zilda_hu)
+        domains = {d.domain_name: d for d in Domain.objects.all()}
+
+        if storage_type == 'database':
+            # Also create underscore-to-domain lookup
+            db_name_to_domain = {d.domain_name.replace('.', '_'): d for d in domains.values()}
+        else:
+            db_name_to_domain = {}
+
+        now = timezone.now()
+
+        for line in output.strip().split('\n'):
+            if not line or '\t' not in line:
+                continue
+
+            parts = line.split('\t')
+            if len(parts) != 2:
+                continue
+
+            try:
+                size_bytes = int(parts[0])
+            except ValueError:
+                continue
+
+            path = parts[1].rstrip('/')
+            name = path.split('/')[-1]  # Get folder/db name
+
+            # Skip system databases for MariaDB
+            if storage_type == 'database' and name in ('mysql', 'sys', 'performance_schema', 'information_schema'):
+                continue
+
+            # Match to domain
+            domain = None
+            if storage_type == 'email':
+                domain = domains.get(name)
+            else:
+                domain = db_name_to_domain.get(name)
+
+            if not domain:
+                if self.verbose:
+                    self.stdout.write(f"  No domain match for {storage_type} folder: {name}")
+                continue
+
+            domain_storage[domain.domain_name] = size_bytes
+
+            if self.verbose:
+                self.stdout.write(f"  {domain.domain_name}: {self._format_bytes(size_bytes)} ({storage_type})")
+
+            # Update DomainStorageUsage record
+            try:
+                usage, _ = DomainStorageUsage.objects.get_or_create(domain=domain)
+                if storage_type == 'email':
+                    usage.email_bytes = size_bytes
+                    usage.email_checked_at = now
+                else:
+                    usage.database_bytes = size_bytes
+                    usage.database_checked_at = now
+                usage.save()
+            except Exception as e:
+                logger.error(f"Failed to update storage for {domain.domain_name}: {e}")
+
+        return domain_storage
+
+    def _get_pvc_size(self, namespace, pvc_name):
+        """
+        Get the capacity of a PVC in bytes.
+
+        Args:
+            namespace: Kubernetes namespace
+            pvc_name: Name of the PersistentVolumeClaim
+
+        Returns:
+            int: PVC capacity in bytes, or 0 if not found
+        """
+        try:
+            pvc = self.core_v1.read_namespaced_persistent_volume_claim(
+                name=pvc_name,
+                namespace=namespace
+            )
+            capacity_str = pvc.status.capacity.get('storage', '0')
+            return self._parse_k8s_size(capacity_str)
+        except ApiException as e:
+            if self.verbose:
+                self.stdout.write(f"  Failed to get PVC {pvc_name}: {e.reason}")
+            return 0
+        except Exception as e:
+            if self.verbose:
+                self.stdout.write(f"  Failed to get PVC {pvc_name}: {e}")
+            return 0
+
+    def _parse_k8s_size(self, size_str):
+        """
+        Parse Kubernetes size string to bytes.
+
+        Examples: '10Gi' -> 10737418240, '500Mi' -> 524288000
+        """
+        size_str = str(size_str).strip()
+
+        units = {
+            'Ki': 1024,
+            'Mi': 1024 ** 2,
+            'Gi': 1024 ** 3,
+            'Ti': 1024 ** 4,
+            'K': 1000,
+            'M': 1000 ** 2,
+            'G': 1000 ** 3,
+            'T': 1000 ** 4,
+        }
+
+        for suffix, multiplier in units.items():
+            if size_str.endswith(suffix):
+                try:
+                    return int(float(size_str[:-len(suffix)]) * multiplier)
+                except ValueError:
+                    return 0
+
+        # Plain number (bytes)
+        try:
+            return int(size_str)
+        except ValueError:
+            return 0
+
+    @staticmethod
+    def _format_bytes(size_bytes):
+        """Format bytes to human-readable string."""
+        if size_bytes == 0:
+            return "0 B"
+
+        units = ['B', 'KB', 'MB', 'GB', 'TB']
+        unit_index = 0
+        size = float(size_bytes)
+
+        while size >= 1024 and unit_index < len(units) - 1:
+            size /= 1024
+            unit_index += 1
+
+        if unit_index == 0:
+            return f"{int(size)} {units[unit_index]}"
+        return f"{size:.1f} {units[unit_index]}"
