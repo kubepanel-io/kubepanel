@@ -651,6 +651,7 @@ def view_domain(request, domain):
         "domain": domain_model,
         "form": form,
         "config_form": config_form,
+        "config": config_initial,  # Raw config dict for template conditionals
         "k8s": k8s_credentials,
         "storage": storage_info,
         "external_storage": external_storage,
@@ -1398,3 +1399,105 @@ def alias_delete(request, pk):
 
         return redirect('alias_list', pk=domain.pk)
     return render(request, 'main/delete_alias.html', {'alias': alias})
+
+
+@login_required(login_url="/dashboard/")
+def purge_cache(request, domain):
+    """
+    Purge the FastCGI cache for a domain.
+
+    Executes a command on the nginx container to remove all cached files.
+    """
+    from django.http import JsonResponse
+    from kubernetes.stream import stream
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    # Check permissions
+    try:
+        if request.user.is_superuser:
+            domain_obj = Domain.objects.get(domain_name=domain)
+        else:
+            domain_obj = Domain.objects.get(owner=request.user, domain_name=domain)
+    except Domain.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+    namespace = domain_obj.namespace
+
+    try:
+        # Load K8s config
+        try:
+            config.load_incluster_config()
+        except:
+            config.load_kube_config()
+
+        core_api = client.CoreV1Api()
+
+        # Find the nginx container in the domain's deployment
+        pod_list = core_api.list_namespaced_pod(
+            namespace=namespace,
+            label_selector='app=domain-workload'
+        )
+
+        if not pod_list.items:
+            return JsonResponse({
+                'success': False,
+                'error': 'No running pods found for this domain'
+            }, status=404)
+
+        # Use the first running pod
+        target_pod = None
+        for pod in pod_list.items:
+            if pod.status.phase == 'Running':
+                target_pod = pod
+                break
+
+        if not target_pod:
+            return JsonResponse({
+                'success': False,
+                'error': 'No running pods found for this domain'
+            }, status=404)
+
+        # Execute cache purge command on nginx container
+        # The cache is stored in /var/cache/nginx
+        exec_command = [
+            '/bin/sh', '-c',
+            'rm -rf /var/cache/nginx/* 2>/dev/null; echo "Cache purged"'
+        ]
+
+        resp = stream(
+            core_api.connect_get_namespaced_pod_exec,
+            target_pod.metadata.name,
+            namespace,
+            container='nginx',
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+
+        logger.info(f"Cache purged for domain {domain}: {resp}")
+
+        # Log the action
+        LogEntry.objects.create(
+            content_object=domain_obj,
+            actor=f"user:{request.user.username}",
+            user=request.user,
+            level="INFO",
+            message=f"FastCGI cache purged for {domain}",
+            data={
+                "domain_id": domain_obj.pk,
+                "pod": target_pod.metadata.name,
+            }
+        )
+
+        return JsonResponse({'success': True, 'message': 'Cache purged successfully'})
+
+    except Exception as e:
+        logger.error(f"Failed to purge cache for {domain}: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

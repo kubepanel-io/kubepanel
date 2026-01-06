@@ -161,6 +161,61 @@ class DomainConfigForm(forms.Form):
         label='Custom Nginx Config',
     )
 
+    # Nginx FastCGI Cache settings
+    cache_enabled = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label='Enable Page Caching',
+    )
+    cache_size = forms.ChoiceField(
+        choices=[
+            ('256Mi', '256 MB'),
+            ('512Mi', '512 MB'),
+            ('1Gi', '1 GB'),
+            ('2Gi', '2 GB'),
+        ],
+        initial='512Mi',
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Cache Size',
+    )
+    cache_inactive_time = forms.ChoiceField(
+        choices=[
+            ('30m', '30 minutes'),
+            ('60m', '1 hour'),
+            ('6h', '6 hours'),
+            ('24h', '24 hours'),
+        ],
+        initial='60m',
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Inactive Timeout',
+    )
+    cache_valid_time = forms.ChoiceField(
+        choices=[
+            ('5m', '5 minutes'),
+            ('10m', '10 minutes'),
+            ('30m', '30 minutes'),
+            ('1h', '1 hour'),
+            ('6h', '6 hours'),
+        ],
+        initial='10m',
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Cache Duration',
+    )
+    cache_bypass_uris = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control font-mono',
+            'rows': 3,
+            'placeholder': '/api/\n/webhook/\n/cron/'
+        }),
+        label='Additional Bypass URIs',
+        help_text='One URI pattern per line. WordPress admin, login, and WooCommerce pages are excluded automatically.',
+    )
+
     def to_cr_patch(self, workload_type: str = 'php') -> dict:
         """Convert form data to Domain CR patch format."""
         data = self.cleaned_data
@@ -196,6 +251,23 @@ class DomainConfigForm(forms.Form):
             patch["webserver"]["wwwRedirect"] = data["www_redirect"]
         if data.get("custom_nginx_config"):
             patch["webserver"]["customConfig"] = data["custom_nginx_config"]
+
+        # Cache settings
+        cache = {
+            "enabled": data.get("cache_enabled", False),
+        }
+        if data.get("cache_enabled"):
+            cache["size"] = data.get("cache_size", "512Mi")
+            cache["inactiveTime"] = data.get("cache_inactive_time", "60m")
+            cache["validTime"] = data.get("cache_valid_time", "10m")
+            # Convert newline-separated string to list
+            bypass_uris_str = data.get("cache_bypass_uris", "")
+            if bypass_uris_str:
+                cache["bypassUris"] = [
+                    uri.strip() for uri in bypass_uris_str.split("\n")
+                    if uri.strip()
+                ]
+        patch["webserver"]["cache"] = cache
 
         # Clean up empty nested dicts
         if not patch["workload"]["settings"]:

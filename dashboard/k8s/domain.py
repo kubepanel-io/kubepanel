@@ -106,6 +106,13 @@ class DomainSpec:
         self.www_redirect: Optional[str] = None
         self.custom_nginx_config: Optional[str] = None
 
+        # Nginx cache settings (optional)
+        self.cache_enabled: Optional[bool] = None
+        self.cache_size: Optional[str] = None  # e.g., '512Mi', '1Gi'
+        self.cache_inactive_time: Optional[str] = None  # e.g., '60m', '24h'
+        self.cache_valid_time: Optional[str] = None  # e.g., '10m', '1h'
+        self.cache_bypass_uris: Optional[list] = None  # e.g., ['/api/', '/webhook/']
+
         # Feature toggles (optional)
         self.database_enabled: Optional[bool] = None
         self.email_enabled: Optional[bool] = None
@@ -186,6 +193,20 @@ class DomainSpec:
             webserver["wwwRedirect"] = self.www_redirect
         if self.custom_nginx_config:
             webserver["customConfig"] = self.custom_nginx_config
+
+        # Add cache settings if any are set
+        if self.cache_enabled is not None:
+            cache = {"enabled": self.cache_enabled}
+            if self.cache_size:
+                cache["size"] = self.cache_size
+            if self.cache_inactive_time:
+                cache["inactiveTime"] = self.cache_inactive_time
+            if self.cache_valid_time:
+                cache["validTime"] = self.cache_valid_time
+            if self.cache_bypass_uris:
+                cache["bypassUris"] = self.cache_bypass_uris
+            webserver["cache"] = cache
+
         if webserver:
             spec["webserver"] = webserver
         
@@ -833,6 +854,7 @@ def get_domain_config(domain_name: str) -> dict:
 
     # Extract webserver settings
     webserver = spec.get("webserver", {})
+    cache = webserver.get("cache", {})
 
     return {
         # Workload info
@@ -852,4 +874,11 @@ def get_domain_config(domain_name: str) -> dict:
         "ssl_redirect": webserver.get("sslRedirect", True),
         "www_redirect": webserver.get("wwwRedirect", "none"),
         "custom_nginx_config": webserver.get("customConfig", ""),
+
+        # Cache settings
+        "cache_enabled": cache.get("enabled", False),
+        "cache_size": cache.get("size", "512Mi"),
+        "cache_inactive_time": cache.get("inactiveTime", "60m"),
+        "cache_valid_time": cache.get("validTime", "10m"),
+        "cache_bypass_uris": "\n".join(cache.get("bypassUris", [])),  # Convert list to newline-separated string for form
     }

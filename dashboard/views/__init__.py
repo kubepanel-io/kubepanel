@@ -31,6 +31,7 @@ from .domains import (
     alias_list,
     alias_add,
     alias_delete,
+    purge_cache,
 )
 
 # Mail views
@@ -218,6 +219,7 @@ __all__ = [
     'alias_list',
     'alias_add',
     'alias_delete',
+    'purge_cache',
 
     # Mail
     'list_mail_users',

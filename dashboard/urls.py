@@ -140,4 +140,6 @@ urlpatterns = [
     path('api/logs/', views_logging.logs_api, name='logs_api'),
     path('api/workload-types/', views.get_workload_types, name='api_workload_types'),
     path('api/workload-versions/<int:type_id>/', views.get_workload_versions, name='api_workload_versions'),
+    # Cache management
+    path('domains/<str:domain>/purge-cache/', views.purge_cache, name='purge_cache'),
 ]
