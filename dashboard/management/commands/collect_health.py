@@ -567,22 +567,23 @@ class Command(BaseCommand):
             # Parse du output and update per-domain storage
             domain_storage = self._parse_du_output(result, 'email')
 
-            # Get total consumed space
-            total_result = stream(
+            # Get total consumed space and mount size using df
+            df_result = stream(
                 self.core_v1.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=namespace,
-                command=['sh', '-c', 'du -sb /var/mail/vmail 2>/dev/null | cut -f1'],
+                command=['sh', '-c', "df -B1 /var/mail/vmail 2>/dev/null | tail -1 | awk '{print $2, $3}'"],
                 stderr=True,
                 stdin=False,
                 stdout=True,
                 tty=False,
                 _preload_content=True
             )
-            total_bytes = int(total_result.strip()) if total_result.strip().isdigit() else 0
 
-            # Get PVC size
-            pvc_bytes = self._get_pvc_size(namespace, 'mail-data')
+            # Parse df output: "total_size used_size"
+            df_parts = df_result.strip().split()
+            pvc_bytes = int(df_parts[0]) if len(df_parts) >= 1 and df_parts[0].isdigit() else 0
+            total_bytes = int(df_parts[1]) if len(df_parts) >= 2 and df_parts[1].isdigit() else 0
 
             return {
                 'component': 'smtp_storage',
@@ -654,22 +655,23 @@ class Command(BaseCommand):
             # Parse du output and update per-domain storage
             domain_storage = self._parse_du_output(result, 'database')
 
-            # Get total consumed space
-            total_result = stream(
+            # Get total consumed space and mount size using df
+            df_result = stream(
                 self.core_v1.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=namespace,
-                command=['sh', '-c', 'du -sb /var/lib/mysql 2>/dev/null | cut -f1'],
+                command=['sh', '-c', "df -B1 /var/lib/mysql 2>/dev/null | tail -1 | awk '{print $2, $3}'"],
                 stderr=True,
                 stdin=False,
                 stdout=True,
                 tty=False,
                 _preload_content=True
             )
-            total_bytes = int(total_result.strip()) if total_result.strip().isdigit() else 0
 
-            # Get PVC size
-            pvc_bytes = self._get_pvc_size(namespace, 'mariadb-data')
+            # Parse df output: "total_size used_size"
+            df_parts = df_result.strip().split()
+            pvc_bytes = int(df_parts[0]) if len(df_parts) >= 1 and df_parts[0].isdigit() else 0
+            total_bytes = int(df_parts[1]) if len(df_parts) >= 2 and df_parts[1].isdigit() else 0
 
             return {
                 'component': 'mariadb_storage',
@@ -777,65 +779,6 @@ class Command(BaseCommand):
                 logger.error(f"Failed to update storage for {domain.domain_name}: {e}")
 
         return domain_storage
-
-    def _get_pvc_size(self, namespace, pvc_name):
-        """
-        Get the capacity of a PVC in bytes.
-
-        Args:
-            namespace: Kubernetes namespace
-            pvc_name: Name of the PersistentVolumeClaim
-
-        Returns:
-            int: PVC capacity in bytes, or 0 if not found
-        """
-        try:
-            pvc = self.core_v1.read_namespaced_persistent_volume_claim(
-                name=pvc_name,
-                namespace=namespace
-            )
-            capacity_str = pvc.status.capacity.get('storage', '0')
-            return self._parse_k8s_size(capacity_str)
-        except ApiException as e:
-            if self.verbose:
-                self.stdout.write(f"  Failed to get PVC {pvc_name}: {e.reason}")
-            return 0
-        except Exception as e:
-            if self.verbose:
-                self.stdout.write(f"  Failed to get PVC {pvc_name}: {e}")
-            return 0
-
-    def _parse_k8s_size(self, size_str):
-        """
-        Parse Kubernetes size string to bytes.
-
-        Examples: '10Gi' -> 10737418240, '500Mi' -> 524288000
-        """
-        size_str = str(size_str).strip()
-
-        units = {
-            'Ki': 1024,
-            'Mi': 1024 ** 2,
-            'Gi': 1024 ** 3,
-            'Ti': 1024 ** 4,
-            'K': 1000,
-            'M': 1000 ** 2,
-            'G': 1000 ** 3,
-            'T': 1000 ** 4,
-        }
-
-        for suffix, multiplier in units.items():
-            if size_str.endswith(suffix):
-                try:
-                    return int(float(size_str[:-len(suffix)]) * multiplier)
-                except ValueError:
-                    return 0
-
-        # Plain number (bytes)
-        try:
-            return int(size_str)
-        except ValueError:
-            return 0
 
     @staticmethod
     def _format_bytes(size_bytes):
