@@ -376,28 +376,73 @@
 {% block extra_js %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Search functionality
+        // Search and filter functionality
         const searchInput = document.getElementById('domain-search');
-        const tableRows = document.querySelectorAll('tbody tr:not(:last-child)');
-        
-        if (searchInput) {
-            searchInput.addEventListener('input', function() {
-                const searchTerm = this.value.toLowerCase();
-                
-                tableRows.forEach(row => {
-                    const domainName = row.querySelector('td:first-child .font-medium')?.textContent?.toLowerCase() || '';
-                    const ownerName = row.querySelector('td:nth-child(2) .text-gray-900')?.textContent?.toLowerCase() || '';
-                    
-                    if (selectedStatus === 'all' || 
-                        (selectedStatus === 'running' && rowStatus.includes('running')) ||
-                        (selectedStatus === 'not-running' && rowStatus.includes('stopped')) ||
-                        (selectedStatus === 'pending' && !rowStatus.includes('running') && !rowStatus.includes('stopped'))) {
-                        row.style.display = '';
-                    } else {
-                        row.style.display = 'none';
-                    }
-                });
+        const statusFilter = document.getElementById('status-filter');
+        const tableRows = document.querySelectorAll('tbody tr');
+
+        // Get status from a row
+        function getRowStatus(row) {
+            const statusBadge = row.querySelector('td:nth-child(5) span');
+            if (!statusBadge) return '';
+            const text = statusBadge.textContent.trim().toLowerCase();
+            return text;
+        }
+
+        // Filter function that handles both search and status filter
+        function filterRows() {
+            const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const selectedStatus = statusFilter ? statusFilter.value : 'all';
+
+            let visibleCount = 0;
+
+            tableRows.forEach(row => {
+                // Skip the "no domains" row
+                if (row.querySelector('td[colspan]')) {
+                    return;
+                }
+
+                const domainName = row.querySelector('td:first-child .font-medium')?.textContent?.toLowerCase() || '';
+                const ownerName = row.querySelector('td:nth-child(2) .text-gray-900')?.textContent?.toLowerCase() || '';
+                const rowStatus = getRowStatus(row);
+
+                // Check search match
+                const matchesSearch = searchTerm === '' ||
+                    domainName.includes(searchTerm) ||
+                    ownerName.includes(searchTerm);
+
+                // Check status filter match
+                let matchesStatus = false;
+                if (selectedStatus === 'all') {
+                    matchesStatus = true;
+                } else if (selectedStatus === 'running') {
+                    matchesStatus = rowStatus === 'ready';
+                } else if (selectedStatus === 'not-running') {
+                    matchesStatus = rowStatus === 'suspended' || rowStatus === 'not in k8s';
+                } else if (selectedStatus === 'pending') {
+                    matchesStatus = rowStatus === 'provisioning' || rowStatus === 'failed' ||
+                                   (rowStatus !== 'ready' && rowStatus !== 'suspended' && rowStatus !== 'not in k8s');
+                }
+
+                // Show/hide row
+                if (matchesSearch && matchesStatus) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
             });
+
+            return visibleCount;
+        }
+
+        // Attach event listeners
+        if (searchInput) {
+            searchInput.addEventListener('input', filterRows);
+        }
+
+        if (statusFilter) {
+            statusFilter.addEventListener('change', filterRows);
         }
         
         // Fixed dropdown functionality with both hover and click
