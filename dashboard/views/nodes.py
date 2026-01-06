@@ -662,12 +662,13 @@ def get_pods_status(request):
         if not user_domains:
             return render(request, "main/pods_status.html", {"pods": []})
 
-        slugs = [d.replace(".", "-") for d in user_domains]
+        # Domain CR names are domain names with dots replaced by dashes
+        domain_cr_names = [d.replace(".", "-") for d in user_domains]
 
-        if len(slugs) == 1:
-            label_selector = f"group={slugs[0]}"
+        if len(domain_cr_names) == 1:
+            label_selector = f"kubepanel.io/domain={domain_cr_names[0]}"
         else:
-            label_selector = f"group in ({','.join(slugs)})"
+            label_selector = f"kubepanel.io/domain in ({','.join(domain_cr_names)})"
 
     try:
         base, headers, verify = _load_k8s_auth()
