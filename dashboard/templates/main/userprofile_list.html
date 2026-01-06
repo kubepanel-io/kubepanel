@@ -146,18 +146,6 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex items-center space-x-2">
-                        <!-- Quick Package Assignment -->
-                        {% if not p.package %}
-                        <button class="text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-1"
-                                title="Assign package"
-                                onclick="showPackageModal('{{ p.pk }}', '{{ p.user.username }}')">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                            </svg>
-                            <span>Assign</span>
-                        </button>
-                        {% endif %}
-                        
                         <!-- Actions Dropdown -->
                         <div class="relative dropdown">
                             <button class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
@@ -174,39 +162,16 @@
                                     </svg>
                                     <span>Edit Profile</span>
                                 </a>
-                                <a href="#"
+                                <a href="{% url 'reset_user_password' p.user.pk %}"
                                    class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
                                     </svg>
                                     <span>Reset Password</span>
                                 </a>
-                                <a href="#"
-                                   class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                                    </svg>
-                                    <span>View Usage</span>
-                                </a>
+                                {% if not p.user.is_superuser %}
                                 <hr class="my-1 border-gray-200">
-                                {% if p.user.is_active %}
-                                <a href="#"
-                                   class="flex items-center space-x-2 px-4 py-2 text-sm text-orange-600 hover:bg-orange-50">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728"></path>
-                                    </svg>
-                                    <span>Deactivate User</span>
-                                </a>
-                                {% else %}
-                                <a href="#"
-                                   class="flex items-center space-x-2 px-4 py-2 text-sm text-green-600 hover:bg-green-50">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    <span>Activate User</span>
-                                </a>
-                                {% endif %}
-                                <a href="#"
+                                <a href="{% url 'delete_user' p.user.pk %}"
                                    class="flex items-center space-x-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                                    onclick="return confirm('Are you sure you want to delete {{ p.user.username }}? This action cannot be undone.')">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -214,6 +179,7 @@
                                     </svg>
                                     <span>Delete User</span>
                                 </a>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -390,12 +356,6 @@
             });
         });
     });
-
-    // Package assignment modal (placeholder function)
-    function showPackageModal(profileId, username) {
-        alert(`Package assignment for ${username} would open here. Profile ID: ${profileId}`);
-        // In a real implementation, this would open a modal with package selection
-    }
 </script>
 {% endblock %}
 {% endblock %}

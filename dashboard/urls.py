@@ -4,7 +4,7 @@ from .views import (
     UserProfilePackageUpdateView, PackageListView, PackageCreateView, PackageUpdateView,
     UserProfileListView, UserProfileCreateView, UserProfileUpdateView,
     UserCreateView, DownloadSnapshotView, DownloadSqlDumpView, UploadRestoreFilesView,
-    system_settings,
+    system_settings, reset_user_password, delete_user,
 )
 from dashboard.k8s import (
     DomainSpec,
@@ -78,6 +78,8 @@ urlpatterns = [
     path('profiles/<int:pk>/edit/', UserProfileUpdateView.as_view(), name='edit_userprofile'),
     path('users/add/', UserCreateView.as_view(), name='create_user_with_profile'),
     path('profiles/<int:pk>/edit-package/',UserProfilePackageUpdateView.as_view(),name='edit_userprofile_package'),
+    path('users/<int:pk>/reset-password/', reset_user_password, name='reset_user_password'),
+    path('users/<int:pk>/delete/', delete_user, name='delete_user'),
     path("download/<str:snapshot_name>/", DownloadSnapshotView.as_view(), name="download_snapshot"),
     path("download/sql/<str:dump_name>/", DownloadSqlDumpView.as_view(), name="download_sql_dump"),
     path('restore/upload/<str:domain_name>/',UploadRestoreFilesView.as_view(),name='upload_restore'),

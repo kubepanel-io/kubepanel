@@ -95,6 +95,8 @@ from .admin import (
     DownloadSqlDumpView,
     UploadRestoreFilesView,
     system_settings,
+    reset_user_password,
+    delete_user,
 )
 
 # Security views
@@ -274,6 +276,9 @@ __all__ = [
     'DownloadSnapshotView',
     'DownloadSqlDumpView',
     'UploadRestoreFilesView',
+    'system_settings',
+    'reset_user_password',
+    'delete_user',
 
     # Security
     'manage_ips',

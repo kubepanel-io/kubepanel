@@ -399,6 +399,66 @@ from django.shortcuts import redirect
 
 
 @login_required
+def reset_user_password(request, pk):
+    """Reset a user's password (superuser only)."""
+    if not request.user.is_superuser:
+        messages.error(request, "You don't have permission to reset passwords.")
+        return redirect('list_userprofiles')
+
+    user = get_object_or_404(User, pk=pk)
+
+    if request.method == 'POST':
+        new_password = request.POST.get('new_password')
+        confirm_password = request.POST.get('confirm_password')
+
+        if not new_password:
+            messages.error(request, 'Password is required.')
+        elif new_password != confirm_password:
+            messages.error(request, 'Passwords do not match.')
+        elif len(new_password) < 8:
+            messages.error(request, 'Password must be at least 8 characters long.')
+        else:
+            user.set_password(new_password)
+            user.save()
+            messages.success(request, f'Password for {user.username} has been reset.')
+            return redirect('list_userprofiles')
+
+    return render(request, 'main/reset_user_password.html', {'target_user': user})
+
+
+@login_required
+def delete_user(request, pk):
+    """Delete a user (superuser only). Cannot delete superusers."""
+    if not request.user.is_superuser:
+        messages.error(request, "You don't have permission to delete users.")
+        return redirect('list_userprofiles')
+
+    user = get_object_or_404(User, pk=pk)
+
+    if user.is_superuser:
+        messages.error(request, 'Cannot delete a superuser account.')
+        return redirect('list_userprofiles')
+
+    if request.method == 'POST':
+        username = user.username
+        # Check if user has domains
+        user_domains = Domain.objects.filter(owner=user)
+        if user_domains.exists():
+            messages.error(
+                request,
+                f'Cannot delete user {username}. They own {user_domains.count()} domain(s). '
+                'Please delete or transfer the domains first.'
+            )
+            return redirect('list_userprofiles')
+
+        user.delete()
+        messages.success(request, f'User {username} has been deleted.')
+        return redirect('list_userprofiles')
+
+    return render(request, 'main/delete_user.html', {'target_user': user})
+
+
+@login_required
 def system_settings(request):
     """View and edit system-wide settings (superuser only)."""
     if not request.user.is_superuser:
