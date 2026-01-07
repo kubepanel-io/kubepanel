@@ -4,6 +4,8 @@ Domain management views (CRUD, backup, credentials, etc.)
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import PasswordChangeForm
+from django.contrib.auth import update_session_auth_hash
 from django.contrib import messages
 from django.db.models import Sum
 from django.db import transaction
@@ -17,7 +19,7 @@ import base64
 import re
 import pymysql
 
-from dashboard.models import Domain, DomainAlias, DomainStorageUsage, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry, WorkloadVersion
+from dashboard.models import Domain, DomainAlias, DomainStorageUsage, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry, WorkloadVersion, SystemSettings
 from dashboard.forms import DomainForm, DomainConfigForm, DomainAddForm, DomainAliasForm
 from dashboard.services.dkim import generate_dkim_keypair
 from dashboard.k8s import (
@@ -1073,8 +1075,70 @@ def domain_logs(request, domain):
     })
 
 
+@login_required
 def settings(request):
-    return render(request, "main/settings.html")
+    """
+    User settings page with:
+    - Password change (all users)
+    - Storage notification settings (superusers only)
+    """
+    password_form = PasswordChangeForm(request.user)
+    password_changed = False
+
+    # Get system settings for superusers
+    system_settings = None
+    if request.user.is_superuser:
+        system_settings = SystemSettings.get_settings()
+
+    if request.method == 'POST':
+        # Handle password change
+        if 'change_password' in request.POST:
+            password_form = PasswordChangeForm(request.user, request.POST)
+            if password_form.is_valid():
+                user = password_form.save()
+                update_session_auth_hash(request, user)
+                messages.success(request, 'Your password has been changed successfully.')
+                password_changed = True
+                password_form = PasswordChangeForm(request.user)  # Reset form
+            else:
+                messages.error(request, 'Please correct the errors below.')
+
+        # Handle storage notification settings (superuser only)
+        elif 'save_notifications' in request.POST and request.user.is_superuser:
+            try:
+                # Update storage notification settings
+                system_settings.storage_notifications_enabled = 'storage_notifications_enabled' in request.POST
+
+                # Thresholds
+                system_settings.storage_info_threshold = int(request.POST.get('storage_info_threshold', 85))
+                system_settings.storage_warning_threshold = int(request.POST.get('storage_warning_threshold', 90))
+                system_settings.storage_alert_threshold = int(request.POST.get('storage_alert_threshold', 95))
+
+                # Frequencies
+                system_settings.storage_info_frequency_days = int(request.POST.get('storage_info_frequency_days', 30))
+                system_settings.storage_warning_frequency_days = int(request.POST.get('storage_warning_frequency_days', 7))
+                system_settings.storage_alert_frequency_days = int(request.POST.get('storage_alert_frequency_days', 1))
+
+                # Email templates
+                system_settings.storage_info_subject = request.POST.get('storage_info_subject', system_settings.storage_info_subject)
+                system_settings.storage_info_template = request.POST.get('storage_info_template', system_settings.storage_info_template)
+                system_settings.storage_warning_subject = request.POST.get('storage_warning_subject', system_settings.storage_warning_subject)
+                system_settings.storage_warning_template = request.POST.get('storage_warning_template', system_settings.storage_warning_template)
+                system_settings.storage_alert_subject = request.POST.get('storage_alert_subject', system_settings.storage_alert_subject)
+                system_settings.storage_alert_template = request.POST.get('storage_alert_template', system_settings.storage_alert_template)
+
+                system_settings.save()
+                messages.success(request, 'Storage notification settings saved successfully.')
+            except (ValueError, TypeError) as e:
+                messages.error(request, f'Invalid value: {e}')
+            except Exception as e:
+                messages.error(request, f'Error saving settings: {e}')
+
+    return render(request, "main/settings.html", {
+        'password_form': password_form,
+        'password_changed': password_changed,
+        'system_settings': system_settings,
+    })
 
 
 # Password management functions

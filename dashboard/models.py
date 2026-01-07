@@ -708,6 +708,9 @@ class DomainStorageUsage(models.Model):
         related_name='storage_usage'
     )
 
+    # PVC storage (from domain pod /var/www)
+    pvc_bytes = models.BigIntegerField(default=0, help_text="PVC/disk storage in bytes")
+
     # Email storage (from /var/mail/vmail/<domain>)
     email_bytes = models.BigIntegerField(default=0, help_text="Email storage in bytes")
 
@@ -715,6 +718,7 @@ class DomainStorageUsage(models.Model):
     database_bytes = models.BigIntegerField(default=0, help_text="Database storage in bytes")
 
     # Timestamps
+    pvc_checked_at = models.DateTimeField(null=True, blank=True)
     email_checked_at = models.DateTimeField(null=True, blank=True)
     database_checked_at = models.DateTimeField(null=True, blank=True)
 
@@ -723,7 +727,12 @@ class DomainStorageUsage(models.Model):
         verbose_name_plural = "Domain Storage Usage"
 
     def __str__(self):
-        return f"{self.domain.domain_name}: {self.email_display} email, {self.database_display} DB"
+        return f"{self.domain.domain_name}: {self.pvc_display} disk, {self.email_display} email, {self.database_display} DB"
+
+    @property
+    def pvc_display(self) -> str:
+        """Human-readable PVC/disk storage size."""
+        return self._format_bytes(self.pvc_bytes)
 
     @property
     def email_display(self) -> str:
@@ -737,8 +746,8 @@ class DomainStorageUsage(models.Model):
 
     @property
     def total_bytes(self) -> int:
-        """Total storage usage in bytes."""
-        return self.email_bytes + self.database_bytes
+        """Total storage usage in bytes (PVC + email + database)."""
+        return self.pvc_bytes + self.email_bytes + self.database_bytes
 
     @property
     def total_display(self) -> str:
@@ -767,6 +776,7 @@ class DomainStorageUsage(models.Model):
 class SystemSettings(models.Model):
     """Singleton model for system-wide settings."""
 
+    # Mail queue thresholds
     mail_queue_warning_threshold = models.IntegerField(
         default=50,
         help_text="Warn when mail queue exceeds this count"
@@ -778,6 +788,101 @@ class SystemSettings(models.Model):
     health_check_email_enabled = models.BooleanField(
         default=True,
         help_text="Send email alerts for health issues"
+    )
+
+    # Storage notification settings
+    storage_notifications_enabled = models.BooleanField(
+        default=True,
+        help_text="Enable storage usage notifications to domain owners"
+    )
+
+    # Storage thresholds (percentage)
+    storage_info_threshold = models.IntegerField(
+        default=85,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="INFO notification threshold (percentage)"
+    )
+    storage_warning_threshold = models.IntegerField(
+        default=90,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="WARNING notification threshold (percentage)"
+    )
+    storage_alert_threshold = models.IntegerField(
+        default=95,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="ALERT notification threshold (percentage)"
+    )
+
+    # Notification frequencies (days)
+    storage_info_frequency_days = models.IntegerField(
+        default=30,
+        validators=[MinValueValidator(1)],
+        help_text="Days between INFO notifications"
+    )
+    storage_warning_frequency_days = models.IntegerField(
+        default=7,
+        validators=[MinValueValidator(1)],
+        help_text="Days between WARNING notifications"
+    )
+    storage_alert_frequency_days = models.IntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="Days between ALERT notifications"
+    )
+
+    # Email templates
+    storage_info_subject = models.CharField(
+        max_length=255,
+        default="[KubePanel] Storage usage notice for {{domain_name}}",
+        help_text="INFO email subject template"
+    )
+    storage_info_template = models.TextField(
+        default="""Your domain {{domain_name}} is using {{usage_percent}}% of allocated storage.
+
+Storage breakdown:
+- Disk space: {{pvc_gb}} GB
+- Email: {{email_gb}} GB
+- Database: {{database_gb}} GB
+- Total: {{storage_used_gb}} GB of {{storage_limit_gb}} GB
+
+Consider cleaning up unused files or upgrading your storage allocation.""",
+        help_text="INFO email body template"
+    )
+
+    storage_warning_subject = models.CharField(
+        max_length=255,
+        default="[KubePanel] Storage warning for {{domain_name}}",
+        help_text="WARNING email subject template"
+    )
+    storage_warning_template = models.TextField(
+        default="""WARNING: Your domain {{domain_name}} is using {{usage_percent}}% of allocated storage.
+
+Storage breakdown:
+- Disk space: {{pvc_gb}} GB
+- Email: {{email_gb}} GB
+- Database: {{database_gb}} GB
+- Total: {{storage_used_gb}} GB of {{storage_limit_gb}} GB
+
+Please take action to free up space or upgrade your storage.""",
+        help_text="WARNING email body template"
+    )
+
+    storage_alert_subject = models.CharField(
+        max_length=255,
+        default="[KubePanel] CRITICAL: Storage alert for {{domain_name}}",
+        help_text="ALERT email subject template"
+    )
+    storage_alert_template = models.TextField(
+        default="""CRITICAL: Your domain {{domain_name}} is using {{usage_percent}}% of allocated storage!
+
+Storage breakdown:
+- Disk space: {{pvc_gb}} GB
+- Email: {{email_gb}} GB
+- Database: {{database_gb}} GB
+- Total: {{storage_used_gb}} GB of {{storage_limit_gb}} GB
+
+Immediate action required to prevent service disruption.""",
+        help_text="ALERT email body template"
     )
 
     class Meta:
@@ -796,3 +901,49 @@ class SystemSettings(models.Model):
 
     def __str__(self):
         return "System Settings"
+
+
+class StorageNotificationLog(models.Model):
+    """
+    Tracks storage notification emails sent to domain owners.
+
+    Used to enforce notification frequency limits (e.g., only send INFO once per month).
+    """
+    LEVEL_CHOICES = [
+        ('info', 'Info'),
+        ('warning', 'Warning'),
+        ('alert', 'Alert'),
+    ]
+
+    domain = models.ForeignKey(
+        Domain,
+        on_delete=models.CASCADE,
+        related_name='storage_notifications'
+    )
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES)
+    sent_at = models.DateTimeField(auto_now_add=True)
+    usage_percent = models.FloatField(help_text="Storage usage percentage at time of notification")
+    storage_used_bytes = models.BigIntegerField(help_text="Total storage used in bytes")
+    storage_limit_bytes = models.BigIntegerField(help_text="Storage limit in bytes")
+    recipient_email = models.EmailField(help_text="Email address notification was sent to")
+
+    class Meta:
+        verbose_name = "Storage Notification Log"
+        verbose_name_plural = "Storage Notification Logs"
+        ordering = ['-sent_at']
+        indexes = [
+            models.Index(fields=['domain', 'level', '-sent_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.domain.domain_name} - {self.level.upper()} @ {self.sent_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def storage_used_display(self) -> str:
+        """Human-readable storage used."""
+        return DomainStorageUsage._format_bytes(self.storage_used_bytes)
+
+    @property
+    def storage_limit_display(self) -> str:
+        """Human-readable storage limit."""
+        return DomainStorageUsage._format_bytes(self.storage_limit_bytes)
