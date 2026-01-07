@@ -20,7 +20,7 @@ LINSTOR_API_URL = "http://linstor-controller.piraeus-datastore.svc.cluster.local
 def fetch_linstor_storage_pools():
     """Fetch storage pool information from Linstor REST API."""
     try:
-        api_url = f"{LINSTOR_API_URL}/v1/storage-pools"
+        api_url = f"{LINSTOR_API_URL}/v1/view/storage-pools"
         req = urllib.request.Request(api_url, headers={'Accept': 'application/json'})
         with urllib.request.urlopen(req, timeout=10) as response:
             data = json.loads(response.read().decode('utf-8'))
