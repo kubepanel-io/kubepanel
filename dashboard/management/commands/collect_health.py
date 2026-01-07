@@ -10,8 +10,10 @@ Components checked:
 - MariaDB: Database health via TCP connection
 - SMTP Storage: Per-domain email storage usage
 - MariaDB Storage: Per-domain database storage usage
-- PVC Storage: Per-domain disk storage usage
 - Storage Notifications: Send email alerts when storage usage exceeds thresholds
+
+Note: PVC/disk storage is collected by collect_metrics command (DomainMetric.storage_bytes).
+Storage notifications combine PVC (from DomainMetric) + email + database storage.
 """
 import os
 import re
@@ -31,7 +33,7 @@ from kubernetes.client.rest import ApiException
 from django.utils import timezone
 
 from dashboard.models import (
-    Domain, DomainStorageUsage, SystemHealthStatus, SystemSettings,
+    Domain, DomainMetric, DomainStorageUsage, SystemHealthStatus, SystemSettings,
     StorageNotificationLog
 )
 
@@ -50,7 +52,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--component',
             type=str,
-            choices=['linstor', 'mail_queue', 'mariadb', 'smtp_storage', 'mariadb_storage', 'pvc_storage', 'storage_notifications'],
+            choices=['linstor', 'mail_queue', 'mariadb', 'smtp_storage', 'mariadb_storage', 'storage_notifications'],
             help='Check only a specific component',
         )
         parser.add_argument(
@@ -94,7 +96,7 @@ class Command(BaseCommand):
             })()
 
         # Components to check (storage_notifications runs separately after storage collection)
-        components = ['linstor', 'mail_queue', 'mariadb', 'smtp_storage', 'mariadb_storage', 'pvc_storage']
+        components = ['linstor', 'mail_queue', 'mariadb', 'smtp_storage', 'mariadb_storage']
         if specific_component:
             if specific_component == 'storage_notifications':
                 # Only run storage notifications
@@ -116,8 +118,6 @@ class Command(BaseCommand):
                     result = self.check_smtp_storage()
                 elif component == 'mariadb_storage':
                     result = self.check_mariadb_storage()
-                elif component == 'pvc_storage':
-                    result = self.check_pvc_storage()
 
                 results.append(result)
 
@@ -145,7 +145,7 @@ class Command(BaseCommand):
             self.process_alerts(results)
 
         # Process storage notifications (after all storage data is collected)
-        if not specific_component or specific_component in ('smtp_storage', 'mariadb_storage', 'pvc_storage'):
+        if not specific_component or specific_component in ('smtp_storage', 'mariadb_storage'):
             self.check_storage_notifications()
 
         self.stdout.write(self.style.SUCCESS(f'Health check completed for {len(results)} components'))
@@ -818,101 +818,14 @@ class Command(BaseCommand):
             return f"{int(size)} {units[unit_index]}"
         return f"{size:.1f} {units[unit_index]}"
 
-    def check_pvc_storage(self):
-        """
-        Collect PVC storage usage for all domains.
-
-        Runs 'du -sb /var/www' in each domain's web pod and updates DomainStorageUsage.
-        """
-        if not self.db_available:
-            return {
-                'component': 'pvc_storage',
-                'status': 'warning',
-                'message': 'Database unavailable, skipping PVC storage collection',
-                'details': {},
-            }
-
-        domains = Domain.objects.all()
-        updated_count = 0
-        error_count = 0
-        total_bytes = 0
-        now = timezone.now()
-
-        for domain in domains:
-            namespace_name = domain.namespace
-            pod_label = 'app=web'
-
-            try:
-                pods = self.core_v1.list_namespaced_pod(
-                    namespace=namespace_name,
-                    label_selector=pod_label
-                ).items
-
-                running_pods = [p for p in pods if p.status.phase == 'Running']
-                if not running_pods:
-                    if self.verbose:
-                        self.stdout.write(f"  {domain.domain_name}: No running pod found")
-                    continue
-
-                pod_name = running_pods[0].metadata.name
-
-                # Get storage usage from /var/www
-                result = stream(
-                    self.core_v1.connect_get_namespaced_pod_exec,
-                    name=pod_name,
-                    namespace=namespace_name,
-                    container='nginx',  # Use nginx container which has access to /var/www
-                    command=['sh', '-c', 'du -sb /var/www 2>/dev/null || echo "0\t/var/www"'],
-                    stderr=True,
-                    stdin=False,
-                    stdout=True,
-                    tty=False,
-                    _preload_content=True
-                )
-
-                # Parse du output: "SIZE\tPATH"
-                parts = result.strip().split('\t')
-                if len(parts) >= 1:
-                    try:
-                        size_bytes = int(parts[0])
-                    except ValueError:
-                        size_bytes = 0
-
-                    # Update DomainStorageUsage record
-                    usage, _ = DomainStorageUsage.objects.get_or_create(domain=domain)
-                    usage.pvc_bytes = size_bytes
-                    usage.pvc_checked_at = now
-                    usage.save()
-
-                    total_bytes += size_bytes
-                    updated_count += 1
-
-                    if self.verbose:
-                        self.stdout.write(f"  {domain.domain_name}: {self._format_bytes(size_bytes)}")
-
-            except ApiException as e:
-                if self.verbose:
-                    self.stdout.write(f"  {domain.domain_name}: API error - {e.reason}")
-                error_count += 1
-            except Exception as e:
-                if self.verbose:
-                    self.stdout.write(f"  {domain.domain_name}: Error - {e}")
-                error_count += 1
-
-        return {
-            'component': 'pvc_storage',
-            'status': 'healthy' if error_count == 0 else 'warning',
-            'message': f'Updated {updated_count} domains, {self._format_bytes(total_bytes)} total',
-            'details': {
-                'updated_count': updated_count,
-                'error_count': error_count,
-                'total_bytes': total_bytes,
-            },
-        }
-
     def check_storage_notifications(self):
         """
         Check storage usage for all domains and send notifications if thresholds are exceeded.
+
+        Storage data sources:
+        - PVC/disk storage: Latest DomainMetric.storage_bytes (collected by collect_metrics)
+        - Email storage: DomainStorageUsage.email_bytes (collected by collect_health)
+        - Database storage: DomainStorageUsage.database_bytes (collected by collect_health)
 
         Notification levels:
         - INFO: storage >= info_threshold (default 85%)
@@ -927,21 +840,21 @@ class Command(BaseCommand):
             return
 
         # Check if notifications are enabled
-        if not self.system_settings.storage_notifications_enabled:
+        if not getattr(self.system_settings, 'storage_notifications_enabled', True):
             if self.verbose:
                 self.stdout.write("[Storage Notifications] Disabled in settings")
             return
 
         # Get thresholds and frequencies
         thresholds = {
-            'alert': self.system_settings.storage_alert_threshold,
-            'warning': self.system_settings.storage_warning_threshold,
-            'info': self.system_settings.storage_info_threshold,
+            'alert': getattr(self.system_settings, 'storage_alert_threshold', 95),
+            'warning': getattr(self.system_settings, 'storage_warning_threshold', 90),
+            'info': getattr(self.system_settings, 'storage_info_threshold', 85),
         }
         frequencies = {
-            'alert': timedelta(days=self.system_settings.storage_alert_frequency_days),
-            'warning': timedelta(days=self.system_settings.storage_warning_frequency_days),
-            'info': timedelta(days=self.system_settings.storage_info_frequency_days),
+            'alert': timedelta(days=getattr(self.system_settings, 'storage_alert_frequency_days', 1)),
+            'warning': timedelta(days=getattr(self.system_settings, 'storage_warning_frequency_days', 7)),
+            'info': timedelta(days=getattr(self.system_settings, 'storage_info_frequency_days', 30)),
         }
 
         if self.verbose:
@@ -951,9 +864,8 @@ class Command(BaseCommand):
         now = timezone.now()
         notifications_sent = 0
 
-        # Iterate through all domains with storage usage data
-        for usage in DomainStorageUsage.objects.select_related('domain', 'domain__owner').all():
-            domain = usage.domain
+        # Iterate through all domains
+        for domain in Domain.objects.select_related('owner').all():
             owner = domain.owner
 
             # Skip if owner has no email
@@ -962,9 +874,22 @@ class Command(BaseCommand):
                     self.stdout.write(f"  {domain.domain_name}: Owner has no email, skipping")
                 continue
 
-            # Calculate storage usage percentage
+            # Get PVC/disk storage from the latest DomainMetric
+            latest_metric = DomainMetric.objects.filter(domain=domain).order_by('-timestamp').first()
+            pvc_bytes = latest_metric.storage_bytes if latest_metric and latest_metric.storage_bytes else 0
+
+            # Get email and database storage from DomainStorageUsage
+            try:
+                storage_usage = domain.storage_usage
+                email_bytes = storage_usage.email_bytes
+                database_bytes = storage_usage.database_bytes
+            except DomainStorageUsage.DoesNotExist:
+                email_bytes = 0
+                database_bytes = 0
+
+            # Calculate total storage usage
             storage_limit_bytes = domain.storage_size * 1024 * 1024 * 1024  # GB to bytes
-            storage_used_bytes = usage.total_bytes
+            storage_used_bytes = pvc_bytes + email_bytes + database_bytes
 
             if storage_limit_bytes == 0:
                 continue
@@ -974,7 +899,8 @@ class Command(BaseCommand):
             if self.verbose:
                 self.stdout.write(
                     f"  {domain.domain_name}: {usage_percent:.1f}% "
-                    f"({self._format_bytes(storage_used_bytes)} / {self._format_bytes(storage_limit_bytes)})"
+                    f"({self._format_bytes(storage_used_bytes)} / {self._format_bytes(storage_limit_bytes)}) "
+                    f"[pvc={self._format_bytes(pvc_bytes)}, email={self._format_bytes(email_bytes)}, db={self._format_bytes(database_bytes)}]"
                 )
 
             # Determine notification level (highest applicable)
@@ -1020,9 +946,9 @@ class Command(BaseCommand):
                 usage_percent=usage_percent,
                 storage_used_bytes=storage_used_bytes,
                 storage_limit_bytes=storage_limit_bytes,
-                pvc_bytes=usage.pvc_bytes,
-                email_bytes=usage.email_bytes,
-                database_bytes=usage.database_bytes,
+                pvc_bytes=pvc_bytes,
+                email_bytes=email_bytes,
+                database_bytes=database_bytes,
             ):
                 # Log the notification
                 StorageNotificationLog.objects.create(
