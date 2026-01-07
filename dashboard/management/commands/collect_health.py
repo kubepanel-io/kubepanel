@@ -144,6 +144,10 @@ class Command(BaseCommand):
         if not self.dry_run:
             self.process_alerts(results)
 
+        # Sync PVC storage from DomainMetric to DomainStorageUsage
+        if not specific_component or specific_component in ('smtp_storage', 'mariadb_storage'):
+            self.sync_pvc_storage()
+
         # Process storage notifications (after all storage data is collected)
         if not specific_component or specific_component in ('smtp_storage', 'mariadb_storage'):
             self.check_storage_notifications()
@@ -818,6 +822,46 @@ class Command(BaseCommand):
             return f"{int(size)} {units[unit_index]}"
         return f"{size:.1f} {units[unit_index]}"
 
+    def sync_pvc_storage(self):
+        """
+        Sync PVC storage from DomainMetric to DomainStorageUsage.
+
+        DomainMetric.storage_bytes is collected by collect_metrics command.
+        This method copies the latest value to DomainStorageUsage.pvc_bytes
+        so that total_bytes includes all storage types.
+        """
+        if not self.db_available:
+            if self.verbose:
+                self.stdout.write("[Sync PVC Storage] Database unavailable, skipping")
+            return
+
+        now = timezone.now()
+        synced_count = 0
+
+        for domain in Domain.objects.all():
+            # Get latest DomainMetric for this domain
+            latest_metric = DomainMetric.objects.filter(domain=domain).order_by('-timestamp').first()
+
+            if not latest_metric or not latest_metric.storage_bytes:
+                continue
+
+            # Get or create DomainStorageUsage and update pvc_bytes
+            usage, _ = DomainStorageUsage.objects.get_or_create(domain=domain)
+
+            if usage.pvc_bytes != latest_metric.storage_bytes:
+                usage.pvc_bytes = latest_metric.storage_bytes
+                usage.pvc_checked_at = now
+                usage.save()
+                synced_count += 1
+
+                if self.verbose:
+                    self.stdout.write(
+                        f"  {domain.domain_name}: synced pvc_bytes = {self._format_bytes(latest_metric.storage_bytes)}"
+                    )
+
+        if self.verbose and synced_count > 0:
+            self.stdout.write(f"[Sync PVC Storage] Updated {synced_count} domains")
+
     def check_storage_notifications(self):
         """
         Check storage usage for all domains and send notifications if thresholds are exceeded.
@@ -864,8 +908,10 @@ class Command(BaseCommand):
         now = timezone.now()
         notifications_sent = 0
 
-        # Iterate through all domains
-        for domain in Domain.objects.select_related('owner').all():
+        # Iterate through all domains with storage usage data
+        # (pvc_bytes is synced from DomainMetric by sync_pvc_storage())
+        for usage in DomainStorageUsage.objects.select_related('domain', 'domain__owner').all():
+            domain = usage.domain
             owner = domain.owner
 
             # Skip if owner has no email
@@ -874,22 +920,14 @@ class Command(BaseCommand):
                     self.stdout.write(f"  {domain.domain_name}: Owner has no email, skipping")
                 continue
 
-            # Get PVC/disk storage from the latest DomainMetric
-            latest_metric = DomainMetric.objects.filter(domain=domain).order_by('-timestamp').first()
-            pvc_bytes = latest_metric.storage_bytes if latest_metric and latest_metric.storage_bytes else 0
-
-            # Get email and database storage from DomainStorageUsage
-            try:
-                storage_usage = domain.storage_usage
-                email_bytes = storage_usage.email_bytes
-                database_bytes = storage_usage.database_bytes
-            except DomainStorageUsage.DoesNotExist:
-                email_bytes = 0
-                database_bytes = 0
+            # Get storage values from DomainStorageUsage (pvc_bytes synced from DomainMetric)
+            pvc_bytes = usage.pvc_bytes
+            email_bytes = usage.email_bytes
+            database_bytes = usage.database_bytes
 
             # Calculate total storage usage
             storage_limit_bytes = domain.storage_size * 1024 * 1024 * 1024  # GB to bytes
-            storage_used_bytes = pvc_bytes + email_bytes + database_bytes
+            storage_used_bytes = usage.total_bytes  # pvc + email + database
 
             if storage_limit_bytes == 0:
                 continue
