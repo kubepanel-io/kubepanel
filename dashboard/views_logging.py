@@ -1,13 +1,17 @@
 from django.shortcuts import render, get_object_or_404
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 from datetime import datetime, timedelta
-from dashboard.models import LogEntry, Domain
+from dashboard.models import LogEntry, Domain, StorageNotificationLog
 from dashboard.services.logging_service import LogQueryManager
 import json
+
+
+def is_superuser(user):
+    return user.is_superuser
 
 @login_required
 def system_logs(request):
@@ -255,11 +259,77 @@ def logs_stats(request):
         })
     
     recent_activity.reverse()  # Oldest first for charts
-    
+
     context = {
         'stats': stats,
         'level_stats': level_stats,
         'recent_activity': recent_activity,
     }
-    
+
     return render(request, 'logging/logs_stats.html', context)
+
+
+@login_required
+@user_passes_test(is_superuser)
+def notification_logs(request):
+    """
+    View for storage notification logs (superuser only).
+    Shows all sent storage notifications with filtering options.
+    """
+    # Get filter parameters
+    level_filter = request.GET.get('level', '')
+    domain_filter = request.GET.get('domain', '')
+    days_filter = request.GET.get('days', '30')
+
+    try:
+        days = int(days_filter)
+    except ValueError:
+        days = 30
+
+    # Build queryset
+    logs_queryset = StorageNotificationLog.objects.select_related(
+        'domain', 'domain__owner'
+    ).order_by('-sent_at')
+
+    # Apply filters
+    if level_filter:
+        logs_queryset = logs_queryset.filter(level=level_filter)
+
+    if domain_filter:
+        logs_queryset = logs_queryset.filter(
+            Q(domain__domain_name__icontains=domain_filter) |
+            Q(recipient_email__icontains=domain_filter)
+        )
+
+    # Filter by date range
+    if days > 0:
+        cutoff_date = datetime.now() - timedelta(days=days)
+        logs_queryset = logs_queryset.filter(sent_at__gte=cutoff_date)
+
+    # Get counts by level
+    total_logs = logs_queryset.count()
+    info_count = logs_queryset.filter(level='info').count()
+    warning_count = logs_queryset.filter(level='warning').count()
+    alert_count = logs_queryset.filter(level='alert').count()
+
+    # Pagination
+    paginator = Paginator(logs_queryset, 50)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Get unique domains for filter dropdown
+    domains = Domain.objects.all().order_by('domain_name')
+
+    context = {
+        'page_obj': page_obj,
+        'total_logs': total_logs,
+        'info_count': info_count,
+        'warning_count': warning_count,
+        'alert_count': alert_count,
+        'current_level': level_filter,
+        'current_domain': domain_filter,
+        'current_days': days,
+        'domains': domains,
+    }
+
+    return render(request, 'logging/notification_logs.html', context)

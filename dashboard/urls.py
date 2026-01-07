@@ -88,6 +88,7 @@ urlpatterns = [
     path('logs/', views_logging.system_logs, name='system_logs'),
     path('logs/errors/', views_logging.error_logs, name='error_logs'),
     path('logs/stats/', views_logging.logs_stats, name='logs_stats'),
+    path('logs/notifications/', views_logging.notification_logs, name='notification_logs'),
     path('logs/<int:log_id>/', views_logging.log_detail, name='log_detail'),
     path('logs/object/<int:content_type_id>/<int:object_id>/', views_logging.object_logs, name='object_logs'),
     path("change_password/<str:domain>/<str:password_type>", views.change_password, name="change_password"),

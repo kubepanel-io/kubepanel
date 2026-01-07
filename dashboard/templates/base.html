@@ -250,14 +250,14 @@
                     
 <!-- System Logs -->
                     <div class="relative dropdown">
-                        <button class="{% if 'logs' in request.path or request.resolver_match.url_name|slice:':4' == 'logs' or request.resolver_match.url_name == 'system_logs' or request.resolver_match.url_name == 'error_logs' or request.resolver_match.url_name == 'log_detail' or request.resolver_match.url_name == 'object_logs' %}bg-primary-50 border-r-4 border-primary-600 text-primary-700{% else %}text-gray-700 hover:text-primary-600 hover:bg-gray-50{% endif %} group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-l-lg sidebar-transition">
+                        <button class="{% if 'logs' in request.path or request.resolver_match.url_name|slice:':4' == 'logs' or request.resolver_match.url_name == 'system_logs' or request.resolver_match.url_name == 'error_logs' or request.resolver_match.url_name == 'log_detail' or request.resolver_match.url_name == 'object_logs' or request.resolver_match.url_name == 'notification_logs' %}bg-primary-50 border-r-4 border-primary-600 text-primary-700{% else %}text-gray-700 hover:text-primary-600 hover:bg-gray-50{% endif %} group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-l-lg sidebar-transition">
                             <div class="flex items-center">
-                                <svg class="{% if 'logs' in request.path or request.resolver_match.url_name|slice:':4' == 'logs' or request.resolver_match.url_name == 'system_logs' or request.resolver_match.url_name == 'error_logs' or request.resolver_match.url_name == 'log_detail' or request.resolver_match.url_name == 'object_logs' %}text-primary-500{% else %}text-gray-400 group-hover:text-primary-500{% endif %} mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="{% if 'logs' in request.path or request.resolver_match.url_name|slice:':4' == 'logs' or request.resolver_match.url_name == 'system_logs' or request.resolver_match.url_name == 'error_logs' or request.resolver_match.url_name == 'log_detail' or request.resolver_match.url_name == 'object_logs' or request.resolver_match.url_name == 'notification_logs' %}text-primary-500{% else %}text-gray-400 group-hover:text-primary-500{% endif %} mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
                                 <span>System Logs</span>
                             </div>
-                            <svg class="{% if 'logs' in request.path or request.resolver_match.url_name|slice:':4' == 'logs' or request.resolver_match.url_name == 'system_logs' or request.resolver_match.url_name == 'error_logs' or request.resolver_match.url_name == 'log_detail' or request.resolver_match.url_name == 'object_logs' %}text-primary-500{% else %}text-gray-400 group-hover:text-primary-500{% endif %} h-4 w-4 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="{% if 'logs' in request.path or request.resolver_match.url_name|slice:':4' == 'logs' or request.resolver_match.url_name == 'system_logs' or request.resolver_match.url_name == 'error_logs' or request.resolver_match.url_name == 'log_detail' or request.resolver_match.url_name == 'object_logs' or request.resolver_match.url_name == 'notification_logs' %}text-primary-500{% else %}text-gray-400 group-hover:text-primary-500{% endif %} h-4 w-4 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                             </svg>
                         </button>
@@ -280,7 +280,7 @@
                                     <span>Errors Only</span>
                                 </div>
                             </a>
-                            <a href="{% url 'logs_stats' %}" 
+                            <a href="{% url 'logs_stats' %}"
                                class="{% if request.resolver_match.url_name == 'logs_stats' %}bg-primary-50 text-primary-700{% else %}text-gray-700 hover:bg-gray-50 hover:text-primary-600{% endif %} block px-4 py-2 text-sm transition-colors">
                                 <div class="flex items-center space-x-2">
                                     <svg class="w-4 h-4 {% if request.resolver_match.url_name == 'logs_stats' %}text-primary-500{% else %}text-gray-400{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -289,6 +289,17 @@
                                     <span>Statistics</span>
                                 </div>
                             </a>
+                            {% if request.user.is_superuser %}
+                            <a href="{% url 'notification_logs' %}"
+                               class="{% if request.resolver_match.url_name == 'notification_logs' %}bg-primary-50 text-primary-700{% else %}text-gray-700 hover:bg-gray-50 hover:text-primary-600{% endif %} block px-4 py-2 text-sm transition-colors">
+                                <div class="flex items-center space-x-2">
+                                    <svg class="w-4 h-4 {% if request.resolver_match.url_name == 'notification_logs' %}text-primary-500{% else %}text-gray-400{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                                    </svg>
+                                    <span>Notification Logs</span>
+                                </div>
+                            </a>
+                            {% endif %}
                         </div>
                     </div>                    
                     <!-- Support -->
