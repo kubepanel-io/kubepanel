@@ -17,6 +17,81 @@ logger = logging.getLogger(__name__)
 LINSTOR_API_URL = "http://linstor-controller.piraeus-datastore.svc.cluster.local:3370"
 
 
+def fetch_linstor_storage_pools():
+    """Fetch storage pool information from Linstor REST API."""
+    try:
+        api_url = f"{LINSTOR_API_URL}/v1/storage-pools"
+        req = urllib.request.Request(api_url, headers={'Accept': 'application/json'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+        return data, None
+    except urllib.error.URLError as e:
+        logger.error(f"Failed to reach Linstor storage pools API: {e}")
+        return [], f"Cannot reach Linstor storage pools API: {e.reason}"
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON from Linstor storage pools API: {e}")
+        return [], "Invalid response from Linstor storage pools API"
+    except Exception as e:
+        logger.error(f"Failed to fetch Linstor storage pools: {e}")
+        return [], f"Failed to fetch Linstor storage pools: {e}"
+
+
+def build_storage_pool_data(storage_pools):
+    """
+    Process storage pool data for display.
+
+    Filters to LVM_THIN pools and calculates usage percentages.
+    """
+    pool_data = []
+
+    for pool in storage_pools:
+        provider_kind = pool.get('provider_kind', '')
+
+        # Skip DISKLESS pools - they don't have actual storage
+        if provider_kind == 'DISKLESS':
+            continue
+
+        node_name = pool.get('node_name', 'Unknown')
+        pool_name = pool.get('storage_pool_name', 'Unknown')
+
+        # Capacities are in KiB
+        free_capacity_kib = pool.get('free_capacity', 0)
+        total_capacity_kib = pool.get('total_capacity', 0)
+
+        # Calculate used capacity
+        used_capacity_kib = total_capacity_kib - free_capacity_kib
+
+        # Calculate percentage
+        if total_capacity_kib > 0:
+            usage_percent = (used_capacity_kib / total_capacity_kib) * 100
+        else:
+            usage_percent = 0
+
+        # Get pool path from props if available
+        props = pool.get('props', {})
+        pool_path = props.get('StorDriver/LvmVg', '')
+        if not pool_path:
+            pool_path = props.get('StorDriver/ThinPool', '')
+
+        pool_data.append({
+            'node_name': node_name,
+            'pool_name': pool_name,
+            'provider_kind': provider_kind,
+            'pool_path': pool_path,
+            'used_capacity': format_size_kib(used_capacity_kib),
+            'total_capacity': format_size_kib(total_capacity_kib),
+            'free_capacity': format_size_kib(free_capacity_kib),
+            'usage_percent': round(usage_percent, 1),
+            'used_kib': used_capacity_kib,
+            'total_kib': total_capacity_kib,
+        })
+
+    # Sort by node name
+    pool_data.sort(key=lambda x: x['node_name'])
+
+    return pool_data
+
+
 @login_required
 def storage_list(request):
     """Display Linstor volumes mapped to domains."""
@@ -25,24 +100,39 @@ def storage_list(request):
 
     errors = []
 
-    # 1. Get Linstor resources (single API call)
+    # 1. Get Linstor storage pools (for overall capacity)
+    storage_pools_raw, pools_error = fetch_linstor_storage_pools()
+    if pools_error:
+        errors.append(pools_error)
+    storage_pools = build_storage_pool_data(storage_pools_raw)
+
+    # 2. Get Linstor resources (single API call)
     linstor_resources, linstor_error = fetch_linstor_resources()
     if linstor_error:
         errors.append(linstor_error)
 
-    # 2. Get all PVs from Kubernetes (single API call)
+    # 3. Get all PVs from Kubernetes (single API call)
     pv_list, pv_error = fetch_all_pvs()
     if pv_error:
         errors.append(pv_error)
 
-    # 3. Get all domains from Django (single query)
+    # 4. Get all domains from Django (single query)
     domains = list(Domain.objects.all())
 
-    # 4. Build domain-grouped storage data (consolidated by PVC)
+    # 5. Build domain-grouped storage data (consolidated by PVC)
     storage_data = build_storage_data(linstor_resources, pv_list, domains)
+
+    # Calculate total storage pool stats
+    total_used_kib = sum(p['used_kib'] for p in storage_pools)
+    total_capacity_kib = sum(p['total_kib'] for p in storage_pools)
+    total_usage_percent = round((total_used_kib / total_capacity_kib * 100), 1) if total_capacity_kib > 0 else 0
 
     return render(request, 'main/storage_list.html', {
         'storage_data': storage_data,
+        'storage_pools': storage_pools,
+        'total_pool_used': format_size_kib(total_used_kib),
+        'total_pool_capacity': format_size_kib(total_capacity_kib),
+        'total_pool_usage_percent': total_usage_percent,
         'error_message': '; '.join(errors) if errors else None,
     })
 
