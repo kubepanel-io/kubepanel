@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    PhpImage, Package, UserProfile, LogEntry, MailUser, MailAlias,
+    Package, UserProfile, LogEntry, MailUser, MailAlias,
     ClusterIP, Domain, DomainAlias, DNSRecord, DNSZone, CloudflareAPIToken,
     WorkloadType, WorkloadVersion
 )
@@ -79,4 +79,3 @@ admin.site.register(MailAlias)
 admin.site.register(LogEntry)
 admin.site.register(Package)
 admin.site.register(UserProfile)
-admin.site.register(PhpImage)  # DEPRECATED: Keep for migration compatibility

@@ -38,15 +38,6 @@ def create_user_profile(sender, instance, created, **kwargs):
 def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
 
-class PhpImage(models.Model):
-    """DEPRECATED: Use WorkloadVersion instead. Kept for migration compatibility."""
-    version = models.CharField(max_length=50, unique=True)
-    repository_url = models.CharField(max_length=255)
-
-    def __str__(self):
-        return self.repository_url
-
-
 class WorkloadType(models.Model):
     """
     Admin-configurable workload types (PHP, Python, Node.js, Django, etc.)
@@ -256,19 +247,7 @@ class Domain(models.Model):
         WorkloadVersion,
         on_delete=models.PROTECT,
         related_name='domains',
-        null=True,  # Nullable during migration, will be made required later
-        blank=True,
         help_text="Workload type and version for this domain"
-    )
-
-    # DEPRECATED: Keep for migration compatibility
-    php_image = models.ForeignKey(
-        PhpImage,
-        on_delete=models.PROTECT,
-        related_name='domains',
-        null=True,  # Made nullable for migration
-        blank=True,
-        help_text="DEPRECATED: Use workload_version instead"
     )
 
     # === Timestamps ===
@@ -312,12 +291,6 @@ class Domain(models.Model):
         if total_mem > pkg.max_memory:
             raise ValidationError({
                 'mem_limit': f"Total memory ({total_mem} MB) exceeds package limit ({pkg.max_memory} MB)."
-            })
-        
-        # Check workload version (or php_image during migration)
-        if self.workload_version_id is None and self.php_image_id is None:
-            raise ValidationError({
-                'workload_version': 'A workload type and version must be selected.'
             })
         
         # Check domain aliases limit

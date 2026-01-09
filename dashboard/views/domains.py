@@ -19,7 +19,7 @@ import base64
 import re
 import pymysql
 
-from dashboard.models import Domain, DomainAlias, DomainStorageUsage, PhpImage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry, WorkloadVersion, SystemSettings
+from dashboard.models import Domain, DomainAlias, DomainStorageUsage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry, WorkloadVersion, SystemSettings
 from dashboard.forms import DomainForm, DomainConfigForm, DomainAddForm, DomainAliasForm
 from dashboard.services.dkim import generate_dkim_keypair
 from dashboard.k8s import (
@@ -486,8 +486,8 @@ def view_domain(request, domain):
     View domain details with credentials fetched from Kubernetes.
 
     Uses two forms:
-    - DomainForm: Django-backed fields (cpu_limit, mem_limit, php_image)
-    - DomainConfigForm: CR-backed config (PHP/nginx settings from K8s)
+    - DomainForm: Django-backed fields (cpu_limit, mem_limit, workload_version)
+    - DomainConfigForm: CR-backed config (app/nginx settings from K8s)
     """
     try:
         if request.user.is_superuser:
@@ -670,8 +670,8 @@ def save_domain(request, domain):
     """
     Save domain settings.
 
-    - Django model fields (cpu_limit, mem_limit, php_image): saved to Django DB
-    - Config fields (PHP/nginx settings): saved directly to K8s Domain CR
+    - Django model fields (cpu_limit, mem_limit, workload_version): saved to Django DB
+    - Config fields (app/nginx settings): saved directly to K8s Domain CR
 
     The CR is the single source of truth for infrastructure configuration.
     """

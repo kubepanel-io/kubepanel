@@ -4,17 +4,11 @@ from django.contrib.auth.hashers import make_password
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from dashboard.models import (
-    PhpImage, Package, UserProfile, Domain, DomainAlias,
+    Package, UserProfile, Domain, DomainAlias,
     CloudflareAPIToken, DNSRecord, DNSZone, MailUser, MailAlias,
     WorkloadType, WorkloadVersion,
 )
 from passlib.hash import sha512_crypt
-
-
-# DEPRECATED: Keep for backward compatibility
-class PhpImageChoiceField(forms.ModelChoiceField):
-    def label_from_instance(self, obj):
-        return f"{obj.version}"
 
 
 class WorkloadVersionChoiceField(forms.ModelChoiceField):
