@@ -19,8 +19,11 @@ import os
 import re
 import logging
 import smtplib
+import socket
+import uuid
 from datetime import timedelta
 from email.mime.text import MIMEText
+from email.utils import formatdate, make_msgid
 
 from django.core.management.base import BaseCommand
 from django.conf import settings
@@ -525,13 +528,12 @@ class Command(BaseCommand):
             self.stdout.write(f"[Alerts] From address: {formatted_from}")
 
         # Send using internal SMTP (no auth needed - kubepanel pods are in trusted mynetworks)
-        import smtplib
-        from email.mime.text import MIMEText
-
         msg = MIMEText(body)
         msg['Subject'] = subject
         msg['From'] = formatted_from
         msg['To'] = ', '.join(recipient_emails)
+        msg['Date'] = formatdate(localtime=True)
+        msg['Message-ID'] = make_msgid(domain=kubepanel_domain)
 
         try:
             # Use headless service (smtp-internal) to bypass kube-proxy SNAT
@@ -1062,11 +1064,13 @@ class Command(BaseCommand):
         from_name = 'KubePanel'
         formatted_from = f'{from_name} <{from_email}>'
 
-        # Build email
+        # Build email with proper headers to avoid spam filters
         msg = MIMEText(body)
         msg['Subject'] = subject
         msg['From'] = formatted_from
         msg['To'] = owner.email
+        msg['Date'] = formatdate(localtime=True)
+        msg['Message-ID'] = make_msgid(domain=kubepanel_domain)
 
         try:
             # Send via internal SMTP
