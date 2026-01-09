@@ -282,17 +282,10 @@ class DomainConfigForm(forms.Form):
 class DomainAddForm(forms.ModelForm):
     """Form for creating a new domain with workload selection."""
 
-    workload_type = forms.ModelChoiceField(
-        queryset=WorkloadType.objects.filter(is_active=True).order_by('display_order', 'name'),
-        widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_workload_type'}),
-        label='Workload Type',
-        required=True,
-    )
-
     workload_version = WorkloadVersionChoiceField(
         queryset=WorkloadVersion.objects.filter(is_active=True).select_related('workload_type'),
         widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_workload_version'}),
-        label='Version',
+        label='Workload Version',
         required=True,
     )
 
@@ -322,10 +315,9 @@ class DomainAddForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Set default workload type if there's one with a default version
+        # Set default workload version if there's one marked as default
         default_version = WorkloadVersion.objects.filter(is_default=True, is_active=True).first()
         if default_version:
-            self.fields['workload_type'].initial = default_version.workload_type
             self.fields['workload_version'].initial = default_version
 
 class APITokenForm(forms.ModelForm):
