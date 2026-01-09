@@ -42,6 +42,7 @@ urlpatterns = [
     path('tokens/list/', views.list_api_tokens, name='list_api_tokens'),
     path('tokens/<int:token_id>/delete/', views.delete_api_token, name='delete_api_token'),  # Delete token
     # Domain-centric DNS management routes
+    path('domains/<str:domain>/enable-dns/', views.enable_dns, name='enable_dns'),
     path('domains/<str:domain>/dns/', views.domain_dns_records, name='domain_dns_records'),
     path('domains/<str:domain>/dns/add/', views.add_domain_dns_record, name='add_domain_dns_record'),
     path('domains/<str:domain>/dns/<int:record_index>/edit/', views.edit_domain_dns_record, name='edit_domain_dns_record'),

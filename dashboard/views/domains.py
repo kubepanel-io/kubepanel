@@ -63,6 +63,89 @@ def _sanitize_k8s_name(name: str) -> str:
     return sanitized.strip('-')
 
 
+def _build_dns_records(domain_name: str, cluster_ips: list, dkim_selector: str = None, dkim_dns_record: str = None) -> list:
+    """
+    Build standard DNS records for a domain.
+
+    Creates A, MX, SPF, DMARC, and optionally DKIM records.
+
+    Args:
+        domain_name: The domain name (e.g., 'example.com')
+        cluster_ips: List of cluster IP addresses
+        dkim_selector: DKIM selector (e.g., 'default')
+        dkim_dns_record: DKIM public key DNS record value
+
+    Returns:
+        List of DNS record dicts
+    """
+    dns_records = []
+
+    # A records for root and www
+    for ip in cluster_ips:
+        dns_records.append({
+            'type': 'A',
+            'name': '@',
+            'content': ip,
+            'ttl': 1,
+            'proxied': False,
+        })
+        dns_records.append({
+            'type': 'A',
+            'name': 'www',
+            'content': ip,
+            'ttl': 1,
+            'proxied': False,
+        })
+
+    # MX records
+    for i, ip in enumerate(cluster_ips):
+        mx_hostname = f'mx{i}'
+        # A record for mail server
+        dns_records.append({
+            'type': 'A',
+            'name': mx_hostname,
+            'content': ip,
+            'ttl': 1,
+            'proxied': False,
+        })
+        # MX record pointing to mx hostname
+        dns_records.append({
+            'type': 'MX',
+            'name': '@',
+            'content': f'{mx_hostname}.{domain_name}',
+            'ttl': 1,
+            'priority': i * 10,
+        })
+
+    # SPF record
+    spf_ips = ' '.join(f'ip4:{ip}' for ip in cluster_ips)
+    dns_records.append({
+        'type': 'TXT',
+        'name': '@',
+        'content': f'v=spf1 {spf_ips} -all',
+        'ttl': 1,
+    })
+
+    # DMARC record
+    dns_records.append({
+        'type': 'TXT',
+        'name': '_dmarc',
+        'content': 'v=DMARC1; p=none;',
+        'ttl': 1,
+    })
+
+    # DKIM record
+    if dkim_selector and dkim_dns_record:
+        dns_records.append({
+            'type': 'TXT',
+            'name': f'{dkim_selector}._domainkey',
+            'content': dkim_dns_record,
+            'ttl': 1,
+        })
+
+    return dns_records
+
+
 @login_required(login_url="/dashboard/")
 def kpmain(request):
     """Main dashboard view"""
@@ -345,71 +428,13 @@ def add_domain(request):
                             # Get cluster IPs for A records
                             cluster_ips = list(ClusterIP.objects.values_list('ip_address', flat=True))
 
-                            # Build DNS records
-                            dns_records = []
-
-                            # A records for root and www
-                            for ip in cluster_ips:
-                                dns_records.append({
-                                    'type': 'A',
-                                    'name': '@',
-                                    'content': ip,
-                                    'ttl': 1,
-                                    'proxied': False,
-                                })
-                                dns_records.append({
-                                    'type': 'A',
-                                    'name': 'www',
-                                    'content': ip,
-                                    'ttl': 1,
-                                    'proxied': False,
-                                })
-
-                            # MX records
-                            for i, ip in enumerate(cluster_ips):
-                                mx_hostname = f'mx{i}'
-                                # A record for mail server
-                                dns_records.append({
-                                    'type': 'A',
-                                    'name': mx_hostname,
-                                    'content': ip,
-                                    'ttl': 1,
-                                    'proxied': False,
-                                })
-                                # MX record pointing to mx hostname
-                                dns_records.append({
-                                    'type': 'MX',
-                                    'name': '@',
-                                    'content': f'{mx_hostname}.{domain_name}',
-                                    'ttl': 1,
-                                    'priority': i * 10,
-                                })
-
-                            # SPF record
-                            spf_ips = ' '.join(f'ip4:{ip}' for ip in cluster_ips)
-                            dns_records.append({
-                                'type': 'TXT',
-                                'name': '@',
-                                'content': f'v=spf1 {spf_ips} -all',
-                                'ttl': 1,
-                            })
-
-                            # DMARC record
-                            dns_records.append({
-                                'type': 'TXT',
-                                'name': '_dmarc',
-                                'content': 'v=DMARC1; p=none;',
-                                'ttl': 1,
-                            })
-
-                            # DKIM record
-                            if dkim_dns_record:
-                                dns_records.append({
-                                    'type': 'TXT',
-                                    'name': f'{dkim_selector}._domainkey',
-                                    'content': dkim_dns_record,
-                                    'ttl': 1,
-                                })
+                            # Build DNS records using helper function
+                            dns_records = _build_dns_records(
+                                domain_name=domain_name,
+                                cluster_ips=cluster_ips,
+                                dkim_selector=dkim_selector,
+                                dkim_dns_record=dkim_dns_record,
+                            )
 
                             # Create DNSZone CR
                             create_dnszone(
@@ -653,6 +678,9 @@ def view_domain(request, domain):
     # Get TLS certificate info
     certificate_info = get_tls_certificate_info(domain, domain_model.namespace)
 
+    # Get user's CloudFlare API tokens for DNS enable form
+    api_tokens = CloudflareAPIToken.objects.filter(user=request.user)
+
     return render(request, "main/view_domain.html", {
         "domain": domain_model,
         "form": form,
@@ -662,6 +690,7 @@ def view_domain(request, domain):
         "storage": storage_info,
         "external_storage": external_storage,
         "certificate": certificate_info,
+        "api_tokens": api_tokens,
     })
 
 
@@ -837,6 +866,147 @@ def delete_domain(request, domain):
     return render(request, "main/delete_domain_confirm.html", {
         "domain": domain_model,
     })
+
+
+@login_required(login_url="/dashboard/")
+def enable_dns(request, domain):
+    """Enable DNS management for an existing domain."""
+    from kubernetes.client import V1Secret, V1ObjectMeta
+    from kubernetes.client.rest import ApiException as K8sApiException
+    from dashboard.k8s.client import get_core_api
+
+    if request.method != 'POST':
+        return redirect('view_domain', domain=domain)
+
+    # Get domain model (check ownership or superuser)
+    try:
+        if request.user.is_superuser:
+            domain_model = Domain.objects.get(domain_name=domain)
+        else:
+            domain_model = Domain.objects.get(domain_name=domain, owner=request.user)
+    except Domain.DoesNotExist:
+        messages.error(request, f"Domain '{domain}' not found.")
+        return redirect('kpmain')
+
+    # Check if DNS is already enabled
+    if dnszone_exists(domain):
+        messages.warning(request, "DNS management is already enabled for this domain.")
+        return redirect('view_domain', domain=domain)
+
+    # Get selected CloudFlare token
+    api_token_id = request.POST.get('api_token')
+    if not api_token_id:
+        messages.error(request, "Please select a CloudFlare API token.")
+        return redirect('view_domain', domain=domain)
+
+    try:
+        cf_token = CloudflareAPIToken.objects.get(pk=int(api_token_id), user=request.user)
+    except (CloudflareAPIToken.DoesNotExist, ValueError):
+        messages.error(request, "Invalid CloudFlare API token selected.")
+        return redirect('view_domain', domain=domain)
+
+    # Check if auto_records checkbox is checked
+    auto_records = request.POST.get('auto_records') == '1'
+
+    # Create/update K8s secret for CF token
+    cf_credential_secret_name = f"cf-token-{cf_token.pk}"
+    try:
+        core_api = get_core_api()
+        cf_secret = V1Secret(
+            api_version="v1",
+            kind="Secret",
+            metadata=V1ObjectMeta(
+                name=cf_credential_secret_name,
+                namespace="kubepanel",
+                labels={
+                    "app.kubernetes.io/managed-by": "kubepanel",
+                    "kubepanel.io/type": "cloudflare-credential",
+                }
+            ),
+            type="Opaque",
+            string_data={
+                "api_token": cf_token.api_token,
+            }
+        )
+        try:
+            core_api.create_namespaced_secret(namespace="kubepanel", body=cf_secret)
+            logger.info(f"Created CloudFlare credential secret '{cf_credential_secret_name}'")
+        except K8sApiException as e:
+            if e.status == 409:
+                # Secret already exists, update it
+                core_api.replace_namespaced_secret(
+                    name=cf_credential_secret_name,
+                    namespace="kubepanel",
+                    body=cf_secret
+                )
+                logger.info(f"Updated CloudFlare credential secret '{cf_credential_secret_name}'")
+            else:
+                raise
+    except Exception as e:
+        logger.error(f"Failed to create CF credential secret: {e}")
+        messages.error(request, f"Failed to create CloudFlare credential: {str(e)}")
+        return redirect('view_domain', domain=domain)
+
+    # Build DNS records if auto_records is checked
+    dns_records = []
+    if auto_records:
+        cluster_ips = list(ClusterIP.objects.values_list('ip_address', flat=True))
+
+        # Try to get DKIM record from existing secret
+        dkim_selector = "default"
+        dkim_dns_record = None
+        dkim_secret_name = f"dkim-{_sanitize_k8s_name(domain)}"
+        try:
+            dkim_dns_record = get_secret_value(
+                name=dkim_secret_name,
+                namespace="kubepanel",
+                key="dns-txt-record"
+            )
+            logger.info(f"Found existing DKIM record for '{domain}'")
+        except Exception as e:
+            logger.warning(f"Could not get DKIM record for '{domain}': {e}")
+            dkim_selector = None
+
+        dns_records = _build_dns_records(
+            domain_name=domain,
+            cluster_ips=cluster_ips,
+            dkim_selector=dkim_selector,
+            dkim_dns_record=dkim_dns_record,
+        )
+
+    # Create DNSZone CR
+    try:
+        create_dnszone(
+            zone_name=domain,
+            credential_secret_ref={
+                'name': cf_credential_secret_name,
+                'namespace': 'kubepanel',
+            },
+            records=dns_records,
+        )
+        logger.info(f"Created DNSZone CR for '{domain}' with {len(dns_records)} records")
+
+        LogEntry.objects.create(
+            content_object=domain_model,
+            actor=f"user:{request.user.username}",
+            user=request.user,
+            level="INFO",
+            message=f"Enabled DNS management for {domain}",
+            data={
+                "auto_records": auto_records,
+                "record_count": len(dns_records),
+            }
+        )
+
+        if auto_records:
+            messages.success(request, f"DNS management enabled with {len(dns_records)} default records.")
+        else:
+            messages.success(request, "DNS management enabled. Add records manually via Manage Records.")
+    except K8sClientError as e:
+        logger.error(f"Failed to create DNSZone CR: {e}")
+        messages.error(request, f"Failed to enable DNS management: {str(e)}")
+
+    return redirect('view_domain', domain=domain)
 
 
 @login_required(login_url="/dashboard/")
