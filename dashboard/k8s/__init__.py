@@ -41,6 +41,8 @@ from .secrets import (
     update_sftp_password,
     update_database_password,
     create_dkim_secret,
+    get_tls_certificate_info,
+    CertificateInfo,
 )
 
 from .backup import (
@@ -196,6 +198,8 @@ __all__ = [
     'update_sftp_password',
     'update_database_password',
     'create_dkim_secret',
+    'get_tls_certificate_info',
+    'CertificateInfo',
 
     # Backup operations
     'Backup',

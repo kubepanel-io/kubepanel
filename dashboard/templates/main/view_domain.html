@@ -587,6 +587,152 @@
             </div>
             {% endif %}
 
+            <!-- TLS Certificate Status -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">HTTPS Certificate</h3>
+                        {% if certificate.status == 'valid' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                            Valid
+                        </span>
+                        {% elif certificate.status == 'expiring_soon' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
+                            Expiring Soon
+                        </span>
+                        {% elif certificate.status == 'expired' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                            Expired
+                        </span>
+                        {% elif certificate.status == 'not_found' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                            Pending
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                            Unknown
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="p-6">
+                    {% if certificate.exists %}
+                    <div class="space-y-4">
+                        <!-- Status Message -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 {% if certificate.status == 'valid' %}bg-green-100{% elif certificate.status == 'expiring_soon' %}bg-yellow-100{% else %}bg-red-100{% endif %} rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 {% if certificate.status == 'valid' %}text-green-600{% elif certificate.status == 'expiring_soon' %}text-yellow-600{% else %}text-red-600{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Status</p>
+                                    <p class="text-xs text-gray-500">Certificate health</p>
+                                </div>
+                            </div>
+                            <span class="text-sm {% if certificate.status == 'valid' %}text-green-700{% elif certificate.status == 'expiring_soon' %}text-yellow-700{% else %}text-red-700{% endif %} font-medium">
+                                {{ certificate.status_message }}
+                            </span>
+                        </div>
+
+                        <!-- Expiry Date -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Expires</p>
+                                    <p class="text-xs text-gray-500">Certificate expiry date</p>
+                                </div>
+                            </div>
+                            <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ certificate.not_after|date:"Y-m-d H:i" }} UTC</code>
+                        </div>
+
+                        <!-- Issuer -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Issuer</p>
+                                    <p class="text-xs text-gray-500">Certificate authority</p>
+                                </div>
+                            </div>
+                            <span class="text-sm text-gray-700 truncate max-w-xs" title="{{ certificate.issuer }}">
+                                {% if 'Let' in certificate.issuer %}
+                                    Let's Encrypt
+                                {% else %}
+                                    {{ certificate.issuer|truncatechars:40 }}
+                                {% endif %}
+                            </span>
+                        </div>
+
+                        <!-- Valid From -->
+                        <div class="flex items-center justify-between py-3">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Valid From</p>
+                                    <p class="text-xs text-gray-500">Certificate start date</p>
+                                </div>
+                            </div>
+                            <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ certificate.not_before|date:"Y-m-d H:i" }} UTC</code>
+                        </div>
+                    </div>
+
+                    {% if certificate.status == 'expiring_soon' and certificate.days_until_expiry <= 7 %}
+                    <div class="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                            <span class="text-sm text-yellow-700 font-medium">Certificate renewal is imminent. cert-manager should renew it automatically.</span>
+                        </div>
+                    </div>
+                    {% elif certificate.status == 'expired' %}
+                    <div class="mt-4 p-3 bg-red-50 rounded-lg border border-red-200">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                            <span class="text-sm text-red-700 font-medium">Certificate has expired! Check cert-manager logs for renewal issues.</span>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% else %}
+                    <div class="text-center py-8">
+                        <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                            </svg>
+                        </div>
+                        <p class="text-gray-500 text-sm">{{ certificate.status_message }}</p>
+                        {% if certificate.error %}
+                        <p class="text-gray-400 text-xs mt-1">{{ certificate.error }}</p>
+                        {% endif %}
+                        <p class="text-gray-400 text-xs mt-2">cert-manager will provision the certificate automatically.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
             <!-- Domain WAF -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-200">
                 <div class="px-6 py-4 border-b border-gray-200">

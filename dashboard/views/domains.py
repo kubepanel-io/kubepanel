@@ -34,6 +34,7 @@ from dashboard.k8s import (
     get_sftp_password,
     get_database_password,
     get_secret_value,
+    get_tls_certificate_info,
     update_sftp_password as k8s_update_sftp_password,
     update_database_password as k8s_update_database_password,
     create_dkim_secret,
@@ -649,6 +650,9 @@ def view_domain(request, domain):
     except Exception as e:
         logger.warning(f"Failed to get external storage for {domain}: {e}")
 
+    # Get TLS certificate info
+    certificate_info = get_tls_certificate_info(domain, domain_model.namespace)
+
     return render(request, "main/view_domain.html", {
         "domain": domain_model,
         "form": form,
@@ -657,6 +661,7 @@ def view_domain(request, domain):
         "k8s": k8s_credentials,
         "storage": storage_info,
         "external_storage": external_storage,
+        "certificate": certificate_info,
     })
 
 

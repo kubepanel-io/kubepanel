@@ -11,6 +11,8 @@ import base64
 import logging
 import legacycrypt as crypt
 from typing import Optional
+from datetime import datetime, timezone
+from dataclasses import dataclass
 
 from .client import get_core_api, handle_api_exception
 
@@ -290,3 +292,116 @@ def create_dkim_secret(
             )
         else:
             handle_api_exception(e, f"Secret '{namespace}/{name}'")
+
+
+@dataclass
+class CertificateInfo:
+    """Information about a TLS certificate."""
+    exists: bool = False
+    subject: Optional[str] = None
+    issuer: Optional[str] = None
+    not_before: Optional[datetime] = None
+    not_after: Optional[datetime] = None
+    days_until_expiry: Optional[int] = None
+    serial_number: Optional[str] = None
+    status: str = 'unknown'  # valid, expiring_soon, expired, not_yet_valid, not_found, error
+    status_message: str = ''
+    error: Optional[str] = None
+
+
+def get_tls_certificate_info(domain_name: str, namespace: str) -> CertificateInfo:
+    """
+    Get TLS certificate information from Kubernetes secret.
+
+    Args:
+        domain_name: The domain name (e.g., 'example.com')
+        namespace: The domain namespace (e.g., 'dom-example-com')
+
+    Returns:
+        CertificateInfo with certificate details
+    """
+    # TLS secret name follows pattern: example-com-tls (domain with dots replaced by dashes)
+    secret_name = domain_name.replace('.', '-') + '-tls'
+
+    try:
+        # Get the certificate PEM from the secret
+        cert_pem = get_secret_value(
+            name=secret_name,
+            namespace=namespace,
+            key='tls.crt'
+        )
+
+        if not cert_pem:
+            return CertificateInfo(
+                exists=False,
+                status='not_found',
+                status_message='Certificate not found or not yet provisioned'
+            )
+
+        # Parse the certificate using cryptography library
+        try:
+            from cryptography import x509
+            from cryptography.hazmat.backends import default_backend
+        except ImportError:
+            return CertificateInfo(
+                exists=True,
+                status='error',
+                status_message='cryptography library not available',
+                error='cryptography library not installed'
+            )
+
+        # Load the certificate
+        cert = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
+
+        # Extract subject and issuer
+        subject = cert.subject.rfc4514_string()
+        issuer = cert.issuer.rfc4514_string()
+
+        # Get validity dates
+        not_before = cert.not_valid_before_utc
+        not_after = cert.not_valid_after_utc
+
+        # Calculate days until expiry
+        now = datetime.now(timezone.utc)
+        days_until_expiry = (not_after - now).days
+
+        # Determine status
+        if now < not_before:
+            status = 'not_yet_valid'
+            status_message = f'Certificate not yet valid (starts {not_before.strftime("%Y-%m-%d")})'
+        elif now > not_after:
+            status = 'expired'
+            status_message = f'Certificate expired on {not_after.strftime("%Y-%m-%d")}'
+        elif days_until_expiry <= 7:
+            status = 'expiring_soon'
+            status_message = f'Certificate expires in {days_until_expiry} days!'
+        elif days_until_expiry <= 30:
+            status = 'expiring_soon'
+            status_message = f'Certificate expires in {days_until_expiry} days'
+        else:
+            status = 'valid'
+            status_message = f'Certificate valid for {days_until_expiry} days'
+
+        # Get serial number (as hex string)
+        serial_hex = format(cert.serial_number, 'x').upper()
+
+        return CertificateInfo(
+            exists=True,
+            subject=subject,
+            issuer=issuer,
+            not_before=not_before,
+            not_after=not_after,
+            days_until_expiry=days_until_expiry,
+            serial_number=serial_hex,
+            status=status,
+            status_message=status_message
+        )
+
+    except Exception as e:
+        logger.warning(f"Failed to get TLS certificate for {domain_name}: {e}")
+        return CertificateInfo(
+            exists=False,
+            status='error',
+            status_message='Failed to retrieve certificate',
+            error=str(e)
+        )
