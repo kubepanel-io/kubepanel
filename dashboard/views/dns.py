@@ -543,6 +543,7 @@ def domain_dns_records(request, domain):
         zone = {
             'id': dnszone.status.zone_id,
             'name': dnszone.zone_name,
+            'nameservers': dnszone.status.nameservers,
         }
         dns_enabled = True
         dns_phase = dnszone.status.phase

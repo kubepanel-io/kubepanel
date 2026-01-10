@@ -84,6 +84,11 @@ class DNSZoneStatus:
     def last_synced_at(self) -> Optional[str]:
         return self._raw.get("lastSyncedAt")
 
+    @property
+    def nameservers(self) -> list[str]:
+        """Authoritative nameservers from CloudFlare."""
+        return self._raw.get("nameservers", [])
+
 
 class DNSZone:
     """
