@@ -148,6 +148,7 @@ from .domain_waf import (
     domain_waf_add_country,
     domain_waf_remove_country,
     domain_waf_add_protected_path,
+    domain_waf_edit_protected_path,
     domain_waf_delete_protected_path,
 )
 
@@ -321,6 +322,7 @@ __all__ = [
     'domain_waf_add_country',
     'domain_waf_remove_country',
     'domain_waf_add_protected_path',
+    'domain_waf_edit_protected_path',
     'domain_waf_delete_protected_path',
 
     # Metrics

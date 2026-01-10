@@ -22,6 +22,8 @@ from dashboard.k8s import (
     delete_domain_waf_rule,
     get_domain_waf_rule,
     add_domain_protected_path,
+    get_domain_protected_path,
+    update_domain_protected_path,
     delete_domain_protected_path,
     K8sClientError,
     K8sNotFoundError,
@@ -568,3 +570,100 @@ def domain_waf_delete_protected_path(request, domain, path_index):
         messages.error(request, f"Failed to delete protected path: {e}")
 
     return redirect('domain_waf_list', domain=domain)
+
+
+@login_required
+def domain_waf_edit_protected_path(request, domain, path_index):
+    """
+    Edit a protected path.
+    """
+    domain_obj = get_object_or_404(Domain, domain_name=domain)
+
+    access_denied = _check_domain_access(request.user, domain_obj)
+    if access_denied:
+        return access_denied
+
+    # Get country list for dropdowns
+    countries = get_countries_list()
+
+    try:
+        existing_path = get_domain_protected_path(domain_obj.namespace, path_index)
+        if existing_path is None:
+            messages.error(request, f"Protected path at index {path_index} not found.")
+            return redirect('domain_waf_list', domain=domain)
+    except K8sClientError as e:
+        logger.error(f"Failed to get protected path for {domain}: {e}")
+        messages.error(request, f"Failed to load protected path: {e}")
+        return redirect('domain_waf_list', domain=domain)
+
+    if request.method == 'POST':
+        # Build protected path from form data
+        path = request.POST.get('path', '').strip()
+        if not path:
+            messages.error(request, "Path is required.")
+            return render(request, 'main/domain_waf_edit_path.html', {
+                'domain': domain_obj,
+                'path_index': path_index,
+                'protected_path': existing_path,
+                'countries': countries,
+            })
+
+        path_match_type = request.POST.get('pathMatchType', 'prefix')
+        if path_match_type not in ('exact', 'prefix', 'regex'):
+            path_match_type = 'prefix'
+
+        allow_type = request.POST.get('allow_type', 'ip')
+        comment = request.POST.get('comment', '').strip()
+
+        protected_path = {
+            'path': path,
+            'pathMatchType': path_match_type,
+        }
+
+        if allow_type == 'ip':
+            allowed_ip = request.POST.get('allowedIp', '').strip()
+            if not allowed_ip:
+                messages.error(request, "IP address is required when using IP allowlist.")
+                return render(request, 'main/domain_waf_edit_path.html', {
+                    'domain': domain_obj,
+                    'path_index': path_index,
+                    'protected_path': existing_path,
+                    'countries': countries,
+                })
+            protected_path['allowedIp'] = allowed_ip
+        else:
+            allowed_countries = request.POST.getlist('allowedCountries')
+            if not allowed_countries:
+                messages.error(request, "At least one country is required when using country allowlist.")
+                return render(request, 'main/domain_waf_edit_path.html', {
+                    'domain': domain_obj,
+                    'path_index': path_index,
+                    'protected_path': existing_path,
+                    'countries': countries,
+                })
+            protected_path['allowedCountries'] = [c.strip().upper() for c in allowed_countries if c.strip()]
+
+        if comment:
+            protected_path['comment'] = comment
+
+        try:
+            update_domain_protected_path(domain_obj.namespace, path_index, protected_path)
+            messages.success(request, f"Protected path '{path}' updated successfully.")
+            return redirect('domain_waf_list', domain=domain)
+        except K8sClientError as e:
+            logger.error(f"Failed to update protected path for {domain}: {e}")
+            messages.error(request, f"Failed to update protected path: {e}")
+            return render(request, 'main/domain_waf_edit_path.html', {
+                'domain': domain_obj,
+                'path_index': path_index,
+                'protected_path': existing_path,
+                'countries': countries,
+            })
+
+    # GET - show form with existing protected path data
+    return render(request, 'main/domain_waf_edit_path.html', {
+        'domain': domain_obj,
+        'path_index': path_index,
+        'protected_path': existing_path,
+        'countries': countries,
+    })
