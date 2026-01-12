@@ -275,19 +275,28 @@ class DownloadBackupArchiveView(View):
     """
 
     def get(self, request, backup_name):
+        logger.info(f"Archive download requested for backup: {backup_name}")
+
         # Parse backup name to get namespace
         try:
             namespace = _get_namespace_from_backup_name(backup_name)
-        except ValueError:
+            logger.info(f"Parsed namespace: {namespace}")
+        except ValueError as e:
+            logger.error(f"Invalid backup name format: {backup_name} - {e}")
             return HttpResponseNotFound("Invalid backup name format")
 
         # Get backup from Kubernetes
         backup = get_backup(namespace, backup_name)
         if not backup:
+            logger.error(f"Backup {backup_name} not found in namespace {namespace}")
             return HttpResponseNotFound(f"Backup {backup_name} not found")
+
+        logger.info(f"Found backup: {backup.name}, phase: {backup.status.phase}")
+        logger.info(f"Backup status - volume_snapshot_name: {backup.status.volume_snapshot_name}, db_path: {backup.status.database_backup_path}")
 
         # Check if backup is completed
         if backup.status.phase != 'Completed':
+            logger.error(f"Backup {backup_name} is not completed, phase: {backup.status.phase}")
             return HttpResponseNotFound("Backup is not completed yet")
 
         # Check permissions
@@ -295,8 +304,10 @@ class DownloadBackupArchiveView(View):
         try:
             domain = Domain.objects.get(domain_name=domain_name)
             if not request.user.is_superuser and domain.owner != request.user:
+                logger.error(f"Permission denied for user {request.user} on domain {domain_name}")
                 raise PermissionDenied
         except Domain.DoesNotExist:
+            logger.error(f"Domain {domain_name} not found in database")
             raise PermissionDenied
 
         # Check if backup has required data
@@ -304,7 +315,8 @@ class DownloadBackupArchiveView(View):
         db_backup_path = backup.status.database_backup_path
 
         if not volume_snapshot_name:
-            return HttpResponseNotFound("Backup does not have a volume snapshot")
+            logger.error(f"Backup {backup_name} has no volume snapshot name. Status: {backup.status}")
+            return HttpResponseNotFound("Backup does not have a volume snapshot. This backup may have been created before snapshot support was added.")
 
         # Generate unique names for temporary resources
         unique_id = str(uuid.uuid4())[:8]
@@ -383,14 +395,25 @@ class DownloadBackupArchiveView(View):
 
         except TimeoutError as e:
             # Cleanup on error
+            logger.error(f"TimeoutError in archive download: {e}")
             _cleanup_job(namespace, job_name)
             _delete_temp_pvc(namespace, temp_pvc_name)
             return HttpResponseNotFound(str(e))
         except ApiException as e:
             # Cleanup on error
+            logger.error(f"ApiException in archive download: {e}")
             _cleanup_job(namespace, job_name)
             _delete_temp_pvc(namespace, temp_pvc_name)
             return HttpResponseNotFound(f"Kubernetes API error: {e.reason}")
+        except Exception as e:
+            # Catch-all for unexpected errors
+            logger.exception(f"Unexpected error in archive download for {backup_name}: {e}")
+            try:
+                _cleanup_job(namespace, job_name)
+                _delete_temp_pvc(namespace, temp_pvc_name)
+            except:
+                pass
+            return HttpResponseNotFound(f"Error: {e}")
 
 
 class DownloadBackupSqlView(View):
