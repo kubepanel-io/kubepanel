@@ -479,11 +479,16 @@ class DownloadBackupSqlView(View):
 
 
 # Function-based views for URL routing
+from django.contrib.auth.decorators import login_required
+
+
+@login_required
 def download_backup_archive(request, backup_name):
     """Download complete backup archive."""
     return DownloadBackupArchiveView.as_view()(request, backup_name=backup_name)
 
 
+@login_required
 def download_backup_sql(request, backup_name):
     """Download SQL dump only."""
     return DownloadBackupSqlView.as_view()(request, backup_name=backup_name)
