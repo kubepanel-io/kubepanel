@@ -53,7 +53,13 @@ def _create_temp_pvc_from_snapshot(
     pvc_name: str,
     storage_size: str = "10Gi"
 ) -> None:
-    """Create a temporary PVC from a VolumeSnapshot."""
+    """
+    Create a temporary PVC from a VolumeSnapshot.
+
+    Note: With WaitForFirstConsumer storage classes (like Linstor),
+    the PVC will stay Pending until a Pod mounts it. We don't wait
+    for binding here - the Job creation will trigger binding.
+    """
     _load_k8s_config()
     v1 = client.CoreV1Api()
 
@@ -84,18 +90,7 @@ def _create_temp_pvc_from_snapshot(
         namespace=namespace,
         body=pvc_body
     )
-
-    # Wait for PVC to be bound
-    for _ in range(60):  # 60 second timeout
-        pvc = v1.read_namespaced_persistent_volume_claim(
-            name=pvc_name,
-            namespace=namespace
-        )
-        if pvc.status.phase == "Bound":
-            return
-        time.sleep(1)
-
-    raise TimeoutError(f"PVC {pvc_name} did not bind within timeout")
+    logger.info(f"Created temp PVC {pvc_name} from snapshot {snapshot_name}")
 
 
 def _delete_temp_pvc(namespace: str, pvc_name: str) -> None:
@@ -124,6 +119,9 @@ def _create_download_job(
     Create a Job for downloading backup data.
 
     Returns the name of the pod created by the job.
+
+    Note: The job's pod will trigger PVC binding for WaitForFirstConsumer
+    storage classes. This may take extra time for snapshot restoration.
     """
     _load_k8s_config()
     batch_v1 = client.BatchV1Api()
@@ -166,10 +164,11 @@ def _create_download_job(
     }
 
     batch_v1.create_namespaced_job(namespace=namespace, body=job_body)
+    logger.info(f"Created download job {job_name}")
 
-    # Wait for pod to be running
+    # Wait for pod to be running (includes time for PVC binding with WaitForFirstConsumer)
     pod_name = None
-    for _ in range(120):  # 2 minute timeout
+    for i in range(180):  # 3 minute timeout (PVC binding + snapshot restore can be slow)
         pods = core_v1.list_namespaced_pod(
             namespace=namespace,
             label_selector=f"job-name={job_name}"
@@ -177,11 +176,18 @@ def _create_download_job(
         if pods:
             pod = pods[0]
             pod_name = pod.metadata.name
-            if pod.status.phase == "Running":
+            phase = pod.status.phase
+            if phase == "Running":
+                logger.info(f"Job pod {pod_name} is running")
                 return pod_name
+            elif phase == "Failed":
+                raise RuntimeError(f"Job pod {pod_name} failed")
+            # Log progress every 10 seconds
+            if i > 0 and i % 10 == 0:
+                logger.info(f"Waiting for job pod {pod_name}, phase: {phase}")
         time.sleep(1)
 
-    raise TimeoutError(f"Job pod did not start within timeout")
+    raise TimeoutError(f"Job pod did not start within timeout (3 minutes)")
 
 
 def _create_sql_download_job(
