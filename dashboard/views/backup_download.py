@@ -275,7 +275,7 @@ class DownloadBackupArchiveView(View):
     Download a complete backup as a portable tar.gz archive.
 
     The archive contains:
-    - www/ - Site files from /var/www
+    - html/ - Site files
     - database.sql - Decompressed MariaDB dump
     - manifest.json - Metadata about the backup
     """
@@ -359,15 +359,14 @@ class DownloadBackupArchiveView(View):
 
             # Build the tar command:
             # 1. Create manifest
-            # 2. Tar www directory from /data/var/www
+            # 2. Tar html directory from /data/html
             # 3. Include database.sql (decompressed from zstd)
             tar_cmd = f"""
                 cd /tmp && \
                 echo '{manifest_json}' > manifest.json && \
-                mkdir -p www && \
-                cp -a /data/var/www/. www/ 2>/dev/null || true && \
+                cp -a /data/html . 2>/dev/null || mkdir -p html && \
                 zstd -d {db_backup_path} -o database.sql 2>/dev/null || echo "" > database.sql && \
-                tar czf - manifest.json www database.sql
+                tar czf - manifest.json html database.sql
             """
 
             cmd = [
