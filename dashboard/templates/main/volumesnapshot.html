@@ -21,13 +21,22 @@
 {% endblock %}
 
 {% block header_actions %}
-<a href="{% url 'start_backup' domain %}"
-   class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
-    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-    </svg>
-    <span>Create Backup</span>
-</a>
+<div class="flex items-center space-x-3">
+    <a href="{% url 'upload_restore' domain %}"
+       class="bg-white/20 hover:bg-white/30 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 border border-white/30">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+        </svg>
+        <span>Upload Restore</span>
+    </a>
+    <a href="{% url 'start_backup' domain %}"
+       class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        <span>Create Backup</span>
+    </a>
+</div>
 {% endblock %}
 
 {% block content %}
@@ -211,6 +220,37 @@
                                class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
                                 Restore
                             </a>
+                            <!-- Download Dropdown -->
+                            <div class="relative inline-block download-dropdown">
+                                <button onclick="toggleDownloadMenu(this)"
+                                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors inline-flex items-center">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                    </svg>
+                                    Download
+                                    <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                                <div class="download-menu hidden absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                                    <a href="{% url 'download_backup_archive' backup.name %}"
+                                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                                        </svg>
+                                        Full Archive (.tar.gz)
+                                    </a>
+                                    {% if backup.status.database_backup_path %}
+                                    <a href="{% url 'download_backup_sql' backup.name %}"
+                                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                        </svg>
+                                        SQL Only (.sql.gz)
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
                             {% endif %}
                             <button class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
                                     onclick="toggleDetails({{ forloop.counter }})">
@@ -504,6 +544,28 @@ function toggleDetails(id) {
     var row = document.getElementById('details-' + id);
     row.style.display = (row.style.display === 'none') ? 'table-row' : 'none';
 }
+
+// Download menu toggle function
+function toggleDownloadMenu(button) {
+    // Close all other open menus first
+    document.querySelectorAll('.download-menu').forEach(menu => {
+        if (menu !== button.nextElementSibling) {
+            menu.classList.add('hidden');
+        }
+    });
+    // Toggle this menu
+    const menu = button.nextElementSibling;
+    menu.classList.toggle('hidden');
+}
+
+// Close download menus when clicking outside
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('.download-dropdown')) {
+        document.querySelectorAll('.download-menu').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }
+});
 
 // Details toggle function for restores
 function toggleRestoreDetails(id) {

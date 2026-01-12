@@ -3,8 +3,9 @@ import re
 from .views import (
     UserProfilePackageUpdateView, PackageListView, PackageCreateView, PackageUpdateView,
     UserProfileListView, UserProfileCreateView, UserProfileUpdateView,
-    UserCreateView, DownloadSnapshotView, DownloadSqlDumpView, UploadRestoreFilesView,
+    UserCreateView, UploadRestoreFilesView,
     system_settings, reset_user_password, delete_user,
+    download_backup_archive, download_backup_sql,
 )
 from dashboard.k8s import (
     DomainSpec,
@@ -87,9 +88,11 @@ urlpatterns = [
     path('profiles/<int:pk>/edit-package/',UserProfilePackageUpdateView.as_view(),name='edit_userprofile_package'),
     path('users/<int:pk>/reset-password/', reset_user_password, name='reset_user_password'),
     path('users/<int:pk>/delete/', delete_user, name='delete_user'),
-    path("download/<str:snapshot_name>/", DownloadSnapshotView.as_view(), name="download_snapshot"),
-    path("download/sql/<str:dump_name>/", DownloadSqlDumpView.as_view(), name="download_sql_dump"),
-    path('restore/upload/<str:domain_name>/',UploadRestoreFilesView.as_view(),name='upload_restore'),
+    # Backup download routes (portable formats)
+    path("backup/<str:backup_name>/download/archive/", download_backup_archive, name="download_backup_archive"),
+    path("backup/<str:backup_name>/download/sql/", download_backup_sql, name="download_backup_sql"),
+    # Upload restore route
+    path('domain/<str:domain_name>/upload-restore/', UploadRestoreFilesView.as_view(), name='upload_restore'),
     path('dns/record/<int:record_id>/delete/', views.delete_dns_record, name='delete_dns_record'),
     path('dns/bulk-delete/', views.bulk_delete_dns_records, name='bulk_delete_dns_records'),
     path('logs/', views_logging.system_logs, name='system_logs'),

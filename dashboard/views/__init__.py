@@ -98,12 +98,16 @@ from .admin import (
     UserProfileUpdateView,
     UserCreateView,
     UserProfilePackageUpdateView,
-    DownloadSnapshotView,
-    DownloadSqlDumpView,
     UploadRestoreFilesView,
     system_settings,
     reset_user_password,
     delete_user,
+)
+
+# Backup download views
+from .backup_download import (
+    download_backup_archive,
+    download_backup_sql,
 )
 
 # Security views
@@ -288,12 +292,14 @@ __all__ = [
     'UserProfileUpdateView',
     'UserCreateView',
     'UserProfilePackageUpdateView',
-    'DownloadSnapshotView',
-    'DownloadSqlDumpView',
     'UploadRestoreFilesView',
     'system_settings',
     'reset_user_password',
     'delete_user',
+
+    # Backup download views
+    'download_backup_archive',
+    'download_backup_sql',
 
     # Security
     'manage_ips',

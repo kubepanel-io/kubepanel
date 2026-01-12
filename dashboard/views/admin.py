@@ -1,27 +1,34 @@
 """
 Admin views for packages, user profiles, and CBVs
 """
-from django.shortcuts import get_object_or_404
-from django.http import StreamingHttpResponse, HttpResponseNotFound
+from django.shortcuts import get_object_or_404, render, redirect
+from django.http import HttpResponseNotFound
 from django.urls import reverse, reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, FormView, View
 from django.contrib.auth.models import User
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from kubernetes import client, config
-from kubernetes.stream import stream
 from kubernetes.client import ApiException
 
+import json
+import logging
 import os
+import tarfile
+import tempfile
 import time
-import subprocess
+import uuid
 
 from dashboard.models import Package, UserProfile, Domain, SystemSettings
 from dashboard.forms import UserProfilePackageForm, UserForm, PackageForm, UserProfileForm
-from dashboard.k8s import get_backup, K8sNotFoundError
+from dashboard.k8s import create_restore
 from .utils import SuperuserRequiredMixin
 
-UPLOAD_BASE_DIR = os.getenv('WATCHDOG_UPLOAD_ROOT', '/kubepanel/watchdog/uploads')
+logger = logging.getLogger(__name__)
+
+# Maximum upload size: 10GB
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024 * 1024
 
 
 class PackageListView(SuperuserRequiredMixin, ListView):
@@ -98,304 +105,230 @@ class UserProfilePackageUpdateView(SuperuserRequiredMixin, UpdateView):
         return ctx
 
 
-class DownloadSnapshotView(View):
-    def get(self, request, snapshot_name):
-        # Parse backup name to extract domain (format: domain-name-TIMESTAMP)
-        # e.g., example-com-20240115-020000 -> example-com
-        parts = snapshot_name.rsplit('-', 2)
-        if len(parts) < 3:
-            return HttpResponseNotFound("Invalid backup name format")
-
-        domain_slug = parts[0]  # e.g., example-com
-        namespace = f"dom-{domain_slug}"
-
-        # Get backup from Kubernetes
-        backup = get_backup(namespace, snapshot_name)
-        if not backup:
-            return HttpResponseNotFound(f"Backup {snapshot_name} not found")
-
-        # Check permissions
-        domain_name = backup.domain_name
-        try:
-            domain = Domain.objects.get(domain_name=domain_name)
-            if not request.user.is_superuser and domain.owner != request.user:
-                raise PermissionDenied
-        except Domain.DoesNotExist:
-            raise PermissionDenied
-
-        # Check if backup has a volume snapshot
-        volume_snapshot_name = backup.status.volume_snapshot_name
-        if not volume_snapshot_name:
-            return HttpResponseNotFound("Backup does not have a volume snapshot")
-
-        try:
-            config.load_incluster_config()
-        except config.ConfigException:
-            config.load_kube_config()
-
-        pod_name = None
-        lv_name = None
-        piraeus_namespace = "piraeus-datastore"
-        container = "linstor-satellite"
-        snap_namespace = domain_slug
-
-        co_api = client.CustomObjectsApi()
-        obj = co_api.get_namespaced_custom_object(
-            group="snapshot.storage.k8s.io",
-            version="v1",
-            namespace=namespace,  # Domain namespace (dom-example-com)
-            plural="volumesnapshots",
-            name=volume_snapshot_name,
-        )
-        content_name = obj["status"]["boundVolumeSnapshotContentName"]
-        snap_id = content_name.split('-', 1)[1]
-        v1 = client.CoreV1Api()
-        pods = v1.list_namespaced_pod(
-            piraeus_namespace,
-            label_selector="app.kubernetes.io/component=linstor-satellite"
-        ).items
-
-        for pod in pods:
-            name = pod.metadata.name
-            cmd_check = [
-                "sh", "-c",
-                f"lvs --noheadings -o lv_name linstorvg | grep {snap_id}"
-            ]
-            try:
-                out = stream(
-                    v1.connect_get_namespaced_pod_exec,
-                    name=name,
-                    namespace=piraeus_namespace,
-                    container=container,
-                    command=cmd_check,
-                    stderr=False, stdin=False, stdout=True, tty=False,
-                ).strip()
-            except ApiException:
-                continue
-            if out:
-                pod_name = name
-                lv_name = out
-                break
-
-        if not pod_name or not lv_name:
-            return HttpResponseNotFound(f"Volume snapshot {volume_snapshot_name} not found in storage")
-
-        cmd = [
-            "kubectl", "exec", "-i",
-            "-n", piraeus_namespace,
-            pod_name, "-c", container,
-            "--", "sh", "-c",
-            f"thin_send linstorvg/{lv_name} | zstd -3 -c"
-        ]
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        def stream_generator():
-            for chunk in iter(lambda: proc.stdout.read(64*1024), b""):
-                yield chunk
-            code = proc.wait()
-            if code != 0:
-                err = proc.stderr.read().decode(errors="ignore")
-                raise Exception(f"kubectl exec failed: {err}")
-
-        response = StreamingHttpResponse(stream_generator(), content_type="application/octet-stream")
-        response["Content-Disposition"] = f'attachment; filename="{snapshot_name}.lv.zst"'
-        return response
+def _load_k8s_config():
+    """Load Kubernetes configuration."""
+    try:
+        config.load_incluster_config()
+    except config.ConfigException:
+        config.load_kube_config()
 
 
-class DownloadSqlDumpView(View):
-    def get(self, request, dump_name):
-        # Parse backup name to extract domain (format: domain-name-TIMESTAMP)
-        parts = dump_name.rsplit('-', 2)
-        if len(parts) < 3:
-            return HttpResponseNotFound("Invalid backup name format")
+def _upload_archive_to_pvc(namespace: str, archive_path: str, dest_path: str) -> None:
+    """
+    Upload a tar.gz archive to the backup PVC in a domain namespace.
 
-        domain_slug = parts[0]
-        namespace = f"dom-{domain_slug}"
+    Creates a temporary job to copy the file to the PVC.
+    """
+    _load_k8s_config()
+    batch_v1 = client.BatchV1Api()
+    core_v1 = client.CoreV1Api()
 
-        # Get backup from Kubernetes
-        backup = get_backup(namespace, dump_name)
-        if not backup:
-            return HttpResponseNotFound(f"Backup {dump_name} not found")
+    unique_id = str(uuid.uuid4())[:8]
+    job_name = f"upload-restore-{unique_id}"
 
-        # Check permissions
-        domain_name = backup.domain_name
-        try:
-            domain = Domain.objects.get(domain_name=domain_name)
-            if not request.user.is_superuser and domain.owner != request.user:
-                raise PermissionDenied
-        except Domain.DoesNotExist:
-            raise PermissionDenied
-
-        # Check if backup has a database backup path
-        db_backup_path = backup.status.database_backup_path
-        if not db_backup_path:
-            return HttpResponseNotFound("Backup does not have a database backup")
-
-        try:
-            config.load_incluster_config()
-        except config.ConfigException:
-            config.load_kube_config()
-
-        # The backup PVC is in the domain namespace with name "backup"
-        pvc_name = "backup"
-        file_path = db_backup_path  # e.g., /backup/20240115-020000/database.mariabackup.zst
-
-        # The file_path is relative to /backup mount point, e.g., /backup/20240115/database.mariabackup.zst
-        # We need to mount the backup PVC and cat the file
-        job_body = {
-            "apiVersion": "batch/v1",
-            "kind": "Job",
-            "metadata": {"generateName": f"backup-downloader-{domain_slug}-"},
-            "spec": {
-                "ttlSecondsAfterFinished": 60,
-                "template": {
-                    "spec": {
-                        "restartPolicy": "Never",
-                        "volumes": [{
+    job_body = {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": job_name,
+            "namespace": namespace,
+        },
+        "spec": {
+            "ttlSecondsAfterFinished": 60,
+            "template": {
+                "spec": {
+                    "restartPolicy": "Never",
+                    "volumes": [
+                        {
                             "name": "backup-pvc",
-                            "persistentVolumeClaim": {"claimName": pvc_name}
-                        }],
-                        "containers": [{
-                            "name": "downloader",
-                            "image": "alpine:latest",
-                            "command": ["sh", "-c", "sleep 3600"],
-                            "volumeMounts": [{"mountPath": "/backup", "name": "backup-pvc"}]
-                        }]
-                    }
+                            "persistentVolumeClaim": {"claimName": "backup"}
+                        }
+                    ],
+                    "containers": [{
+                        "name": "uploader",
+                        "image": "alpine:latest",
+                        "command": ["sh", "-c", "sleep 3600"],
+                        "volumeMounts": [
+                            {"mountPath": "/backup", "name": "backup-pvc"}
+                        ]
+                    }]
                 }
             }
         }
+    }
 
-        batch_v1 = client.BatchV1Api()
-        core_v1 = client.CoreV1Api()
+    batch_v1.create_namespaced_job(namespace=namespace, body=job_body)
 
-        job = batch_v1.create_namespaced_job(namespace=namespace, body=job_body)
-        job_name = job.metadata.name
-
-        pod_name = None
-        for _ in range(60):
-            pods = core_v1.list_namespaced_pod(
-                namespace=namespace,
-                label_selector=f"job-name={job_name}"
-            ).items
-            if pods:
-                pod = pods[0]
-                pod_name = pod.metadata.name
-                if pod.status.phase == "Running":
-                    break
-            time.sleep(1)
-
-        if not pod_name:
-            batch_v1.delete_namespaced_job(
-                name=job_name,
-                namespace=namespace,
-                body=client.V1DeleteOptions(propagation_policy='Foreground')
-            )
-            return HttpResponseNotFound("Failed to start job pod")
-
-        cmd = ["cat", file_path]
-        exec_stream = stream(
-            core_v1.connect_get_namespaced_pod_exec,
-            name=pod_name,
+    # Wait for pod to be running
+    pod_name = None
+    for _ in range(120):
+        pods = core_v1.list_namespaced_pod(
             namespace=namespace,
-            container="downloader",
-            command=cmd,
-            stderr=True, stdin=False, stdout=True, tty=False,
-            _preload_content=False
+            label_selector=f"job-name={job_name}"
+        ).items
+        if pods:
+            pod = pods[0]
+            pod_name = pod.metadata.name
+            if pod.status.phase == "Running":
+                break
+        time.sleep(1)
+
+    if not pod_name:
+        batch_v1.delete_namespaced_job(
+            name=job_name,
+            namespace=namespace,
+            body=client.V1DeleteOptions(propagation_policy='Foreground')
         )
+        raise TimeoutError("Upload job pod did not start within timeout")
 
-        def generator():
-            try:
-                while exec_stream.is_open():
-                    exec_stream.update(timeout=1)
-                    chunk = exec_stream.read_stdout()
-                    if chunk:
-                        yield chunk
-            finally:
-                exec_stream.close()
-                batch_v1.delete_namespaced_job(
-                    name=job_name,
-                    namespace=namespace,
-                    body=client.V1DeleteOptions(propagation_policy='Foreground')
-                )
+    try:
+        # Create the destination directory
+        import subprocess
+        mkdir_cmd = [
+            "kubectl", "exec", "-n", namespace, pod_name, "-c", "uploader",
+            "--", "mkdir", "-p", os.path.dirname(dest_path)
+        ]
+        subprocess.run(mkdir_cmd, check=True, capture_output=True)
 
-        # Extract filename from the backup path for download
-        download_filename = f"{dump_name}.mariabackup.zst"
-        response = StreamingHttpResponse(generator(), content_type="application/octet-stream")
-        response["Content-Disposition"] = f'attachment; filename="{download_filename}"'
-        return response
+        # Copy the file to the pod
+        cp_cmd = [
+            "kubectl", "cp", archive_path,
+            f"{namespace}/{pod_name}:{dest_path}",
+            "-c", "uploader"
+        ]
+        subprocess.run(cp_cmd, check=True, capture_output=True)
+
+    finally:
+        batch_v1.delete_namespaced_job(
+            name=job_name,
+            namespace=namespace,
+            body=client.V1DeleteOptions(propagation_policy='Foreground')
+        )
 
 
 class UploadRestoreFilesView(View):
-    """Upload .lv.zst file and queue for restore"""
+    """
+    Upload a tar.gz backup archive and trigger restore.
+
+    Accepts portable tar.gz archives containing:
+    - www/ - Site files
+    - database.sql - MariaDB dump
+    - manifest.json - Backup metadata (optional)
+    """
 
     def get(self, request, domain_name):
         domain = get_object_or_404(Domain, domain_name=domain_name)
         if not request.user.is_superuser and domain.owner != request.user:
             raise PermissionDenied
-        return render(request, 'main/upload_snapshot.html', {
-            'domain_name': domain_name
+        return render(request, 'main/upload_restore.html', {
+            'domain': domain,
+            'max_upload_size_gb': MAX_UPLOAD_SIZE // (1024 * 1024 * 1024),
         })
 
     def post(self, request, domain_name):
-        from django.shortcuts import render, redirect
         domain = get_object_or_404(Domain, domain_name=domain_name)
         if not request.user.is_superuser and domain.owner != request.user:
             raise PermissionDenied
 
-        domain_name_dash = domain_name.replace(".", "-")
-        pvc_name = f"{domain_name_dash}-pvc"
+        archive_file = request.FILES.get('archive_file')
+        if not archive_file:
+            messages.error(request, 'No archive file provided.')
+            return redirect(reverse('upload_restore', args=[domain_name]))
 
-        try:
-            config.load_incluster_config()
-        except config.ConfigException:
-            config.load_kube_config()
-        v1 = client.CoreV1Api()
-        try:
-            pvc = v1.read_namespaced_persistent_volume_claim(
-                name=pvc_name,
-                namespace=domain_name_dash
+        # Validate file type
+        filename = archive_file.name
+        if not filename.endswith('.tar.gz') and not filename.endswith('.tgz'):
+            messages.error(request, 'Invalid file type. Please upload a .tar.gz file.')
+            return redirect(reverse('upload_restore', args=[domain_name]))
+
+        # Check file size
+        if archive_file.size > MAX_UPLOAD_SIZE:
+            messages.error(
+                request,
+                f'File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024*1024*1024)}GB.'
             )
-        except client.exceptions.ApiException:
-            messages.error(request, f"PVC {pvc_name} not found in namespace {domain_name}.")
             return redirect(reverse('upload_restore', args=[domain_name]))
 
-        pv_name = pvc.spec.volume_name
+        namespace = f"dom-{domain_name.replace('.', '-')}"
 
-        domain_dir = os.path.join(UPLOAD_BASE_DIR, domain_name)
-        os.makedirs(domain_dir, exist_ok=True)
+        # Save to temporary file and validate
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.tar.gz') as tmp:
+                for chunk in archive_file.chunks():
+                    tmp.write(chunk)
+                tmp_path = tmp.name
 
-        snapshot_file = request.FILES.get('snapshot_file')
-        if not snapshot_file:
-            messages.error(request, 'No snapshot file provided.')
+            # Validate the archive
+            try:
+                with tarfile.open(tmp_path, 'r:gz') as tar:
+                    members = tar.getnames()
+
+                    # Check for required content (at least one of www/ or database.sql)
+                    has_www = any(m.startswith('www/') or m == 'www' for m in members)
+                    has_db = 'database.sql' in members
+
+                    if not has_www and not has_db:
+                        messages.error(
+                            request,
+                            'Invalid archive: must contain www/ directory or database.sql file.'
+                        )
+                        os.unlink(tmp_path)
+                        return redirect(reverse('upload_restore', args=[domain_name]))
+
+            except tarfile.TarError as e:
+                messages.error(request, f'Invalid tar.gz archive: {e}')
+                os.unlink(tmp_path)
+                return redirect(reverse('upload_restore', args=[domain_name]))
+
+            # Generate unique restore name
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+            restore_name = f"uploaded-{timestamp}"
+            dest_path = f"/backup/uploaded/{restore_name}/archive.tar.gz"
+
+            # Upload to backup PVC
+            try:
+                _upload_archive_to_pvc(namespace, tmp_path, dest_path)
+            except TimeoutError as e:
+                messages.error(request, f'Failed to upload archive: {e}')
+                os.unlink(tmp_path)
+                return redirect(reverse('upload_restore', args=[domain_name]))
+            except Exception as e:
+                logger.exception(f"Failed to upload archive for {domain_name}")
+                messages.error(request, f'Failed to upload archive: {e}')
+                os.unlink(tmp_path)
+                return redirect(reverse('upload_restore', args=[domain_name]))
+
+            # Clean up temp file
+            os.unlink(tmp_path)
+
+            # Create Restore CR
+            try:
+                create_restore(
+                    namespace=namespace,
+                    domain_name=domain_name,
+                    backup_name=f"uploaded-{restore_name}",
+                    volume_snapshot_name=None,  # No snapshot for uploaded restores
+                    database_backup_path=dest_path,
+                    restore_type="uploaded",
+                    uploaded_archive_path=dest_path,
+                )
+                messages.success(
+                    request,
+                    'Archive uploaded successfully. Restore has been initiated.'
+                )
+            except Exception as e:
+                logger.exception(f"Failed to create Restore CR for {domain_name}")
+                messages.error(request, f'Failed to initiate restore: {e}')
+
+            return redirect(reverse('volumesnapshots', args=[domain_name]))
+
+        except Exception as e:
+            logger.exception(f"Upload restore failed for {domain_name}")
+            messages.error(request, f'Upload failed: {e}')
+            if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
             return redirect(reverse('upload_restore', args=[domain_name]))
-
-        filename = snapshot_file.name
-        if not filename.endswith('.lv.zst'):
-            messages.error(request, 'Invalid file type; must be .lv.zst')
-            return redirect(reverse('upload_restore', args=[domain_name]))
-
-        job_id = filename.rsplit('.', 2)[0]
-        job_dir = os.path.join(domain_dir, job_id)
-        os.makedirs(job_dir, exist_ok=True)
-
-        dest_path = os.path.join(job_dir, filename)
-        with open(dest_path, 'wb') as dest:
-            for chunk in snapshot_file.chunks():
-                dest.write(chunk)
-
-        ready_path = os.path.join(job_dir, 'READY')
-        with open(ready_path, 'w') as sem:
-            sem.write(pv_name)
-
-        messages.success(request, 'Snapshot uploaded and queued for restore.')
-        return redirect(reverse('upload_restore', args=[domain_name]))
-
-
-# Need to import render for UploadRestoreFilesView
-from django.shortcuts import render
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect
 
 
 @login_required

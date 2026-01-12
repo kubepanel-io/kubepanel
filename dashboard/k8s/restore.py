@@ -140,8 +140,10 @@ def create_restore(
     namespace: str,
     domain_name: str,
     backup_name: str,
-    volume_snapshot_name: str,
-    database_backup_path: str,
+    volume_snapshot_name: Optional[str],
+    database_backup_path: Optional[str],
+    restore_type: str = 'snapshot',
+    uploaded_archive_path: Optional[str] = None,
 ) -> Restore:
     """
     Create a new Restore CR.
@@ -150,8 +152,10 @@ def create_restore(
         namespace: Kubernetes namespace for the domain
         domain_name: Domain name (e.g., 'example.com')
         backup_name: Name of the Backup CR to restore from
-        volume_snapshot_name: Name of the VolumeSnapshot to restore
+        volume_snapshot_name: Name of the VolumeSnapshot to restore (for snapshot restores)
         database_backup_path: Path to the database dump file
+        restore_type: Type of restore - 'snapshot' (default) or 'uploaded'
+        uploaded_archive_path: Path to uploaded tar.gz archive (for uploaded restores)
 
     Returns:
         Created Restore object
@@ -180,10 +184,17 @@ def create_restore(
         'spec': {
             'domainName': domain_name,
             'backupName': backup_name,
-            'volumeSnapshotName': volume_snapshot_name,
-            'databaseBackupPath': database_backup_path,
+            'restoreType': restore_type,
         },
     }
+
+    # Add optional fields based on restore type
+    if volume_snapshot_name:
+        restore_cr['spec']['volumeSnapshotName'] = volume_snapshot_name
+    if database_backup_path:
+        restore_cr['spec']['databaseBackupPath'] = database_backup_path
+    if uploaded_archive_path:
+        restore_cr['spec']['uploadedArchivePath'] = uploaded_archive_path
 
     try:
         result = custom_api.create_namespaced_custom_object(
