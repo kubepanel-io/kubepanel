@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Upload Restore | KubePanel{% endblock %}
+
+{% block page_title %}Upload Restore{% endblock %}
+{% block page_subtitle %}{{ domain.domain_name }} - Restore from a backup archive{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'volumesnapshots' domain.domain_name %}"
+   class="bg-white/20 hover:bg-white/30 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 border border-white/30">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Backups</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <!-- Info Card -->
+    <div class="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6">
+        <div class="flex">
+            <svg class="w-6 h-6 text-blue-600 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div>
+                <h3 class="text-blue-800 font-medium mb-2">About Backup Archives</h3>
+                <p class="text-blue-700 text-sm">
+                    Upload a <code class="bg-blue-100 px-1 rounded">.tar.gz</code> backup archive to restore your domain.
+                    The archive should contain:
+                </p>
+                <ul class="text-blue-700 text-sm mt-2 list-disc list-inside">
+                    <li><code class="bg-blue-100 px-1 rounded">www/</code> - Your website files</li>
+                    <li><code class="bg-blue-100 px-1 rounded">database.sql</code> - Database dump</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Warning Card -->
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-6">
+        <div class="flex">
+            <svg class="w-6 h-6 text-amber-600 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div>
+                <h3 class="text-amber-800 font-medium mb-2">Warning</h3>
+                <p class="text-amber-700 text-sm">
+                    Restoring will <strong>replace</strong> your current website files and database.
+                    Make sure you have a backup of your current data before proceeding.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Form -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-medium text-gray-900">Upload Backup Archive</h2>
+            <p class="text-sm text-gray-500 mt-1">Maximum file size: {{ max_upload_size_gb }}GB</p>
+        </div>
+
+        <form method="post" enctype="multipart/form-data" id="upload-form">
+            {% csrf_token %}
+
+            <div class="p-6">
+                {% if messages %}
+                <div class="mb-6">
+                    {% for message in messages %}
+                    <div class="{% if message.tags == 'error' %}bg-red-50 border-red-200 text-red-700{% elif message.tags == 'success' %}bg-green-50 border-green-200 text-green-700{% else %}bg-blue-50 border-blue-200 text-blue-700{% endif %} px-4 py-3 rounded-lg border mb-2">
+                        <div class="flex">
+                            <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                {% if message.tags == 'error' %}
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                {% elif message.tags == 'success' %}
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                {% else %}
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                {% endif %}
+                            </svg>
+                            {{ message }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <!-- Drop Zone -->
+                <div class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
+                     id="drop-zone"
+                     onclick="document.getElementById('archive_file').click()">
+                    <input type="file"
+                           name="archive_file"
+                           id="archive_file"
+                           accept=".tar.gz,.tgz"
+                           class="hidden"
+                           onchange="handleFileSelect(this)">
+
+                    <div id="upload-placeholder">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <p class="mt-4 text-sm text-gray-600">
+                            <span class="font-medium text-blue-600">Click to upload</span> or drag and drop
+                        </p>
+                        <p class="mt-1 text-xs text-gray-500">.tar.gz or .tgz files only</p>
+                    </div>
+
+                    <div id="file-selected" class="hidden">
+                        <svg class="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                        </svg>
+                        <p class="mt-4 text-sm font-medium text-gray-900" id="file-name"></p>
+                        <p class="mt-1 text-xs text-gray-500" id="file-size"></p>
+                    </div>
+                </div>
+
+                <!-- Progress Bar (hidden initially) -->
+                <div id="upload-progress" class="mt-4 hidden">
+                    <div class="flex justify-between text-sm text-gray-600 mb-1">
+                        <span>Uploading...</span>
+                        <span id="progress-percent">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="progress-bar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+                <a href="{% url 'volumesnapshots' domain.domain_name %}"
+                   class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                    Cancel
+                </a>
+                <button type="submit"
+                        id="submit-btn"
+                        disabled
+                        class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    <span id="submit-text">Start Restore</span>
+                    <span id="submit-loading" class="hidden">
+                        <svg class="animate-spin h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        Uploading...
+                    </span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('archive_file');
+const submitBtn = document.getElementById('submit-btn');
+const uploadPlaceholder = document.getElementById('upload-placeholder');
+const fileSelected = document.getElementById('file-selected');
+const fileName = document.getElementById('file-name');
+const fileSize = document.getElementById('file-size');
+const maxSize = {{ max_upload_size_gb }} * 1024 * 1024 * 1024;
+
+// Drag and drop handlers
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, highlight, false);
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, unhighlight, false);
+});
+
+function highlight() {
+    dropZone.classList.add('border-blue-400', 'bg-blue-50');
+}
+
+function unhighlight() {
+    dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+}
+
+dropZone.addEventListener('drop', handleDrop, false);
+
+function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files.length > 0) {
+        fileInput.files = files;
+        handleFileSelect(fileInput);
+    }
+}
+
+function handleFileSelect(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.name.endsWith('.tar.gz') && !file.name.endsWith('.tgz')) {
+        alert('Please select a .tar.gz or .tgz file');
+        input.value = '';
+        return;
+    }
+
+    // Validate file size
+    if (file.size > maxSize) {
+        alert('File is too large. Maximum size is {{ max_upload_size_gb }}GB');
+        input.value = '';
+        return;
+    }
+
+    // Update UI
+    uploadPlaceholder.classList.add('hidden');
+    fileSelected.classList.remove('hidden');
+    fileName.textContent = file.name;
+    fileSize.textContent = formatBytes(file.size);
+    submitBtn.disabled = false;
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Form submission
+document.getElementById('upload-form').addEventListener('submit', function(e) {
+    const submitText = document.getElementById('submit-text');
+    const submitLoading = document.getElementById('submit-loading');
+    const uploadProgress = document.getElementById('upload-progress');
+
+    submitBtn.disabled = true;
+    submitText.classList.add('hidden');
+    submitLoading.classList.remove('hidden');
+    uploadProgress.classList.remove('hidden');
+
+    // Note: For actual progress tracking, you would need to use XMLHttpRequest or fetch with upload progress
+    // This is a simplified version that just shows the UI change
+});
+</script>
+{% endblock %}

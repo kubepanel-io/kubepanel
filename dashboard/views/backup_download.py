@@ -1,0 +1,489 @@
+"""
+Backup Download Views
+
+Provides portable backup downloads in tar.gz format.
+"""
+
+import json
+import logging
+import subprocess
+import time
+import uuid
+
+from django.http import StreamingHttpResponse, HttpResponseNotFound, JsonResponse
+from django.views import View
+from django.core.exceptions import PermissionDenied
+from kubernetes import client, config
+from kubernetes.client import ApiException
+
+from dashboard.models import Domain
+from dashboard.k8s import get_backup
+
+logger = logging.getLogger(__name__)
+
+# Storage class for temporary PVCs
+STORAGE_CLASS = 'linstor-sc'
+
+
+def _load_k8s_config():
+    """Load Kubernetes configuration."""
+    try:
+        config.load_incluster_config()
+    except config.ConfigException:
+        config.load_kube_config()
+
+
+def _get_namespace_from_backup_name(backup_name: str) -> str:
+    """
+    Extract namespace from backup name.
+
+    Backup name format: domain-name-YYYYMMDD-HHMMSS
+    e.g., example-com-20240115-020000 -> dom-example-com
+    """
+    parts = backup_name.rsplit('-', 2)
+    if len(parts) < 3:
+        raise ValueError(f"Invalid backup name format: {backup_name}")
+    domain_slug = parts[0]
+    return f"dom-{domain_slug}"
+
+
+def _create_temp_pvc_from_snapshot(
+    namespace: str,
+    snapshot_name: str,
+    pvc_name: str,
+    storage_size: str = "10Gi"
+) -> None:
+    """Create a temporary PVC from a VolumeSnapshot."""
+    _load_k8s_config()
+    v1 = client.CoreV1Api()
+
+    pvc_body = {
+        "apiVersion": "v1",
+        "kind": "PersistentVolumeClaim",
+        "metadata": {
+            "name": pvc_name,
+            "namespace": namespace,
+        },
+        "spec": {
+            "storageClassName": STORAGE_CLASS,
+            "resources": {
+                "requests": {
+                    "storage": storage_size
+                }
+            },
+            "dataSource": {
+                "apiGroup": "snapshot.storage.k8s.io",
+                "kind": "VolumeSnapshot",
+                "name": snapshot_name
+            },
+            "accessModes": ["ReadWriteOnce"]
+        }
+    }
+
+    v1.create_namespaced_persistent_volume_claim(
+        namespace=namespace,
+        body=pvc_body
+    )
+
+    # Wait for PVC to be bound
+    for _ in range(60):  # 60 second timeout
+        pvc = v1.read_namespaced_persistent_volume_claim(
+            name=pvc_name,
+            namespace=namespace
+        )
+        if pvc.status.phase == "Bound":
+            return
+        time.sleep(1)
+
+    raise TimeoutError(f"PVC {pvc_name} did not bind within timeout")
+
+
+def _delete_temp_pvc(namespace: str, pvc_name: str) -> None:
+    """Delete a temporary PVC."""
+    _load_k8s_config()
+    v1 = client.CoreV1Api()
+
+    try:
+        v1.delete_namespaced_persistent_volume_claim(
+            name=pvc_name,
+            namespace=namespace,
+            body=client.V1DeleteOptions(propagation_policy='Foreground')
+        )
+    except ApiException as e:
+        if e.status != 404:
+            logger.error(f"Failed to delete PVC {pvc_name}: {e}")
+
+
+def _create_download_job(
+    namespace: str,
+    job_name: str,
+    data_pvc_name: str,
+    backup_pvc_name: str = "backup"
+) -> str:
+    """
+    Create a Job for downloading backup data.
+
+    Returns the name of the pod created by the job.
+    """
+    _load_k8s_config()
+    batch_v1 = client.BatchV1Api()
+    core_v1 = client.CoreV1Api()
+
+    job_body = {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": job_name,
+            "namespace": namespace,
+        },
+        "spec": {
+            "ttlSecondsAfterFinished": 60,
+            "template": {
+                "spec": {
+                    "restartPolicy": "Never",
+                    "volumes": [
+                        {
+                            "name": "data-pvc",
+                            "persistentVolumeClaim": {"claimName": data_pvc_name}
+                        },
+                        {
+                            "name": "backup-pvc",
+                            "persistentVolumeClaim": {"claimName": backup_pvc_name}
+                        }
+                    ],
+                    "containers": [{
+                        "name": "archiver",
+                        "image": "alpine:latest",
+                        "command": ["sh", "-c", "apk add --no-cache zstd && sleep 3600"],
+                        "volumeMounts": [
+                            {"mountPath": "/data", "name": "data-pvc", "readOnly": True},
+                            {"mountPath": "/backup", "name": "backup-pvc", "readOnly": True}
+                        ]
+                    }]
+                }
+            }
+        }
+    }
+
+    batch_v1.create_namespaced_job(namespace=namespace, body=job_body)
+
+    # Wait for pod to be running
+    pod_name = None
+    for _ in range(120):  # 2 minute timeout
+        pods = core_v1.list_namespaced_pod(
+            namespace=namespace,
+            label_selector=f"job-name={job_name}"
+        ).items
+        if pods:
+            pod = pods[0]
+            pod_name = pod.metadata.name
+            if pod.status.phase == "Running":
+                return pod_name
+        time.sleep(1)
+
+    raise TimeoutError(f"Job pod did not start within timeout")
+
+
+def _create_sql_download_job(
+    namespace: str,
+    job_name: str,
+    backup_pvc_name: str = "backup"
+) -> str:
+    """
+    Create a Job for downloading SQL backup only.
+
+    Returns the name of the pod created by the job.
+    """
+    _load_k8s_config()
+    batch_v1 = client.BatchV1Api()
+    core_v1 = client.CoreV1Api()
+
+    job_body = {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": job_name,
+            "namespace": namespace,
+        },
+        "spec": {
+            "ttlSecondsAfterFinished": 60,
+            "template": {
+                "spec": {
+                    "restartPolicy": "Never",
+                    "volumes": [
+                        {
+                            "name": "backup-pvc",
+                            "persistentVolumeClaim": {"claimName": backup_pvc_name}
+                        }
+                    ],
+                    "containers": [{
+                        "name": "downloader",
+                        "image": "alpine:latest",
+                        "command": ["sh", "-c", "apk add --no-cache zstd gzip && sleep 3600"],
+                        "volumeMounts": [
+                            {"mountPath": "/backup", "name": "backup-pvc", "readOnly": True}
+                        ]
+                    }]
+                }
+            }
+        }
+    }
+
+    batch_v1.create_namespaced_job(namespace=namespace, body=job_body)
+
+    # Wait for pod to be running
+    pod_name = None
+    for _ in range(120):
+        pods = core_v1.list_namespaced_pod(
+            namespace=namespace,
+            label_selector=f"job-name={job_name}"
+        ).items
+        if pods:
+            pod = pods[0]
+            pod_name = pod.metadata.name
+            if pod.status.phase == "Running":
+                return pod_name
+        time.sleep(1)
+
+    raise TimeoutError(f"Job pod did not start within timeout")
+
+
+def _cleanup_job(namespace: str, job_name: str) -> None:
+    """Delete a job and its pods."""
+    _load_k8s_config()
+    batch_v1 = client.BatchV1Api()
+
+    try:
+        batch_v1.delete_namespaced_job(
+            name=job_name,
+            namespace=namespace,
+            body=client.V1DeleteOptions(propagation_policy='Foreground')
+        )
+    except ApiException as e:
+        if e.status != 404:
+            logger.error(f"Failed to delete job {job_name}: {e}")
+
+
+class DownloadBackupArchiveView(View):
+    """
+    Download a complete backup as a portable tar.gz archive.
+
+    The archive contains:
+    - www/ - Site files from /var/www
+    - database.sql - Decompressed MariaDB dump
+    - manifest.json - Metadata about the backup
+    """
+
+    def get(self, request, backup_name):
+        # Parse backup name to get namespace
+        try:
+            namespace = _get_namespace_from_backup_name(backup_name)
+        except ValueError:
+            return HttpResponseNotFound("Invalid backup name format")
+
+        # Get backup from Kubernetes
+        backup = get_backup(namespace, backup_name)
+        if not backup:
+            return HttpResponseNotFound(f"Backup {backup_name} not found")
+
+        # Check if backup is completed
+        if backup.status.phase != 'Completed':
+            return HttpResponseNotFound("Backup is not completed yet")
+
+        # Check permissions
+        domain_name = backup.domain_name
+        try:
+            domain = Domain.objects.get(domain_name=domain_name)
+            if not request.user.is_superuser and domain.owner != request.user:
+                raise PermissionDenied
+        except Domain.DoesNotExist:
+            raise PermissionDenied
+
+        # Check if backup has required data
+        volume_snapshot_name = backup.status.volume_snapshot_name
+        db_backup_path = backup.status.database_backup_path
+
+        if not volume_snapshot_name:
+            return HttpResponseNotFound("Backup does not have a volume snapshot")
+
+        # Generate unique names for temporary resources
+        unique_id = str(uuid.uuid4())[:8]
+        temp_pvc_name = f"download-{unique_id}"
+        job_name = f"download-archive-{unique_id}"
+
+        try:
+            # Get domain's storage size for temp PVC
+            storage_size = f"{domain.storage_size}Gi"
+
+            # Create temporary PVC from snapshot
+            _create_temp_pvc_from_snapshot(
+                namespace=namespace,
+                snapshot_name=volume_snapshot_name,
+                pvc_name=temp_pvc_name,
+                storage_size=storage_size
+            )
+
+            # Create the download job
+            pod_name = _create_download_job(
+                namespace=namespace,
+                job_name=job_name,
+                data_pvc_name=temp_pvc_name,
+            )
+
+            # Build manifest
+            manifest = {
+                "version": "1.0",
+                "domain": domain_name,
+                "backup_name": backup_name,
+                "created_at": backup.created_at,
+            }
+            manifest_json = json.dumps(manifest, indent=2)
+
+            # Build the tar command:
+            # 1. Create manifest
+            # 2. Tar www directory from /data/var/www
+            # 3. Include database.sql (decompressed from zstd)
+            tar_cmd = f"""
+                cd /tmp && \
+                echo '{manifest_json}' > manifest.json && \
+                mkdir -p www && \
+                cp -a /data/var/www/. www/ 2>/dev/null || true && \
+                zstd -d {db_backup_path} -o database.sql 2>/dev/null || echo "" > database.sql && \
+                tar czf - manifest.json www database.sql
+            """
+
+            cmd = [
+                "kubectl", "exec", "-i",
+                "-n", namespace,
+                pod_name, "-c", "archiver",
+                "--", "sh", "-c", tar_cmd
+            ]
+
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            def stream_generator():
+                try:
+                    for chunk in iter(lambda: proc.stdout.read(64 * 1024), b""):
+                        yield chunk
+                    code = proc.wait()
+                    if code != 0:
+                        err = proc.stderr.read().decode(errors="ignore")
+                        logger.error(f"Archive download failed: {err}")
+                finally:
+                    # Cleanup resources
+                    _cleanup_job(namespace, job_name)
+                    _delete_temp_pvc(namespace, temp_pvc_name)
+
+            response = StreamingHttpResponse(
+                stream_generator(),
+                content_type="application/gzip"
+            )
+            response["Content-Disposition"] = f'attachment; filename="{backup_name}.tar.gz"'
+            return response
+
+        except TimeoutError as e:
+            # Cleanup on error
+            _cleanup_job(namespace, job_name)
+            _delete_temp_pvc(namespace, temp_pvc_name)
+            return HttpResponseNotFound(str(e))
+        except ApiException as e:
+            # Cleanup on error
+            _cleanup_job(namespace, job_name)
+            _delete_temp_pvc(namespace, temp_pvc_name)
+            return HttpResponseNotFound(f"Kubernetes API error: {e.reason}")
+
+
+class DownloadBackupSqlView(View):
+    """
+    Download just the SQL dump from a backup as .sql.gz.
+
+    Decompresses the zstd backup and recompresses as gzip for portability.
+    """
+
+    def get(self, request, backup_name):
+        # Parse backup name to get namespace
+        try:
+            namespace = _get_namespace_from_backup_name(backup_name)
+        except ValueError:
+            return HttpResponseNotFound("Invalid backup name format")
+
+        # Get backup from Kubernetes
+        backup = get_backup(namespace, backup_name)
+        if not backup:
+            return HttpResponseNotFound(f"Backup {backup_name} not found")
+
+        # Check if backup is completed
+        if backup.status.phase != 'Completed':
+            return HttpResponseNotFound("Backup is not completed yet")
+
+        # Check permissions
+        domain_name = backup.domain_name
+        try:
+            domain = Domain.objects.get(domain_name=domain_name)
+            if not request.user.is_superuser and domain.owner != request.user:
+                raise PermissionDenied
+        except Domain.DoesNotExist:
+            raise PermissionDenied
+
+        # Check if backup has database
+        db_backup_path = backup.status.database_backup_path
+        if not db_backup_path:
+            return HttpResponseNotFound("Backup does not have a database dump")
+
+        # Generate unique names
+        unique_id = str(uuid.uuid4())[:8]
+        job_name = f"download-sql-{unique_id}"
+
+        try:
+            # Create the download job (just backup PVC)
+            pod_name = _create_sql_download_job(
+                namespace=namespace,
+                job_name=job_name,
+            )
+
+            # Decompress zstd and recompress as gzip
+            cmd = [
+                "kubectl", "exec", "-i",
+                "-n", namespace,
+                pod_name, "-c", "downloader",
+                "--", "sh", "-c",
+                f"zstd -d {db_backup_path} -c | gzip"
+            ]
+
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            def stream_generator():
+                try:
+                    for chunk in iter(lambda: proc.stdout.read(64 * 1024), b""):
+                        yield chunk
+                    code = proc.wait()
+                    if code != 0:
+                        err = proc.stderr.read().decode(errors="ignore")
+                        logger.error(f"SQL download failed: {err}")
+                finally:
+                    _cleanup_job(namespace, job_name)
+
+            response = StreamingHttpResponse(
+                stream_generator(),
+                content_type="application/gzip"
+            )
+            response["Content-Disposition"] = f'attachment; filename="{backup_name}.sql.gz"'
+            return response
+
+        except TimeoutError as e:
+            _cleanup_job(namespace, job_name)
+            return HttpResponseNotFound(str(e))
+        except ApiException as e:
+            _cleanup_job(namespace, job_name)
+            return HttpResponseNotFound(f"Kubernetes API error: {e.reason}")
+
+
+# Function-based views for URL routing
+def download_backup_archive(request, backup_name):
+    """Download complete backup archive."""
+    return DownloadBackupArchiveView.as_view()(request, backup_name=backup_name)
+
+
+def download_backup_sql(request, backup_name):
+    """Download SQL dump only."""
+    return DownloadBackupSqlView.as_view()(request, backup_name=backup_name)
