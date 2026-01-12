@@ -119,8 +119,7 @@
         </div>
     </div>
 
-    {% if user.is_superuser %}
-    <!-- Two-Factor Authentication Section (Superuser Only) -->
+    <!-- Two-Factor Authentication Section -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
         <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50">
             <div class="flex items-center">
@@ -224,7 +223,6 @@
             {% endif %}
         </div>
     </div>
-    {% endif %}
 
     {% if user.is_superuser and system_settings %}
     <!-- Storage Notifications Section (Superuser Only) -->

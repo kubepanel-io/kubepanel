@@ -99,8 +99,8 @@ def kplogin(request):
 
         if user is not None:
             if user.is_active:
-                # Check if 2FA is required for this user (superuser with 2FA enabled)
-                if user.is_superuser and hasattr(user, 'profile') and user.profile.totp_enabled:
+                # Check if 2FA is required for this user
+                if hasattr(user, 'profile') and user.profile.totp_enabled:
                     # Store pending 2FA state in session
                     request.session[PENDING_2FA_USER_ID] = user.id
                     request.session[PENDING_2FA_TIMESTAMP] = timezone.now().isoformat()
@@ -515,13 +515,10 @@ def verify_2fa_recovery(request):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def setup_2fa(request):
-    """Setup 2FA for the current user (superusers only)."""
+    """Setup 2FA for the current user."""
     if not TOTP_AVAILABLE:
         messages.error(request, "2FA is not available. Please contact the administrator.")
         return redirect('settings')
-
-    if not request.user.is_superuser:
-        return HttpResponseForbidden("2FA is only available for administrators.")
 
     # If 2FA is already enabled, redirect to settings
     if request.user.profile.totp_enabled:
@@ -618,9 +615,6 @@ def disable_2fa(request):
         messages.error(request, "2FA is not available.")
         return redirect('settings')
 
-    if not request.user.is_superuser:
-        return HttpResponseForbidden("2FA is only available for administrators.")
-
     if not request.user.profile.totp_enabled:
         messages.info(request, "2FA is not enabled for your account.")
         return redirect('settings')
@@ -674,9 +668,6 @@ def regenerate_recovery_codes(request):
     if not TOTP_AVAILABLE:
         messages.error(request, "2FA is not available.")
         return redirect('settings')
-
-    if not request.user.is_superuser:
-        return HttpResponseForbidden("2FA is only available for administrators.")
 
     if not request.user.profile.totp_enabled:
         messages.info(request, "2FA is not enabled for your account.")
