@@ -359,24 +359,16 @@ class DownloadBackupArchiveView(View):
 
             # Build the tar command:
             # 1. Create manifest
-            # 2. Tar html directory from /data/html
+            # 2. Copy website files from /data/ into html/ directory
             # 3. Include database.sql (decompressed from zstd)
-            # DEBUG: Added sleep and ls for inspection
             tar_cmd = f"""
-                echo "=== DEBUG: Listing /data ===" && \
-                ls -la /data/ && \
-                echo "=== DEBUG: Listing /backup ===" && \
-                ls -la /backup/ && \
-                echo "=== DEBUG: db_backup_path = {db_backup_path} ===" && \
                 cd /tmp && \
                 echo '{manifest_json}' > manifest.json && \
-                cp -a /data/html . 2>/dev/null || mkdir -p html && \
+                mkdir -p html && \
+                cp -a /data/. html/ 2>/dev/null || true && \
                 zstd -d {db_backup_path} -o database.sql 2>/dev/null || echo "" > database.sql && \
-                tar czf - manifest.json html database.sql && \
-                sleep 300
+                tar czf - manifest.json html database.sql
             """
-
-            logger.info(f"DEBUG: Pod for inspection: kubectl exec -it -n {namespace} {pod_name} -c archiver -- sh")
 
             cmd = [
                 "kubectl", "exec", "-i",
@@ -396,11 +388,9 @@ class DownloadBackupArchiveView(View):
                         err = proc.stderr.read().decode(errors="ignore")
                         logger.error(f"Archive download failed: {err}")
                 finally:
-                    # DEBUG: Disabled cleanup for inspection
-                    # _cleanup_job(namespace, job_name)
-                    # _delete_temp_pvc(namespace, temp_pvc_name)
-                    logger.info(f"DEBUG: Skipping cleanup. Inspect with: kubectl exec -it -n {namespace} {pod_name} -c archiver -- sh")
-                    logger.info(f"DEBUG: Cleanup manually: kubectl delete job {job_name} -n {namespace} && kubectl delete pvc {temp_pvc_name} -n {namespace}")
+                    # Cleanup resources
+                    _cleanup_job(namespace, job_name)
+                    _delete_temp_pvc(namespace, temp_pvc_name)
 
             response = StreamingHttpResponse(
                 stream_generator(),
@@ -410,19 +400,22 @@ class DownloadBackupArchiveView(View):
             return response
 
         except TimeoutError as e:
-            # DEBUG: Disabled cleanup for inspection
             logger.error(f"TimeoutError in archive download: {e}")
-            logger.info(f"DEBUG: Cleanup manually: kubectl delete job {job_name} -n {namespace} && kubectl delete pvc {temp_pvc_name} -n {namespace}")
+            _cleanup_job(namespace, job_name)
+            _delete_temp_pvc(namespace, temp_pvc_name)
             return HttpResponseNotFound(str(e))
         except ApiException as e:
-            # DEBUG: Disabled cleanup for inspection
             logger.error(f"ApiException in archive download: {e}")
-            logger.info(f"DEBUG: Cleanup manually: kubectl delete job {job_name} -n {namespace} && kubectl delete pvc {temp_pvc_name} -n {namespace}")
+            _cleanup_job(namespace, job_name)
+            _delete_temp_pvc(namespace, temp_pvc_name)
             return HttpResponseNotFound(f"Kubernetes API error: {e.reason}")
         except Exception as e:
-            # DEBUG: Disabled cleanup for inspection
             logger.exception(f"Unexpected error in archive download for {backup_name}: {e}")
-            logger.info(f"DEBUG: Cleanup manually: kubectl delete job {job_name} -n {namespace} && kubectl delete pvc {temp_pvc_name} -n {namespace}")
+            try:
+                _cleanup_job(namespace, job_name)
+                _delete_temp_pvc(namespace, temp_pvc_name)
+            except:
+                pass
             return HttpResponseNotFound(f"Error: {e}")
 
 
