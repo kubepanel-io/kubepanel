@@ -8,6 +8,12 @@ Re-exports all views for backwards compatibility with existing imports.
 from .auth import (
     kplogin,
     logout_view,
+    # 2FA views
+    verify_2fa,
+    verify_2fa_recovery,
+    setup_2fa,
+    disable_2fa,
+    regenerate_recovery_codes,
 )
 
 # Domain views
@@ -202,6 +208,12 @@ __all__ = [
     # Auth
     'kplogin',
     'logout_view',
+    # 2FA
+    'verify_2fa',
+    'verify_2fa_recovery',
+    'setup_2fa',
+    'disable_2fa',
+    'regenerate_recovery_codes',
 
     # Domains
     'kpmain',
