@@ -29,6 +29,11 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     package = models.ForeignKey(Package, on_delete=models.PROTECT, null=True, blank=True)
 
+    # 2FA fields (for superusers)
+    totp_enabled = models.BooleanField(default=False, help_text="Whether TOTP 2FA is enabled")
+    totp_secret = models.CharField(max_length=32, blank=True, null=True, help_text="Base32-encoded TOTP secret")
+    backup_codes = models.JSONField(default=list, blank=True, help_text="List of hashed backup codes")
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:

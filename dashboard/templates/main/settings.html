@@ -119,6 +119,113 @@
         </div>
     </div>
 
+    {% if user.is_superuser %}
+    <!-- Two-Factor Authentication Section (Superuser Only) -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Two-Factor Authentication</h3>
+                    <p class="text-sm text-gray-600">Add an extra layer of security to your account</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            {% if user.profile.totp_enabled %}
+            <!-- 2FA is enabled -->
+            <div class="flex items-start mb-6">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <h4 class="text-md font-medium text-gray-900">Two-Factor Authentication is Enabled</h4>
+                    <p class="text-sm text-gray-600 mt-1">
+                        Your account is protected with an authenticator app. You'll need to enter a code when logging in.
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <h5 class="text-sm font-medium text-gray-700 mb-3">Recovery Codes</h5>
+                <p class="text-sm text-gray-600 mb-3">
+                    Recovery codes can be used to access your account if you lose your authenticator device.
+                    {% if user.profile.backup_codes %}
+                    You have <span class="font-medium text-gray-900">{{ user.profile.backup_codes|length }}</span> recovery codes remaining.
+                    {% else %}
+                    You have no recovery codes remaining.
+                    {% endif %}
+                </p>
+                <a href="{% url 'regenerate_recovery_codes' %}"
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Regenerate Recovery Codes
+                </a>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-gray-200">
+                <a href="{% url 'disable_2fa' %}"
+                   class="inline-flex items-center px-4 py-2.5 border border-red-300 rounded-lg text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>
+                    </svg>
+                    Disable Two-Factor Authentication
+                </a>
+            </div>
+            {% else %}
+            <!-- 2FA is not enabled -->
+            <div class="flex items-start mb-6">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <h4 class="text-md font-medium text-gray-900">Two-Factor Authentication is Not Enabled</h4>
+                    <p class="text-sm text-gray-600 mt-1">
+                        Enable two-factor authentication to add an extra layer of security to your account.
+                        You'll need an authenticator app like Google Authenticator or Authy.
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h5 class="text-sm font-medium text-blue-800 mb-2">How it works:</h5>
+                <ol class="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+                    <li>Download an authenticator app (Google Authenticator, Authy, etc.)</li>
+                    <li>Scan the QR code we provide</li>
+                    <li>Enter the 6-digit code to verify setup</li>
+                    <li>Save your recovery codes for emergencies</li>
+                </ol>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-gray-200">
+                <a href="{% url 'setup_2fa' %}"
+                   class="inline-flex items-center px-6 py-2.5 border border-transparent rounded-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm transition-all">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                    Enable Two-Factor Authentication
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     {% if user.is_superuser and system_settings %}
     <!-- Storage Notifications Section (Superuser Only) -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">

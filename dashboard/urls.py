@@ -24,6 +24,12 @@ urlpatterns = [
     path("", views.kplogin, name="kplogin"),
     path("main", views.kpmain, name="kpmain"),
     path("logout", views.logout_view, name="logout_view"),
+    # 2FA routes
+    path("2fa/verify/", views.verify_2fa, name="verify_2fa"),
+    path("2fa/verify/recovery/", views.verify_2fa_recovery, name="verify_2fa_recovery"),
+    path("2fa/setup/", views.setup_2fa, name="setup_2fa"),
+    path("2fa/disable/", views.disable_2fa, name="disable_2fa"),
+    path("2fa/recovery-codes/", views.regenerate_recovery_codes, name="regenerate_recovery_codes"),
     path("add_domain", views.add_domain, name="add_domain"),
     path("save_domain/<str:domain>", views.save_domain, name="save_domain"),
     path("view_domain/<str:domain>", views.view_domain, name="view_domain"),

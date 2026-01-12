@@ -503,9 +503,107 @@ class PasswordChangeForm(forms.Form):
         cleaned_data = super().clean()
         new_password = cleaned_data.get('new_password')
         confirm_password = cleaned_data.get('confirm_password')
-        
+
         if new_password and confirm_password:
             if new_password != confirm_password:
                 raise forms.ValidationError('Passwords do not match.')
-        
+
         return cleaned_data
+
+
+# =============================================================================
+# 2FA Forms
+# =============================================================================
+
+class TOTPVerifyForm(forms.Form):
+    """Form for entering TOTP code during login verification."""
+    code = forms.CharField(
+        max_length=6,
+        min_length=6,
+        widget=forms.TextInput(attrs={
+            'class': 'input-focus w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-center text-2xl tracking-widest font-mono',
+            'placeholder': '000000',
+            'autocomplete': 'one-time-code',
+            'inputmode': 'numeric',
+            'pattern': '[0-9]*',
+            'maxlength': '6',
+        }),
+        label='Authentication Code',
+        help_text='Enter the 6-digit code from your authenticator app',
+    )
+
+    def clean_code(self):
+        code = self.cleaned_data.get('code', '').strip()
+        if not code.isdigit():
+            raise ValidationError('Code must contain only digits.')
+        return code
+
+
+class TOTPSetupConfirmForm(forms.Form):
+    """Form for confirming TOTP setup with initial code verification."""
+    code = forms.CharField(
+        max_length=6,
+        min_length=6,
+        widget=forms.TextInput(attrs={
+            'class': 'input-focus w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-center text-2xl tracking-widest font-mono',
+            'placeholder': '000000',
+            'autocomplete': 'one-time-code',
+            'inputmode': 'numeric',
+            'pattern': '[0-9]*',
+            'maxlength': '6',
+        }),
+        label='Verification Code',
+        help_text='Enter the code shown in your authenticator app to confirm setup',
+    )
+
+    def clean_code(self):
+        code = self.cleaned_data.get('code', '').strip()
+        if not code.isdigit():
+            raise ValidationError('Code must contain only digits.')
+        return code
+
+
+class RecoveryCodeForm(forms.Form):
+    """Form for entering a recovery/backup code as alternative to TOTP."""
+    code = forms.CharField(
+        max_length=16,
+        widget=forms.TextInput(attrs={
+            'class': 'input-focus w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-center tracking-widest font-mono',
+            'placeholder': 'XXXX-XXXX',
+            'autocomplete': 'off',
+        }),
+        label='Recovery Code',
+        help_text='Enter one of your backup recovery codes',
+    )
+
+    def clean_code(self):
+        code = self.cleaned_data.get('code', '').strip().upper()
+        # Remove any dashes/spaces for normalization
+        code = code.replace('-', '').replace(' ', '')
+        if not code.isalnum():
+            raise ValidationError('Invalid recovery code format.')
+        return code
+
+
+class TOTPDisableForm(forms.Form):
+    """Form for disabling 2FA (requires current TOTP code for security)."""
+    code = forms.CharField(
+        max_length=6,
+        min_length=6,
+        widget=forms.TextInput(attrs={
+            'class': 'input-focus w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-200 text-center text-2xl tracking-widest font-mono',
+            'placeholder': '000000',
+            'autocomplete': 'one-time-code',
+            'inputmode': 'numeric',
+            'pattern': '[0-9]*',
+            'maxlength': '6',
+        }),
+        label='Current Authentication Code',
+        help_text='Enter your current TOTP code to disable 2FA',
+    )
+
+    def clean_code(self):
+        code = self.cleaned_data.get('code', '').strip()
+        if not code.isdigit():
+            raise ValidationError('Code must contain only digits.')
+        return code

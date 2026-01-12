@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if regenerated %}Recovery Codes Regenerated{% else %}2FA Enabled{% endif %} - KubePanel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #dbeafe 100%);
+        }
+        .login-animation {
+            animation: slideUp 0.6s ease-out;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .card-shadow {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white; }
+            .card-shadow { box-shadow: none; border: 1px solid #ccc; }
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen flex items-center justify-center p-4 relative">
+    <div class="w-full max-w-lg relative z-10">
+        <!-- Header -->
+        <div class="text-center mb-8 login-animation">
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl shadow-lg mb-6 border border-green-200">
+                <i class="fas fa-check-circle text-3xl text-green-600"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-slate-700 mb-2">
+                {% if regenerated %}Recovery Codes Regenerated{% else %}Two-Factor Authentication Enabled{% endif %}
+            </h1>
+            <p class="text-slate-500 font-medium">Save your recovery codes in a secure location</p>
+        </div>
+
+        <!-- Recovery Codes Card -->
+        <div class="bg-white rounded-2xl card-shadow overflow-hidden border border-gray-200 login-animation">
+            <!-- Warning Header -->
+            <div class="bg-amber-50 px-8 py-6 border-b border-amber-200">
+                <div class="flex items-start">
+                    <i class="fas fa-exclamation-triangle text-amber-600 text-lg mr-3 mt-0.5"></i>
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-700 mb-1">Important: Save These Codes</h2>
+                        <p class="text-sm text-amber-800">
+                            These recovery codes can be used to access your account if you lose your authenticator device.
+                            Each code can only be used once. Store them somewhere safe!
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-8 py-8">
+                <!-- Recovery Codes Grid -->
+                <div class="bg-gray-50 rounded-lg p-6 mb-6" id="codesContainer">
+                    <div class="grid grid-cols-2 gap-3">
+                        {% for code in recovery_codes %}
+                        <div class="bg-white border border-gray-200 rounded-lg p-3 text-center">
+                            <code class="font-mono text-lg text-slate-700 select-all">{{ code }}</code>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex flex-col sm:flex-row gap-3 no-print">
+                    <button
+                        onclick="copyAllCodes()"
+                        class="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200"
+                    >
+                        <i class="fas fa-copy mr-2"></i>Copy All Codes
+                    </button>
+                    <button
+                        onclick="window.print()"
+                        class="flex-1 bg-gray-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200"
+                    >
+                        <i class="fas fa-print mr-2"></i>Print Codes
+                    </button>
+                </div>
+
+                <!-- Confirmation Checkbox -->
+                <div class="mt-6 bg-blue-50 rounded-lg p-4 no-print">
+                    <label class="flex items-start cursor-pointer">
+                        <input type="checkbox" id="confirmSaved" class="mt-1 rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                        <span class="ml-3 text-sm text-slate-700">
+                            I have saved my recovery codes in a secure location
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="bg-gray-50 px-8 py-4 border-t border-gray-200 no-print">
+                <a
+                    href="{% url 'settings' %}"
+                    id="continueBtn"
+                    class="block w-full bg-green-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 text-center opacity-50 pointer-events-none"
+                >
+                    <i class="fas fa-arrow-right mr-2"></i>Continue to Settings
+                </a>
+            </div>
+        </div>
+
+        <!-- Print Header (only visible when printing) -->
+        <div class="hidden print-only text-center mb-4">
+            <h2 class="text-xl font-bold">KubePanel Recovery Codes</h2>
+            <p class="text-sm text-gray-600">Store these codes securely. Each code can only be used once.</p>
+        </div>
+    </div>
+
+    <script>
+        // Store codes for copying
+        const codes = [{% for code in recovery_codes %}"{{ code }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+
+        function copyAllCodes() {
+            const codesText = codes.join('\n');
+            navigator.clipboard.writeText(codesText).then(function() {
+                const btn = event.target.closest('button');
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+                btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                btn.classList.add('bg-green-600');
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.classList.remove('bg-green-600');
+                    btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                }, 2000);
+            });
+        }
+
+        // Enable continue button when checkbox is checked
+        document.getElementById('confirmSaved').addEventListener('change', function() {
+            const btn = document.getElementById('continueBtn');
+            if (this.checked) {
+                btn.classList.remove('opacity-50', 'pointer-events-none');
+            } else {
+                btn.classList.add('opacity-50', 'pointer-events-none');
+            }
+        });
+    </script>
+</body>
+</html>
