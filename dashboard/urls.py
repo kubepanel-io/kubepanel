@@ -62,6 +62,7 @@ urlpatterns = [
     path('users/create/', views.create_mail_user, name='create_mail_user'),
     path('users/<int:user_id>/edit/', views.edit_mail_user, name='edit_mail_user'),
     path('users/<int:user_id>/delete/', views.delete_mail_user, name='delete_mail_user'),
+    path('users/<int:user_id>/download/', views.download_mailbox, name='download_mailbox'),
     path('domain/<int:pk>/aliases/', views.alias_list,      name='alias_list'),
     path('domain/<int:pk>/aliases/add/', views.alias_add,   name='alias_add'),
     path('aliases/<int:pk>/delete/', views.alias_delete,    name='alias_delete'),
