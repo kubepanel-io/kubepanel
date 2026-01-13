@@ -33,7 +33,7 @@ class DomainForm(forms.ModelForm):
 
     class Meta:
         model = Domain
-        fields = ["cpu_limit", "mem_limit", "workload_version"]
+        fields = ["cpu_limit", "mem_limit", "storage_size", "workload_version"]
         widgets = {
             'cpu_limit': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -47,7 +47,30 @@ class DomainForm(forms.ModelForm):
                 'max': 4096,
                 'placeholder': 'Memory Limit in MiB'
             }),
+            'storage_size': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 1,
+                'max': 10000,
+                'placeholder': 'Storage in GB'
+            }),
         }
+
+    def clean_storage_size(self):
+        """Validate that storage size can only be increased, not decreased."""
+        new_size = self.cleaned_data.get('storage_size')
+        if self.instance and self.instance.pk:
+            # Get the original value from the database (not the form)
+            from dashboard.models import Domain
+            try:
+                original = Domain.objects.get(pk=self.instance.pk)
+                current_size = original.storage_size
+                if new_size < current_size:
+                    raise ValidationError(
+                        f"Storage size can only be increased. Current: {current_size}GB"
+                    )
+            except Domain.DoesNotExist:
+                pass
+        return new_size
 
 
 class DomainConfigForm(forms.Form):
