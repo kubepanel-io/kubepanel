@@ -123,6 +123,36 @@ class DomainConfigForm(forms.Form):
         label='Post Max Size',
     )
 
+    # PHP-FPM Pool settings
+    fpm_max_children = forms.IntegerField(
+        min_value=1,
+        max_value=100,
+        required=False,
+        initial=25,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': 1,
+            'max': 100,
+            'placeholder': '25'
+        }),
+        label='FPM Max Children',
+        help_text='Maximum number of PHP-FPM worker processes (1-100)',
+    )
+    fpm_process_idle_timeout = forms.IntegerField(
+        min_value=1,
+        max_value=300,
+        required=False,
+        initial=30,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'min': 1,
+            'max': 300,
+            'placeholder': '30'
+        }),
+        label='FPM Idle Timeout',
+        help_text='Seconds to wait before killing an idle worker (1-300)',
+    )
+
     # Generic workload custom config (works for all types)
     custom_app_config = forms.CharField(
         required=False,
@@ -253,6 +283,11 @@ class DomainConfigForm(forms.Form):
                 patch["workload"]["settings"]["uploadMaxFilesize"] = data["php_upload_max_filesize"]
             if data.get("php_post_max_size"):
                 patch["workload"]["settings"]["postMaxSize"] = data["php_post_max_size"]
+            # PHP-FPM pool settings
+            if data.get("fpm_max_children"):
+                patch["workload"]["settings"]["fpmMaxChildren"] = data["fpm_max_children"]
+            if data.get("fpm_process_idle_timeout"):
+                patch["workload"]["settings"]["fpmProcessIdleTimeout"] = data["fpm_process_idle_timeout"]
 
         # Custom config for any workload type
         if data.get("custom_app_config"):

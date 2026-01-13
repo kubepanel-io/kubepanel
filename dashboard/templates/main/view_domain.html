@@ -63,33 +63,24 @@
                         If none selected, any available server will be used.
                     </p>
                     {% if nodes %}
-                    <form method="POST" action="{% url 'save_preferred_nodes' domain=domain.domain_name %}" id="preferred-nodes-form">
-                        {% csrf_token %}
-                        <div class="space-y-3">
-                            {% for node in nodes %}
-                            <label class="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors">
-                                <input type="checkbox"
-                                       name="preferred_nodes"
-                                       value="{{ node.name }}"
-                                       {% if node.selected %}checked{% endif %}
-                                       class="h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500">
-                                <div class="ml-3 flex-1">
-                                    <span class="font-medium text-gray-900">{{ node.name }}</span>
-                                </div>
-                                <span class="px-2 py-1 text-xs rounded-full
-                                    {% if node.status == 'Ready' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
-                                    {{ node.status }}
-                                </span>
-                            </label>
-                            {% endfor %}
-                        </div>
-                        <div class="mt-4 flex justify-end">
-                            <button type="submit"
-                                    class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium text-sm">
-                                Save Preferences
-                            </button>
-                        </div>
-                    </form>
+                    <div class="space-y-3">
+                        {% for node in nodes %}
+                        <label class="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors">
+                            <input type="checkbox"
+                                   name="preferred_nodes"
+                                   value="{{ node.name }}"
+                                   {% if node.selected %}checked{% endif %}
+                                   class="h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500">
+                            <div class="ml-3 flex-1">
+                                <span class="font-medium text-gray-900">{{ node.name }}</span>
+                            </div>
+                            <span class="px-2 py-1 text-xs rounded-full
+                                {% if node.status == 'Ready' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                {{ node.status }}
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
                     {% else %}
                     <div class="text-center py-8">
                         <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -904,6 +895,21 @@
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-2">Post Max Size</label>
                                     {{ config_form.php_post_max_size }}
+                                </div>
+                            </div>
+
+                            <!-- PHP-FPM Pool Settings -->
+                            <h4 class="text-sm font-medium text-gray-900 border-b pb-2 mt-4">PHP-FPM Pool Settings</h4>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Max Children</label>
+                                    {{ config_form.fpm_max_children }}
+                                    <p class="mt-1 text-xs text-gray-500">Maximum worker processes (default: 25)</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Process Idle Timeout (sec)</label>
+                                    {{ config_form.fpm_process_idle_timeout }}
+                                    <p class="mt-1 text-xs text-gray-500">Seconds before idle worker terminates (default: 30)</p>
                                 </div>
                             </div>
                         </div>

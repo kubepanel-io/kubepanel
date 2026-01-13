@@ -876,6 +876,8 @@ def get_domain_config(domain_name: str) -> dict:
         "php_max_execution_time": workload_settings.get("maxExecutionTime", 30),
         "php_upload_max_filesize": workload_settings.get("uploadMaxFilesize", "64M"),
         "php_post_max_size": workload_settings.get("postMaxSize", "64M"),
+        "fpm_max_children": workload_settings.get("fpmMaxChildren", 25),
+        "fpm_process_idle_timeout": workload_settings.get("fpmProcessIdleTimeout", 30),
         "custom_app_config": workload.get("customConfig", ""),
 
         # Webserver settings

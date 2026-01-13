@@ -815,6 +815,10 @@ def save_domain(request, domain):
         if "webserver" in config_patch:
             patch["webserver"] = config_patch["webserver"]
 
+        # Add preferred nodes (from checkboxes in the form)
+        preferred_nodes = request.POST.getlist('preferred_nodes')
+        patch["preferredNodes"] = preferred_nodes
+
         k8s_patch_domain(domain_instance.domain_name, patch)
         logger.info(f"Patched Domain CR for {domain_instance.domain_name}")
     except K8sNotFoundError:
@@ -837,6 +841,7 @@ def save_domain(request, domain):
             "workload_version": workload_version.version if workload_version else None,
             "php_memory_limit": config_form.cleaned_data.get("php_memory_limit"),
             "document_root": config_form.cleaned_data.get("document_root"),
+            "preferred_nodes": request.POST.getlist('preferred_nodes'),
         }
     )
 
