@@ -52,50 +52,51 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Left Column -->
         <div class="space-y-8">
-            <!-- Domain Aliases -->
+            <!-- Preferred Servers -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-200">
                 <div class="px-6 py-4 border-b border-gray-200">
-                    <div class="flex items-center justify-between">
-                        <h3 class="text-lg font-medium text-gray-900">Domain Aliases</h3>
-                        <a href="{% url 'alias_add' domain.pk %}"
-                           class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                            </svg>
-                            <span>Add Alias</span>
-                        </a>
-                    </div>
+                    <h3 class="text-lg font-medium text-gray-900">Preferred Servers</h3>
                 </div>
                 <div class="p-6">
-                    {% if domain.aliases.exists %}
+                    <p class="text-sm text-gray-600 mb-4">
+                        Select which servers this domain should preferably run on.
+                        If none selected, any available server will be used.
+                    </p>
+                    {% if nodes %}
+                    <form method="POST" action="{% url 'save_preferred_nodes' domain=domain.domain_name %}" id="preferred-nodes-form">
+                        {% csrf_token %}
                         <div class="space-y-3">
-                            {% for alias in domain.aliases.all %}
-                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                <div class="flex items-center">
-                                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
-                                        </svg>
-                                    </div>
-                                    <span class="text-sm font-medium text-gray-900">{{ alias.alias_name }}</span>
+                            {% for node in nodes %}
+                            <label class="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors">
+                                <input type="checkbox"
+                                       name="preferred_nodes"
+                                       value="{{ node.name }}"
+                                       {% if node.selected %}checked{% endif %}
+                                       class="h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500">
+                                <div class="ml-3 flex-1">
+                                    <span class="font-medium text-gray-900">{{ node.name }}</span>
                                 </div>
-                                <a href="{% url 'alias_delete' alias.pk %}"
-                                   class="text-red-600 hover:text-red-800 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
-                                   onclick="return confirm('Are you sure you want to delete this alias?')">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                    </svg>
-                                </a>
-                            </div>
+                                <span class="px-2 py-1 text-xs rounded-full
+                                    {% if node.status == 'Ready' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                    {{ node.status }}
+                                </span>
+                            </label>
                             {% endfor %}
                         </div>
-                    {% else %}
-                        <div class="text-center py-8">
-                            <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
-                            </svg>
-                            <p class="text-gray-500 text-sm">No aliases defined</p>
+                        <div class="mt-4 flex justify-end">
+                            <button type="submit"
+                                    class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium text-sm">
+                                Save Preferences
+                            </button>
                         </div>
+                    </form>
+                    {% else %}
+                    <div class="text-center py-8">
+                        <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                        </svg>
+                        <p class="text-gray-500 text-sm">No cluster nodes available</p>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -1045,6 +1046,54 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Domain Aliases -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">Domain Aliases</h3>
+                        <a href="{% url 'alias_add' domain.pk %}"
+                           class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            <span>Add Alias</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="p-6">
+                    {% if domain.aliases.exists %}
+                        <div class="space-y-3">
+                            {% for alias in domain.aliases.all %}
+                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm font-medium text-gray-900">{{ alias.alias_name }}</span>
+                                </div>
+                                <a href="{% url 'alias_delete' alias.pk %}"
+                                   class="text-red-600 hover:text-red-800 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                                   onclick="return confirm('Are you sure you want to delete this alias?')">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </a>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-8">
+                            <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                            </svg>
+                            <p class="text-gray-500 text-sm">No aliases defined</p>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
         </div>

@@ -86,6 +86,7 @@ class DomainSpec:
         # Optional fields with defaults
         self.title: Optional[str] = None
         self.aliases: list[str] = []
+        self.preferred_nodes: list[str] = []  # Preferred cluster nodes for scheduling
         self.suspended: bool = False
 
         # Workload optional fields
@@ -168,6 +169,10 @@ class DomainSpec:
         # Add aliases if any
         if self.aliases:
             spec["aliases"] = self.aliases
+
+        # Add preferred nodes if any
+        if self.preferred_nodes:
+            spec["preferredNodes"] = self.preferred_nodes
 
         # Add suspended if True
         if self.suspended:
@@ -397,7 +402,12 @@ class Domain:
     @property
     def creation_timestamp(self) -> str:
         return self._raw.get("metadata", {}).get("creationTimestamp", "")
-    
+
+    @property
+    def raw(self) -> dict:
+        """Return raw CR dict."""
+        return self._raw
+
     def to_dict(self) -> dict:
         """Return raw CR dict."""
         return self._raw

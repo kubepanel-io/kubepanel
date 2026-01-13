@@ -33,6 +33,7 @@ urlpatterns = [
     path("2fa/recovery-codes/", views.regenerate_recovery_codes, name="regenerate_recovery_codes"),
     path("add_domain", views.add_domain, name="add_domain"),
     path("save_domain/<str:domain>", views.save_domain, name="save_domain"),
+    path("save_preferred_nodes/<str:domain>", views.save_preferred_nodes, name="save_preferred_nodes"),
     path("view_domain/<str:domain>", views.view_domain, name="view_domain"),
     path("volumesnapshots/<str:domain>", views.volumesnapshots, name="volumesnapshots"),
     path("restore_backup/<str:domain>/<str:backup_name>", views.restore_backup, name="restore_backup"),

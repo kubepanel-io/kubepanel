@@ -681,6 +681,40 @@ def view_domain(request, domain):
     # Get user's CloudFlare API tokens for DNS enable form
     api_tokens = CloudflareAPIToken.objects.filter(user=request.user)
 
+    # Get cluster nodes for Preferred Servers section
+    nodes = []
+    preferred_nodes = []
+    try:
+        # Get preferred nodes from Domain CR spec
+        k8s_domain_cr = k8s_get_domain(domain)
+        if k8s_domain_cr and hasattr(k8s_domain_cr, 'raw') and k8s_domain_cr.raw:
+            preferred_nodes = k8s_domain_cr.raw.get('spec', {}).get('preferredNodes', [])
+
+        # Fetch cluster nodes
+        try:
+            config.load_incluster_config()
+        except:
+            config.load_kube_config()
+
+        v1 = client.CoreV1Api()
+        node_list = v1.list_node()
+        for n in node_list.items:
+            # Determine node status
+            node_status = 'NotReady'
+            if n.status and n.status.conditions:
+                for condition in n.status.conditions:
+                    if condition.type == 'Ready' and condition.status == 'True':
+                        node_status = 'Ready'
+                        break
+
+            nodes.append({
+                'name': n.metadata.name,
+                'status': node_status,
+                'selected': n.metadata.name in preferred_nodes,
+            })
+    except Exception as e:
+        logger.warning(f"Failed to fetch cluster nodes: {e}")
+
     return render(request, "main/view_domain.html", {
         "domain": domain_model,
         "form": form,
@@ -691,6 +725,7 @@ def view_domain(request, domain):
         "external_storage": external_storage,
         "certificate": certificate_info,
         "api_tokens": api_tokens,
+        "nodes": nodes,
     })
 
 
@@ -807,6 +842,59 @@ def save_domain(request, domain):
 
     messages.success(request, "Domain settings saved successfully.")
     return redirect('view_domain', domain=domain_instance.domain_name)
+
+
+@login_required(login_url="/dashboard/")
+def save_preferred_nodes(request, domain):
+    """
+    Save preferred server nodes for a domain.
+
+    Updates the Domain CR's preferredNodes spec field.
+    """
+    if request.method != 'POST':
+        return redirect('view_domain', domain=domain)
+
+    try:
+        if request.user.is_superuser:
+            domain_instance = Domain.objects.get(domain_name=domain)
+        else:
+            domain_instance = Domain.objects.get(domain_name=domain, owner=request.user)
+    except Domain.DoesNotExist:
+        messages.error(request, f"Domain '{domain}' not found.")
+        return redirect('kpmain')
+
+    # Get selected nodes from form
+    selected_nodes = request.POST.getlist('preferred_nodes')
+
+    # Patch the Domain CR
+    try:
+        k8s_patch_domain(domain, {"preferredNodes": selected_nodes})
+        logger.info(f"Updated preferredNodes for {domain}: {selected_nodes}")
+
+        if selected_nodes:
+            messages.success(request, f"Preferred servers updated: {', '.join(selected_nodes)}")
+        else:
+            messages.success(request, "Preferred servers cleared. Domain will run on any available server.")
+
+        LogEntry.objects.create(
+            content_object=domain_instance,
+            actor=f"user:{request.user.username}",
+            user=request.user,
+            level="INFO",
+            message=f"Updated preferred servers for {domain}",
+            data={
+                "domain_id": domain_instance.pk,
+                "preferred_nodes": selected_nodes,
+            }
+        )
+
+    except K8sNotFoundError:
+        messages.error(request, "Domain not found in Kubernetes cluster.")
+    except K8sClientError as e:
+        logger.error(f"Failed to update preferredNodes for {domain}: {e}")
+        messages.error(request, f"Failed to update preferred servers: {e}")
+
+    return redirect('view_domain', domain=domain)
 
 
 @login_required(login_url="/dashboard/")
