@@ -263,14 +263,18 @@ class UploadRestoreFilesView(View):
                 with tarfile.open(tmp_path, 'r:gz') as tar:
                     members = tar.getnames()
 
-                    # Check for required content (at least one of www/ or database.sql)
-                    has_www = any(m.startswith('www/') or m == 'www' for m in members)
+                    # Check for required content (at least one of html/, www/, or database.sql)
+                    has_files = any(
+                        m.startswith('html/') or m == 'html' or
+                        m.startswith('www/') or m == 'www'
+                        for m in members
+                    )
                     has_db = 'database.sql' in members
 
-                    if not has_www and not has_db:
+                    if not has_files and not has_db:
                         messages.error(
                             request,
-                            'Invalid archive: must contain www/ directory or database.sql file.'
+                            'Invalid archive: must contain html/ or www/ directory, or database.sql file.'
                         )
                         os.unlink(tmp_path)
                         return redirect(reverse('upload_restore', args=[domain_name]))
