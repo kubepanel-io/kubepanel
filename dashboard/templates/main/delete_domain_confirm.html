@@ -131,23 +131,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('delete-domain-form');
     const submitButton = form.querySelector('button[type="submit"]');
 
-    // Add confirmation on submit
+    // Add loading state on submit (user already confirmed by typing domain name)
     form.addEventListener('submit', function(e) {
-        e.preventDefault();
-
-        const domainName = '{{ domain.domain_name|escapejs }}';
-
-        // Multi-step confirmation for domain deletion
-        if (confirm(`Are you sure you want to delete the domain "${domainName}"?`)) {
-            if (confirm(`This is your FINAL WARNING!\n\nDeleting "${domainName}" will:\n- Remove all files and data\n- Delete the database\n- Remove all Kubernetes resources\n- This CANNOT be undone\n\nAre you absolutely certain?`)) {
-                // Show loading state
-                submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Deleting Domain...';
-                submitButton.disabled = true;
-
-                // Submit the form
-                form.submit();
-            }
-        }
+        // Show loading state
+        submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Deleting Domain...';
+        submitButton.disabled = true;
     });
 
     // Add visual emphasis on hover
