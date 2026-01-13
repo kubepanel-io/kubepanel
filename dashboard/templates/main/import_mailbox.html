@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Import Mailbox | KubePanel{% endblock %}
+{% block page_title %}Import Mailbox{% endblock %}
+{% block page_subtitle %}Restore mailbox for {{ mail_user.email }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <form method="post" enctype="multipart/form-data" id="upload-form">
+            {% csrf_token %}
+
+            <!-- File Drop Zone -->
+            <div id="drop-zone"
+                 class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-500 transition-colors cursor-pointer">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                <p class="mt-2 text-sm text-gray-600">
+                    <span class="font-medium text-primary-600">Click to upload</span> or drag and drop
+                </p>
+                <p class="mt-1 text-xs text-gray-500">TAR.GZ files only (max 5GB)</p>
+                <p id="file-name" class="mt-2 text-sm font-medium text-gray-900 hidden"></p>
+            </div>
+
+            <input type="file" name="archive_file" id="archive_file"
+                   accept=".tar.gz,.tgz" class="hidden">
+
+            <!-- Warning -->
+            <div class="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div class="flex">
+                    <svg class="h-5 w-5 text-amber-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                    <p class="text-sm text-amber-700">
+                        <strong>Warning:</strong> Importing will merge with existing mailbox contents.
+                        Existing emails with the same name will be overwritten.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="mt-6 flex justify-end space-x-3">
+                <a href="{% url 'list_mail_users' %}"
+                   class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Cancel
+                </a>
+                <button type="submit" id="submit-btn" disabled
+                        class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Import Mailbox
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('archive_file');
+    const fileName = document.getElementById('file-name');
+    const submitBtn = document.getElementById('submit-btn');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('border-primary-500', 'bg-primary-50');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('border-primary-500', 'bg-primary-50');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-primary-500', 'bg-primary-50');
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            handleFileSelect(fileInput);
+        }
+    });
+
+    fileInput.addEventListener('change', () => handleFileSelect(fileInput));
+
+    function handleFileSelect(input) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            if (file.name.endsWith('.tar.gz') || file.name.endsWith('.tgz')) {
+                fileName.textContent = file.name + ' (' + formatSize(file.size) + ')';
+                fileName.classList.remove('hidden');
+                submitBtn.disabled = false;
+            } else {
+                alert('Please select a .tar.gz file');
+                input.value = '';
+            }
+        }
+    }
+
+    function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    }
+});
+</script>
+{% endblock %}
