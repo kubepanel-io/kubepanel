@@ -208,9 +208,19 @@ def download_mailbox(request, user_id):
             stderr=False, stdin=False, stdout=True, tty=False,
             _preload_content=False
         )
-        for chunk in resp.stream(timeout=300):
+        # Read from websocket while connection is open
+        while resp.is_open():
+            resp.update(timeout=5)
+            if resp.peek_stdout():
+                chunk = resp.read_stdout()
+                if chunk:
+                    yield chunk.encode('latin-1') if isinstance(chunk, str) else chunk
+        # Read any remaining data
+        if resp.peek_stdout():
+            chunk = resp.read_stdout()
             if chunk:
-                yield chunk
+                yield chunk.encode('latin-1') if isinstance(chunk, str) else chunk
+        resp.close()
 
     filename = f"{local_part}_{domain_name}_mailbox.tar.gz"
     response = StreamingHttpResponse(
