@@ -55,9 +55,40 @@
             <!-- Preferred Servers -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-200">
                 <div class="px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-medium text-gray-900">Preferred Servers</h3>
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">Preferred Servers</h3>
+                        <button type="button" id="preferred-servers-info-btn"
+                                class="text-gray-400 hover:text-gray-600 transition-colors"
+                                title="How to move workload to a different server">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="p-6">
+                    <!-- Info panel (hidden by default) -->
+                    <div id="preferred-servers-info" class="hidden mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div class="flex">
+                            <svg class="w-5 h-5 text-amber-500 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                            <div class="text-sm text-amber-800">
+                                <p class="font-medium mb-2">How to move your workload to a different server:</p>
+                                <ol class="list-decimal list-inside space-y-1 text-amber-700">
+                                    <li>Select your preferred server(s) and click <strong>Save Changes</strong></li>
+                                    <li><strong>Stop the domain</strong> using the suspend button</li>
+                                    <li>Wait until the domain is fully stopped (check <em>Live Cluster Status</em> - the web deployment should disappear)</li>
+                                    <li><strong>Start the domain</strong> again - it will now run on your preferred server</li>
+                                </ol>
+                                <p class="mt-2 text-xs text-amber-600">
+                                    <strong>Why?</strong> The storage volume can only be attached to one server at a time.
+                                    The workload must fully stop before it can be moved to a different server.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <p class="text-sm text-gray-600 mb-4">
                         Select which servers this domain should preferably run on.
                         If none selected, any available server will be used.
@@ -1261,6 +1292,18 @@ function showToast(message) {
         }, 300);
     }, 3000);
 }
+
+// Toggle Preferred Servers info panel
+document.addEventListener('DOMContentLoaded', function() {
+    const infoBtn = document.getElementById('preferred-servers-info-btn');
+    const infoPanel = document.getElementById('preferred-servers-info');
+
+    if (infoBtn && infoPanel) {
+        infoBtn.addEventListener('click', function() {
+            infoPanel.classList.toggle('hidden');
+        });
+    }
+});
 
 // Toggle DNS enable form visibility
 document.addEventListener('DOMContentLoaded', function() {
