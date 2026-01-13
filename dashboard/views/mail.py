@@ -1,13 +1,14 @@
 """
 Mail user and alias management views
 """
+import subprocess
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import StreamingHttpResponse
 
 from kubernetes import client, config
-from kubernetes.stream import stream
 
 from dashboard.models import Domain, MailUser, MailAlias, LogEntry
 from dashboard.forms import MailUserForm, MailAliasForm
@@ -140,7 +141,7 @@ def download_mailbox(request, user_id):
     """
     Download entire mailbox as .tar.gz archive.
 
-    Streams tarball directly from SMTP pod to user.
+    Streams tarball directly from SMTP pod to user via kubectl exec.
     """
     # Get mail user (with ownership check)
     try:
@@ -180,47 +181,41 @@ def download_mailbox(request, user_id):
 
     smtp_pod = pods.items[0].metadata.name
 
-    # Check if maildir exists
-    check_cmd = ['sh', '-c', f'test -d "{maildir_path}" && echo "exists"']
+    # Check if maildir exists using kubectl exec
+    check_cmd = [
+        "kubectl", "exec", "-i",
+        "-n", "kubepanel",
+        smtp_pod,
+        "--", "sh", "-c", f'test -d "{maildir_path}" && echo "exists"'
+    ]
     try:
-        resp = stream(
-            v1.connect_get_namespaced_pod_exec,
-            smtp_pod, 'kubepanel',
-            command=check_cmd,
-            stderr=True, stdin=False, stdout=True, tty=False
-        )
-        if 'exists' not in resp:
+        result = subprocess.run(check_cmd, capture_output=True, text=True, timeout=30)
+        if 'exists' not in result.stdout:
             messages.warning(request, "Mailbox is empty or not yet created.")
             return redirect('list_mail_users')
     except Exception as e:
         messages.error(request, f"Failed to check mailbox: {e}")
         return redirect('list_mail_users')
 
-    # Stream tarball
-    tar_cmd = ['tar', '-czf', '-', '-C', f'/var/mail/vmail/{domain_name}', local_part]
+    # Stream tarball using kubectl exec and subprocess
+    tar_cmd = [
+        "kubectl", "exec", "-i",
+        "-n", "kubepanel",
+        smtp_pod,
+        "--", "tar", "-czf", "-", "-C", f"/var/mail/vmail/{domain_name}", local_part
+    ]
+
+    proc = subprocess.Popen(tar_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def stream_tar():
         """Generator that streams tar output from the pod."""
-        resp = stream(
-            v1.connect_get_namespaced_pod_exec,
-            smtp_pod, 'kubepanel',
-            command=tar_cmd,
-            stderr=False, stdin=False, stdout=True, tty=False,
-            _preload_content=False
-        )
-        # Read from websocket while connection is open
-        while resp.is_open():
-            resp.update(timeout=5)
-            if resp.peek_stdout():
-                chunk = resp.read_stdout()
-                if chunk:
-                    yield chunk.encode('latin-1') if isinstance(chunk, str) else chunk
-        # Read any remaining data
-        if resp.peek_stdout():
-            chunk = resp.read_stdout()
-            if chunk:
-                yield chunk.encode('latin-1') if isinstance(chunk, str) else chunk
-        resp.close()
+        try:
+            for chunk in iter(lambda: proc.stdout.read(64 * 1024), b""):
+                yield chunk
+            proc.wait()
+        finally:
+            proc.stdout.close()
+            proc.stderr.close()
 
     filename = f"{local_part}_{domain_name}_mailbox.tar.gz"
     response = StreamingHttpResponse(
