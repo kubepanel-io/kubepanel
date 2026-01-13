@@ -137,6 +137,17 @@
                             <span>Export</span>
                         </a>
 
+                        <!-- Import Mailbox Button -->
+                        <a href="{% url 'import_mailbox' mu.id %}"
+                           class="text-sm bg-purple-50 hover:bg-purple-100 text-purple-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-1"
+                           title="Import mailbox from .tar.gz">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                            </svg>
+                            <span>Import</span>
+                        </a>
+
                         <!-- Actions Dropdown -->
                         <div class="relative dropdown">
                             <button class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
