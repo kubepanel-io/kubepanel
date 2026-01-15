@@ -170,7 +170,7 @@ class DomainConfigForm(forms.Form):
         required=False,
         widget=forms.TextInput(attrs={
             'class': 'form-control',
-            'placeholder': '/public_html'
+            'placeholder': '/usr/share/nginx/html/'
         }),
         label='Document Root',
     )

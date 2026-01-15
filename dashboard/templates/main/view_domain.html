@@ -52,7 +52,8 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Left Column -->
         <div class="space-y-8">
-            <!-- Preferred Servers -->
+            {% if request.user.is_superuser %}
+            <!-- Preferred Servers (superuser only) -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-200">
                 <div class="px-6 py-4 border-b border-gray-200">
                     <div class="flex items-center justify-between">
@@ -122,6 +123,7 @@
                     {% endif %}
                 </div>
             </div>
+            {% endif %}
 
             <!-- Database Details -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-200">
