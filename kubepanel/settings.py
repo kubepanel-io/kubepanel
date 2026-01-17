@@ -16,6 +16,8 @@ import os
 # Use PyMySQL as MySQLdb (MIT license, replacing GPL mysqlclient)
 import pymysql
 pymysql.install_as_MySQLdb()
+# Override version_info to satisfy Django's mysqlclient version check
+pymysql.version_info = (2, 2, 1, "final", 0)
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
