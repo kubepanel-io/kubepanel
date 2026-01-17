@@ -447,6 +447,162 @@
             </form>
         </div>
     </div>
+
+    <!-- License Management Section (Superuser Only) -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-indigo-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">License Management</h3>
+                    <p class="text-sm text-gray-600">Manage your KubePanel license</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <!-- Current License Status -->
+            <div class="mb-6">
+                <h4 class="text-sm font-medium text-gray-700 mb-3">Current License Status</h4>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase tracking-wide">Tier</p>
+                            <p class="text-lg font-semibold {% if license.tier == 'community' %}text-blue-600{% elif license.tier == 'pro' %}text-purple-600{% elif license.tier == 'premium' %}text-indigo-600{% elif license.tier == 'enterprise' %}text-amber-600{% else %}text-gray-600{% endif %}">
+                                {{ license.tier|default:"Community"|title }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase tracking-wide">Domains</p>
+                            <p class="text-lg font-semibold text-gray-900">
+                                {{ license_usage.current }}/{% if license.maxDomains == -1 %}∞{% else %}{{ license.maxDomains|default:5 }}{% endif %}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase tracking-wide">Status</p>
+                            <p class="text-lg font-semibold {% if license.valid %}text-green-600{% else %}text-red-600{% endif %}">
+                                {% if license.valid %}Valid{% else %}Invalid{% endif %}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase tracking-wide">Expires</p>
+                            <p class="text-lg font-semibold text-gray-900">
+                                {% if license.expiresAt %}{{ license.expiresAt|slice:":10" }}{% else %}N/A{% endif %}
+                            </p>
+                        </div>
+                    </div>
+
+                    {% if license.customerName %}
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <p class="text-sm text-gray-600">
+                            <span class="font-medium">Customer:</span> {{ license.customerName }}
+                        </p>
+                    </div>
+                    {% endif %}
+
+                    {% if license.message %}
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <p class="text-sm text-gray-600">{{ license.message }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if license.gracePeriodEndsAt %}
+                    <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p class="text-sm text-yellow-800">
+                            <span class="font-medium">Warning:</span> License verification failing. Grace period ends {{ license.gracePeriodEndsAt|slice:":10" }}.
+                        </p>
+                    </div>
+                    {% endif %}
+
+                    {% if license.lastPhoneHome %}
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <p class="text-xs text-gray-500">
+                            Last verified: {{ license.lastPhoneHome|slice:":19" }}
+                            {% if license.phoneHomeFailures > 0 %}
+                            <span class="text-yellow-600">({{ license.phoneHomeFailures }} failed attempts)</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Update License Key -->
+            <form method="POST" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="save_license" value="1">
+
+                <div class="mb-4">
+                    <label for="license_key" class="block text-sm font-medium text-gray-700 mb-2">
+                        License Key
+                    </label>
+                    <textarea name="license_key"
+                              id="license_key"
+                              rows="3"
+                              placeholder="Paste your license key here..."
+                              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"></textarea>
+                    <p class="mt-1 text-xs text-gray-500">
+                        Paste the license key you received after purchase. Leave empty and save to use Community tier.
+                    </p>
+                </div>
+
+                <div class="flex justify-between pt-4 border-t border-gray-200">
+                    {% if license.tier and license.tier != 'community' %}
+                    <button type="submit"
+                            name="remove_license"
+                            value="1"
+                            onclick="return confirm('Are you sure you want to remove the license? This will revert to Community tier (5 domains max).');"
+                            class="inline-flex items-center px-4 py-2.5 border border-red-300 rounded-lg text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        Remove License
+                    </button>
+                    {% else %}
+                    <div></div>
+                    {% endif %}
+
+                    <button type="submit"
+                            class="inline-flex items-center px-6 py-2.5 border border-transparent rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 shadow-sm transition-all">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Update License
+                    </button>
+                </div>
+            </form>
+
+            <!-- Purchase Link -->
+            {% if license.tier == 'community' %}
+            <div class="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h5 class="text-sm font-medium text-purple-800">Upgrade to Pro</h5>
+                        <p class="text-sm text-purple-700 mt-1">
+                            Get unlimited domains, priority support, and more.
+                        </p>
+                        <a href="https://kubepanel.io/pricing" target="_blank"
+                           class="inline-flex items-center mt-2 text-sm font-medium text-purple-700 hover:text-purple-900">
+                            View pricing
+                            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
     {% endif %}
 
 </div>

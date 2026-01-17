@@ -1367,14 +1367,28 @@ def settings(request):
     User settings page with:
     - Password change (all users)
     - Storage notification settings (superusers only)
+    - License management (superusers only)
     """
     password_form = PasswordChangeForm(request.user)
     password_changed = False
 
     # Get system settings for superusers
     system_settings = None
+    license_status = None
+    license_usage = None
+
     if request.user.is_superuser:
         system_settings = SystemSettings.get_settings()
+
+        # Get license status
+        try:
+            from dashboard.licensing.service import LicenseService
+            license_status = LicenseService.get_license_status(use_cache=False)
+            license_usage = LicenseService.get_domain_usage()
+        except Exception as e:
+            logger.warning(f"Failed to get license status: {e}")
+            license_status = {'tier': 'unknown', 'message': f'Error: {e}'}
+            license_usage = {'current': 0, 'max': 5, 'percentage': 0}
 
     if request.method == 'POST':
         # Handle password change
@@ -1420,11 +1434,126 @@ def settings(request):
             except Exception as e:
                 messages.error(request, f'Error saving settings: {e}')
 
+        # Handle license key update (superuser only)
+        elif 'save_license' in request.POST and request.user.is_superuser:
+            license_key = request.POST.get('license_key', '').strip()
+            try:
+                _update_license_cr(license_key)
+                messages.success(request, 'License key updated successfully.')
+
+                # Refresh license status
+                from dashboard.licensing.service import LicenseService
+                LicenseService.invalidate_cache()
+                license_status = LicenseService.get_license_status(use_cache=False)
+                license_usage = LicenseService.get_domain_usage()
+            except Exception as e:
+                logger.error(f"Failed to update license: {e}")
+                messages.error(request, f'Failed to update license: {e}')
+
+        # Handle license removal (superuser only)
+        elif 'remove_license' in request.POST and request.user.is_superuser:
+            try:
+                _delete_license_cr()
+                messages.success(request, 'License removed. Reverted to Community tier.')
+
+                # Refresh license status
+                from dashboard.licensing.service import LicenseService
+                LicenseService.invalidate_cache()
+                license_status = LicenseService.get_license_status(use_cache=False)
+                license_usage = LicenseService.get_domain_usage()
+            except Exception as e:
+                logger.error(f"Failed to remove license: {e}")
+                messages.error(request, f'Failed to remove license: {e}')
+
     return render(request, "main/settings.html", {
         'password_form': password_form,
         'password_changed': password_changed,
         'system_settings': system_settings,
+        'license': license_status,
+        'license_usage': license_usage,
     })
+
+
+def _update_license_cr(license_key: str):
+    """Create or update the License CR in Kubernetes."""
+    from kubernetes import client, config
+    from kubernetes.client.rest import ApiException
+
+    try:
+        config.load_incluster_config()
+    except config.ConfigException:
+        config.load_kube_config()
+
+    api = client.CustomObjectsApi()
+
+    license_cr = {
+        'apiVersion': 'kubepanel.io/v1alpha1',
+        'kind': 'License',
+        'metadata': {
+            'name': 'kubepanel-license',
+        },
+        'spec': {
+            'licenseKey': license_key,
+        }
+    }
+
+    try:
+        # Try to get existing CR
+        api.get_cluster_custom_object(
+            group='kubepanel.io',
+            version='v1alpha1',
+            plural='licenses',
+            name='kubepanel-license'
+        )
+        # CR exists, patch it
+        api.patch_cluster_custom_object(
+            group='kubepanel.io',
+            version='v1alpha1',
+            plural='licenses',
+            name='kubepanel-license',
+            body={'spec': {'licenseKey': license_key}}
+        )
+        logger.info("License CR updated")
+    except ApiException as e:
+        if e.status == 404:
+            # CR doesn't exist, create it
+            api.create_cluster_custom_object(
+                group='kubepanel.io',
+                version='v1alpha1',
+                plural='licenses',
+                body=license_cr
+            )
+            logger.info("License CR created")
+        else:
+            raise
+
+
+def _delete_license_cr():
+    """Delete the License CR from Kubernetes (reverts to community tier)."""
+    from kubernetes import client, config
+    from kubernetes.client.rest import ApiException
+
+    try:
+        config.load_incluster_config()
+    except config.ConfigException:
+        config.load_kube_config()
+
+    api = client.CustomObjectsApi()
+
+    try:
+        api.delete_cluster_custom_object(
+            group='kubepanel.io',
+            version='v1alpha1',
+            plural='licenses',
+            name='kubepanel-license'
+        )
+        logger.info("License CR deleted")
+    except ApiException as e:
+        if e.status == 404:
+            # Already deleted, that's fine
+            pass
+        else:
+            raise
 
 
 # Password management functions
