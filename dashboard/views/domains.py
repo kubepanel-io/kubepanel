@@ -225,6 +225,22 @@ def kpmain(request):
         d.storage_used_gb for d in domains if d.storage_used_gb is not None
     )
 
+    # Get license status for display
+    license_status = {}
+    license_usage = {}
+    try:
+        from dashboard.licensing.service import LicenseService
+        license_status = LicenseService.get_license_status()
+        license_usage = LicenseService.get_domain_usage()
+    except ImportError:
+        # Licensing module not available
+        license_status = {'tier': 'community', 'valid': True}
+        license_usage = {'current': len(domains), 'max': 5, 'percentage': 0}
+    except Exception as e:
+        logger.warning(f"Failed to get license status: {e}")
+        license_status = {'tier': 'unknown', 'valid': True, 'message': 'License check unavailable'}
+        license_usage = {'current': len(domains), 'max': -1, 'percentage': 0}
+
     return render(request, 'main/domain.html', {
         'domains': domains,
         'pkg': pkg,
@@ -234,6 +250,8 @@ def kpmain(request):
         'total_mem': total_mem,
         'total_mail_users': total_mail_users,
         'total_domain_aliases': total_domain_aliases,
+        'license': license_status,
+        'license_usage': license_usage,
     })
 
 

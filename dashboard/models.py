@@ -317,6 +317,23 @@ class Domain(models.Model):
                     'mail_users': f"Total mail users ({total_mail_users}) exceed package limit ({pkg.max_mail_users})."
                 })
 
+        # Check global license domain limit (only for new domains)
+        if not self.pk:
+            try:
+                from dashboard.licensing.service import LicenseService
+                can_create, message = LicenseService.can_create_domain()
+                if not can_create:
+                    raise ValidationError({
+                        '__all__': message
+                    })
+            except ImportError:
+                # Licensing module not available - allow creation
+                pass
+            except Exception as e:
+                # Log but don't block domain creation on license check errors
+                import logging
+                logging.getLogger(__name__).warning(f"License check failed: {e}")
+
     @property
     def cr_name(self) -> str:
         """
