@@ -21,27 +21,39 @@
 {% endblock %}
 
 {% block header_actions %}
-{% if license_usage.max != -1 and license_usage.current >= license_usage.max %}
-<span class="relative group">
-    <span class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm opacity-50 cursor-not-allowed flex items-center space-x-2">
+<div class="flex items-center space-x-4">
+    {% if license.tier and license.tier != 'community' %}
+    <!-- Compact license badge for paid tiers -->
+    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">
+        <svg class="w-3.5 h-3.5 mr-1.5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        {{ license.tier|title }}{% if license.maxDomains != -1 %}: {{ license_usage.current }}/{{ license.maxDomains }}{% endif %}
+    </span>
+    {% endif %}
+
+    {% if license_usage.max != -1 and license_usage.current >= license_usage.max %}
+    <span class="relative group">
+        <span class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm opacity-50 cursor-not-allowed flex items-center space-x-2">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+            <span>Add Domain</span>
+        </span>
+        <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            Domain limit reached ({{ license_usage.current }}/{{ license_usage.max }}). <a href="https://kubepanel.io/pricing" class="underline">Upgrade</a>
+        </span>
+    </span>
+    {% else %}
+    <a href="{% url 'add_domain' %}"
+       class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
         </svg>
         <span>Add Domain</span>
-    </span>
-    <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-        Domain limit reached ({{ license_usage.current }}/{{ license_usage.max }}). <a href="https://kubepanel.io/pricing" class="underline">Upgrade</a>
-    </span>
-</span>
-{% else %}
-<a href="{% url 'add_domain' %}"
-   class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
-    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-    </svg>
-    <span>Add Domain</span>
-</a>
-{% endif %}
+    </a>
+    {% endif %}
+</div>
 {% endblock %}
 
 {% block content %}
@@ -89,30 +101,6 @@
     <a href="https://kubepanel.io/pricing" target="_blank" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
         Upgrade Now
     </a>
-</div>
-{% elif license.tier and license.tier != 'community' %}
-<div class="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between">
-    <div class="flex items-center">
-        <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-            </svg>
-        </div>
-        <div class="ml-3">
-            <p class="text-sm font-medium text-green-800">
-                {{ license.tier|title }} License
-                {% if license.customerName %} - {{ license.customerName }}{% endif %}
-            </p>
-            <p class="text-sm text-green-700">
-                {% if license.maxDomains == -1 %}
-                    Unlimited domains
-                {% else %}
-                    {{ license_usage.current }}/{{ license.maxDomains }} domains
-                {% endif %}
-                {% if license.expiresAt %} | Expires: {{ license.expiresAt|slice:":10" }}{% endif %}
-            </p>
-        </div>
-    </div>
 </div>
 {% endif %}
 
