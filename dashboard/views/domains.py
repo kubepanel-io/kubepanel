@@ -261,6 +261,20 @@ def add_domain(request):
     Add a new domain.
     Uses atomic transaction to ensure consistency.
     """
+    # Early license check before processing
+    try:
+        from dashboard.licensing.service import LicenseService
+        can_create, license_message = LicenseService.can_create_domain()
+        if not can_create:
+            messages.error(request, license_message)
+            return redirect('kpmain')
+    except ImportError:
+        pass  # Licensing module not available
+    except Exception as e:
+        logger.error(f"License check failed in add_domain view: {e}")
+        messages.error(request, f"Unable to verify license: {e}")
+        return redirect('kpmain')
+
     if request.method == 'POST':
         try:
             # Extract form data

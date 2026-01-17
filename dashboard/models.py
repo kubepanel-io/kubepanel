@@ -327,12 +327,19 @@ class Domain(models.Model):
                         '__all__': message
                     })
             except ImportError:
-                # Licensing module not available - allow creation
+                # Licensing module not available - allow creation (community default)
                 pass
+            except ValidationError:
+                # Re-raise validation errors
+                raise
             except Exception as e:
-                # Log but don't block domain creation on license check errors
+                # License check failed - block domain creation to be safe
                 import logging
-                logging.getLogger(__name__).warning(f"License check failed: {e}")
+                logger = logging.getLogger(__name__)
+                logger.error(f"License check failed with error: {e}")
+                raise ValidationError({
+                    '__all__': f"Unable to verify license. Please try again or contact support. Error: {e}"
+                })
 
     @property
     def cr_name(self) -> str:
