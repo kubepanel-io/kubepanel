@@ -88,6 +88,7 @@ class DomainSpec:
         self.aliases: list[str] = []
         self.preferred_nodes: list[str] = []  # Preferred cluster nodes for scheduling
         self.suspended: bool = False
+        self.timezone: str = 'UTC'  # Container timezone (e.g., 'Europe/Budapest')
 
         # Workload optional fields
         self.workload_command: Optional[list] = None
@@ -177,6 +178,10 @@ class DomainSpec:
         # Add suspended if True
         if self.suspended:
             spec["suspended"] = True
+
+        # Add timezone (only if not default UTC)
+        if self.timezone and self.timezone != 'UTC':
+            spec["timezone"] = self.timezone
 
         # Add resource requests if any are set
         if self.cpu_request or self.memory_request:
@@ -867,6 +872,9 @@ def get_domain_config(domain_name: str) -> dict:
     cache = webserver.get("cache", {})
 
     return {
+        # Domain settings
+        "timezone": spec.get("timezone", "UTC"),
+
         # Workload info
         "workload_type": workload.get("type", "php"),
         "workload_version": workload.get("version", ""),

@@ -11,6 +11,46 @@ from dashboard.models import (
 from passlib.hash import sha512_crypt
 
 
+# Timezone choices for domain containers
+TIMEZONE_CHOICES = [
+    ('UTC', 'UTC'),
+    # Europe
+    ('Europe/London', 'Europe/London (GMT/BST)'),
+    ('Europe/Lisbon', 'Europe/Lisbon (WET/WEST)'),
+    ('Europe/Paris', 'Europe/Paris (CET/CEST)'),
+    ('Europe/Berlin', 'Europe/Berlin (CET/CEST)'),
+    ('Europe/Budapest', 'Europe/Budapest (CET/CEST)'),
+    ('Europe/Bucharest', 'Europe/Bucharest (EET/EEST)'),
+    ('Europe/Helsinki', 'Europe/Helsinki (EET/EEST)'),
+    ('Europe/Moscow', 'Europe/Moscow (MSK)'),
+    # Americas - US
+    ('America/New_York', 'America/New_York (EST/EDT)'),
+    ('America/Chicago', 'America/Chicago (CST/CDT)'),
+    ('America/Denver', 'America/Denver (MST/MDT)'),
+    ('America/Los_Angeles', 'America/Los_Angeles (PST/PDT)'),
+    ('America/Anchorage', 'America/Anchorage (AKST/AKDT)'),
+    ('Pacific/Honolulu', 'Pacific/Honolulu (HST)'),
+    # Americas - South America
+    ('America/Sao_Paulo', 'America/Sao_Paulo (BRT)'),
+    ('America/Buenos_Aires', 'America/Buenos_Aires (ART)'),
+    ('America/Lima', 'America/Lima (PET)'),
+    ('America/Santiago', 'America/Santiago (CLT/CLST)'),
+    ('America/Bogota', 'America/Bogota (COT)'),
+    # Asia
+    ('Asia/Tokyo', 'Asia/Tokyo (JST)'),
+    ('Asia/Shanghai', 'Asia/Shanghai (CST)'),
+    ('Asia/Singapore', 'Asia/Singapore (SGT)'),
+    ('Asia/Ho_Chi_Minh', 'Asia/Ho_Chi_Minh (ICT)'),
+    ('Asia/Bangkok', 'Asia/Bangkok (ICT)'),
+    ('Asia/Dubai', 'Asia/Dubai (GST)'),
+    ('Asia/Kolkata', 'Asia/Kolkata (IST)'),
+    # Australia
+    ('Australia/Sydney', 'Australia/Sydney (AEST/AEDT)'),
+    ('Australia/Perth', 'Australia/Perth (AWST)'),
+    ('Australia/Brisbane', 'Australia/Brisbane (AEST)'),
+]
+
+
 class WorkloadVersionChoiceField(forms.ModelChoiceField):
     """Custom field that displays workload type + version."""
     def label_from_instance(self, obj):
@@ -82,6 +122,16 @@ class DomainConfigForm(forms.Form):
 
     Note: PHP-specific fields are shown/hidden via JavaScript based on workload type.
     """
+    # General settings
+    timezone = forms.ChoiceField(
+        choices=TIMEZONE_CHOICES,
+        initial='UTC',
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Timezone',
+        help_text='Timezone for all containers (app, nginx, sftp)',
+    )
+
     # PHP settings (shown only for PHP workloads)
     php_memory_limit = forms.CharField(
         max_length=10,
@@ -273,6 +323,10 @@ class DomainConfigForm(forms.Form):
             "webserver": {}
         }
 
+        # Timezone (applies to all containers)
+        if data.get("timezone"):
+            patch["timezone"] = data["timezone"]
+
         # Workload settings (PHP-specific settings go in settings dict)
         if workload_type == 'php':
             if data.get("php_memory_limit"):
@@ -339,6 +393,15 @@ class DomainAddForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-select', 'id': 'id_workload_version'}),
         label='Workload Version',
         required=True,
+    )
+
+    timezone = forms.ChoiceField(
+        choices=TIMEZONE_CHOICES,
+        initial='UTC',
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Timezone',
+        help_text='Timezone for all containers (app, nginx, sftp)',
     )
 
     class Meta:

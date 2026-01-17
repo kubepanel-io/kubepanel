@@ -301,6 +301,7 @@ def add_domain(request):
             wp_preinstall = request.POST.get("wordpress_preinstall") == "1"
             auto_dns = request.POST.get("auto_dns") == "1"
             api_token_id = request.POST.get("api_token", "") if auto_dns else None
+            timezone = request.POST.get("timezone", "UTC")
 
             # Generate DKIM keypair
             dkim_private_key, dkim_public_key, dkim_dns_record = generate_dkim_keypair()
@@ -323,6 +324,7 @@ def add_domain(request):
             domain_spec.title = domain_name
             domain_spec.wordpress_preinstall = wp_preinstall
             domain_spec.email_enabled = True
+            domain_spec.timezone = timezone
             domain_spec.dkim_selector = dkim_selector
             domain_spec.dkim_secret_ref = {
                 "name": dkim_secret_name,
