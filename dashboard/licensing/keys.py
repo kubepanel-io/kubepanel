@@ -17,38 +17,10 @@ from cryptography.exceptions import InvalidSignature
 
 logger = logging.getLogger(__name__)
 
-# =============================================================================
-# PUBLIC KEY
-# =============================================================================
-# This is the public key used to verify license signatures.
-# The corresponding private key is kept secret and used only for license generation.
-#
-# TO GENERATE A NEW KEYPAIR (do this once, keep private key secret):
-#   from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-#   from cryptography.hazmat.primitives import serialization
-#
-#   private_key = Ed25519PrivateKey.generate()
-#   public_key = private_key.public_key()
-#
-#   # Save private key (KEEP SECRET!)
-#   private_pem = private_key.private_bytes(
-#       encoding=serialization.Encoding.PEM,
-#       format=serialization.PrivateFormat.PKCS8,
-#       encryption_algorithm=serialization.NoEncryption()
-#   )
-#
-#   # Save public key (embed in code)
-#   public_pem = public_key.public_bytes(
-#       encoding=serialization.Encoding.PEM,
-#       format=serialization.PublicFormat.SubjectPublicKeyInfo
-#   )
-# =============================================================================
-
 PUBLIC_KEY_PEM = b"""-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+MCowBQYDK2VwAyEAV3dpjazDJjUnl6tED1aKyEMYuOCNM4y7i2oblXmKQx4=
 -----END PUBLIC KEY-----"""
 
-# TODO: Replace the above with your actual public key after generating a keypair
 
 
 def get_public_key() -> Ed25519PublicKey:
