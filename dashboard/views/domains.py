@@ -848,6 +848,8 @@ def save_domain(request, domain):
                 patch["workload"] = config_patch["workload"]
         if "webserver" in config_patch:
             patch["webserver"] = config_patch["webserver"]
+        if "timezone" in config_patch:
+            patch["timezone"] = config_patch["timezone"]
 
         # Add preferred nodes (from checkboxes in the form)
         preferred_nodes = request.POST.getlist('preferred_nodes')
@@ -1183,7 +1185,7 @@ def startstop_domain(request, domain, action):
         logger.error(f"Failed to {action} domain: {e}")
         messages.error(request, f"Failed to {action} domain: {str(e)}")
 
-    return redirect('view_domain', domain=domain)
+    return redirect('kpmain')
 
 
 @login_required(login_url="/dashboard/")

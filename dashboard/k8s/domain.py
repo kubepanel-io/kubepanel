@@ -889,7 +889,7 @@ def get_domain_config(domain_name: str) -> dict:
         "custom_app_config": workload.get("customConfig", ""),
 
         # Webserver settings
-        "document_root": webserver.get("documentRoot", "/public_html"),
+        "document_root": webserver.get("documentRoot", "/usr/share/nginx/html"),
         "client_max_body_size": webserver.get("clientMaxBodySize", "64m"),
         "ssl_redirect": webserver.get("sslRedirect", True),
         "www_redirect": webserver.get("wwwRedirect", "none"),
