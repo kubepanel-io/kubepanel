@@ -137,7 +137,7 @@
                         Workload Configuration
                     </h4>
 
-                    <div class="grid grid-cols-1 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <!-- Workload Version -->
                         <div>
                             <label for="id_workload_version" class="block text-sm font-medium text-gray-700 mb-2">
@@ -151,7 +151,23 @@
                             <div class="form-field-wrapper">
                                 {{ form.workload_version }}
                             </div>
-                            <p class="mt-1 text-xs text-gray-500">Select the runtime environment and version for your application (e.g., PHP 8.2, Python 3.11)</p>
+                            <p class="mt-1 text-xs text-gray-500">Select the runtime environment and version for your application</p>
+                        </div>
+
+                        <!-- Timezone -->
+                        <div>
+                            <label for="id_timezone" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Timezone
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.timezone }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Timezone for all containers (app, nginx, sftp)</p>
                         </div>
                     </div>
                 </div>

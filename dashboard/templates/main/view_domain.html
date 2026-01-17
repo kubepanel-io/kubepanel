@@ -897,11 +897,18 @@
                 </div>
                 <div class="p-6">
                     <div class="space-y-6">
-                        <!-- Workload Version -->
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Workload Version</label>
-                            {{ form.workload_version }}
-                            <p class="mt-1 text-xs text-gray-500">Select the runtime version for your application</p>
+                        <!-- Workload Version and Timezone -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Workload Version</label>
+                                {{ form.workload_version }}
+                                <p class="mt-1 text-xs text-gray-500">Select the runtime version for your application</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
+                                {{ config_form.timezone }}
+                                <p class="mt-1 text-xs text-gray-500">Timezone for all containers (app, nginx, sftp)</p>
+                            </div>
                         </div>
 
                         <!-- PHP Settings (shown only for PHP workloads) -->
