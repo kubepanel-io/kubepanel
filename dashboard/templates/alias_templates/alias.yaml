@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress
+  namespace: {{ domain_name_dash }}
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: public
+  rules:
+{% for host in domain.all_hostnames %}
+  - host: "{{ host }}"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 8080
+  - host: "www.{{ host }}"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 8080
+{% endfor %}
+  tls:
+  - hosts:
+{% for host in domain.all_hostnames %}
+    - "{{ host }}"
+    - "www.{{ host }}"
+{% endfor %}
+    secretName: {{ domain_name_dash }}-cert

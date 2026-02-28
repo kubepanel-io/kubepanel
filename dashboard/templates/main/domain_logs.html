@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% load tz %}
+
+{% block title %}Logs | KubePanel{% endblock %}
+
+{% block page_title %}Domain Logs{% endblock %}
+{% block page_subtitle %}{{ domain }} – Auto-refreshes every 5 seconds{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'kpmain' %}" class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Domains</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Live Log Stream</h3>
+                    <p class="text-sm text-gray-600">Viewing logs for <span class="font-mono">{{ domain }}</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            {% if logs %}
+            <div class="overflow-x-auto rounded-lg border border-gray-200">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-4 py-2 text-left font-semibold text-gray-700">Timestamp</th>
+                            <th scope="col" class="px-4 py-2 text-left font-semibold text-gray-700">Level</th>
+                            <th scope="col" class="px-4 py-2 text-left font-semibold text-gray-700">Message</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 font-mono text-xs">
+                        {% localtime on %}
+                        {% for entry in logs %}
+                        <tr class="{% cycle 'bg-white' 'bg-gray-50' %}">
+                            <td class="px-4 py-2 whitespace-nowrap">{{ entry.timestamp|date:"Y-m-d H:i:s" }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap">
+                                <span class="px-2 py-0.5 rounded-full font-semibold {% if entry.level|upper == 'ERROR' %}bg-red-100 text-red-700{% elif entry.level|upper == 'WARNING' %}bg-yellow-100 text-yellow-700{% elif entry.level|upper == 'INFO' %}bg-blue-100 text-blue-700{% elif entry.level|upper == 'DEBUG' %}bg-gray-200 text-gray-700{% else %}bg-green-100 text-green-700{% endif %}">
+                                    {{ entry.level }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-2 whitespace-pre-wrap break-words">{{ entry.message }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% endlocaltime %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-500">No logs available for this domain.</p>
+            {% endif %}
+
+            <div class="flex items-center justify-between mt-6">
+                <p class="text-xs text-gray-400">Page reloads every 5 seconds</p>
+                <a href="{% url 'kpmain' %}" class="px-4 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    <span>Back to Domains</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+setTimeout(function(){ window.location.reload(); }, 5000);
+</script>
+{% endblock %}

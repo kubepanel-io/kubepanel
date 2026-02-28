@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Delete Package | KubePanel{% endblock %}
+
+{% block page_title %}Delete Package{% endblock %}
+{% block page_subtitle %}Permanently remove {{ package.name }} from the system{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'list_packages' %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Packages</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <!-- Warning Alert -->
+    <div class="mb-6 bg-red-50 border border-red-200 rounded-xl p-6">
+        <div class="flex items-start">
+            <div class="flex-shrink-0">
+                <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.232 15.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                </svg>
+            </div>
+            <div class="ml-4">
+                <h3 class="text-lg font-semibold text-red-800 mb-2">Warning: Dangerous Action</h3>
+                <div class="text-red-700 space-y-2">
+                    <p class="font-medium">This action will permanently delete the package:</p>
+                    <ul class="list-disc list-inside space-y-1 text-sm">
+                        <li>Package configuration and limits</li>
+                        <li>Any references to this package</li>
+                    </ul>
+                    <p class="font-semibold text-red-800 mt-3">This action cannot be undone!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-red-50 to-pink-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Confirm Package Deletion</h3>
+                    <p class="text-sm text-gray-600">Type the package name to confirm deletion</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            {% if error %}
+            <div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                <div class="flex items-center">
+                    <svg class="w-5 h-5 text-red-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span class="text-red-800 font-medium">{{ error }}</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Package Information -->
+            <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-900">{{ package.name }}</h4>
+                        <p class="text-sm text-gray-600">Package to be deleted</p>
+                    </div>
+                    <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-gray-500">Storage:</span>
+                        <span class="ml-2 font-medium">{{ package.max_storage_size }} GB</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">CPU:</span>
+                        <span class="ml-2 font-medium">{{ package.max_cpu }}m</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Memory:</span>
+                        <span class="ml-2 font-medium">{{ package.max_memory }} MB</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Mail Users:</span>
+                        <span class="ml-2 font-medium">{{ package.max_mail_users|default:"Unlimited" }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Confirmation Form -->
+            <form action="{% url 'delete_package' pk=package.pk %}" method="post" id="delete-form">
+                {% csrf_token %}
+
+                <div class="mb-6">
+                    <label for="package-confirmation" class="block text-sm font-medium text-gray-700 mb-3">
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                            </svg>
+                            Type the package name <span class="font-semibold text-red-600">{{ package.name }}</span> to confirm deletion:
+                        </div>
+                    </label>
+
+                    <input type="text"
+                           name="imsure"
+                           id="package-confirmation"
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-lg font-mono"
+                           placeholder="Enter package name"
+                           autocomplete="off"
+                           spellcheck="false">
+
+                    <div class="mt-2 flex items-center text-sm text-gray-600">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Package names are case-sensitive
+                    </div>
+
+                    <!-- Live validation indicator -->
+                    <div id="validation-feedback" class="mt-2 hidden">
+                        <div id="validation-success" class="flex items-center text-green-600 text-sm hidden">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Package name matches
+                        </div>
+                        <div id="validation-error" class="flex items-center text-red-600 text-sm hidden">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            Package name does not match
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Final Confirmation Checkbox -->
+                <div class="mb-6">
+                    <div class="flex items-start">
+                        <input type="checkbox"
+                               id="final-confirmation"
+                               class="mt-1 h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded">
+                        <label for="final-confirmation" class="ml-3 text-sm text-gray-700">
+                            I understand this action is <strong class="text-red-600">permanent and irreversible</strong>.
+                            This package will be permanently deleted.
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'list_packages' %}"
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit"
+                            id="delete-button"
+                            disabled
+                            class="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        <span>Delete Package</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const packageInput = document.getElementById('package-confirmation');
+        const finalCheckbox = document.getElementById('final-confirmation');
+        const deleteButton = document.getElementById('delete-button');
+        const validationFeedback = document.getElementById('validation-feedback');
+        const validationSuccess = document.getElementById('validation-success');
+        const validationError = document.getElementById('validation-error');
+
+        const expectedPackage = '{{ package.name }}';
+        let packageMatches = false;
+        let confirmationChecked = false;
+
+        function updateDeleteButton() {
+            deleteButton.disabled = !(packageMatches && confirmationChecked);
+
+            if (deleteButton.disabled) {
+                deleteButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+                deleteButton.classList.add('bg-gray-400', 'cursor-not-allowed');
+            } else {
+                deleteButton.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                deleteButton.classList.add('bg-red-600', 'hover:bg-red-700');
+            }
+        }
+
+        function validatePackage() {
+            const inputValue = packageInput.value.trim();
+
+            if (inputValue === '') {
+                validationFeedback.classList.add('hidden');
+                packageMatches = false;
+            } else if (inputValue === expectedPackage) {
+                validationFeedback.classList.remove('hidden');
+                validationSuccess.classList.remove('hidden');
+                validationError.classList.add('hidden');
+                packageMatches = true;
+                packageInput.classList.remove('border-red-300', 'focus:ring-red-500');
+                packageInput.classList.add('border-green-300', 'focus:ring-green-500');
+            } else {
+                validationFeedback.classList.remove('hidden');
+                validationSuccess.classList.add('hidden');
+                validationError.classList.remove('hidden');
+                packageMatches = false;
+                packageInput.classList.remove('border-green-300', 'focus:ring-green-500');
+                packageInput.classList.add('border-red-300', 'focus:ring-red-500');
+            }
+
+            updateDeleteButton();
+        }
+
+        function updateConfirmation() {
+            confirmationChecked = finalCheckbox.checked;
+            updateDeleteButton();
+        }
+
+        // Event listeners
+        packageInput.addEventListener('input', validatePackage);
+        packageInput.addEventListener('paste', function() {
+            setTimeout(validatePackage, 10);
+        });
+
+        finalCheckbox.addEventListener('change', updateConfirmation);
+
+        // Focus management
+        packageInput.focus();
+
+        // Initial state
+        updateDeleteButton();
+    });
+</script>
+{% endblock %}
+{% endblock %}

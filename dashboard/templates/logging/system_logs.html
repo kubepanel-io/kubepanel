@@ -1,0 +1,478 @@
+<!-- dashboard/templates/logging/system_logs.html -->
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}System Logs | KubePanel{% endblock %}
+
+{% block page_title %}System Logs{% endblock %}
+{% block page_subtitle %}Monitor and analyze all system activity and events{% endblock %}
+
+{% block header_search %}
+<div class="relative">
+    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+    </div>
+    <input type="text"
+           class="pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg w-80 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+           placeholder="Search logs, actors, messages..."
+           id="log-search"
+           value="{{ current_search }}">
+</div>
+{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <a href="{% url 'error_logs' %}" 
+       class="text-red-600 hover:text-red-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-red-300 hover:border-red-400 bg-red-50 hover:bg-red-100">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.99-.833-2.76 0L3.054 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+        </svg>
+        <span>Errors Only</span>
+    </a>
+    <a href="{% url 'logs_stats' %}" 
+       class="btn-primary text-white px-4 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+        </svg>
+        <span>Statistics</span>
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Filters Panel -->
+<div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-6">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+            <label for="level" class="block text-sm font-medium text-gray-700 mb-2">Log Level</label>
+            <select name="level" id="level" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm">
+                <option value="">All Levels</option>
+                {% for level_value, level_display in available_levels %}
+                    <option value="{{ level_value }}" {% if current_level == level_value %}selected{% endif %}>
+                        {{ level_display }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="search" class="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <input type="text" name="search" id="search" 
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm" 
+                   value="{{ current_search }}" 
+                   placeholder="Search message or actor...">
+        </div>
+        <div>
+            <label for="days" class="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
+            <select name="days" id="days" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm">
+                <option value="1" {% if current_days == 1 %}selected{% endif %}>Last 24 hours</option>
+                <option value="7" {% if current_days == 7 %}selected{% endif %}>Last 7 days</option>
+                <option value="30" {% if current_days == 30 %}selected{% endif %}>Last 30 days</option>
+                <option value="0" {% if current_days == 0 %}selected{% endif %}>All time</option>
+            </select>
+        </div>
+        <div class="flex items-end space-x-2">
+            <button type="submit" class="flex-1 btn-primary text-white px-4 py-2 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200">
+                Apply Filters
+            </button>
+            <a href="{% url 'system_logs' %}" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                Clear
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Log Stats Overview -->
+{% if page_obj %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Total Logs</p>
+                <p class="text-2xl font-semibold text-gray-900">{{ total_logs }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Info & Debug</p>
+                <p class="text-2xl font-semibold text-gray-900" id="info-logs">0</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.99-.833-2.76 0L3.054 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Warnings</p>
+                <p class="text-2xl font-semibold text-gray-900" id="warning-logs">0</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Errors</p>
+                <p class="text-2xl font-semibold text-gray-900" id="error-logs">0</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- System Logs Table -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                <div class="w-3 h-3 bg-blue-500 rounded-full mr-3"></div>
+                System Log Entries
+            </h3>
+            <div class="flex items-center space-x-3">
+                {% if page_obj %}
+                <span class="text-sm text-gray-500">
+                    Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} logs
+                </span>
+                {% endif %}
+                <button onclick="location.reload()" 
+                        class="text-sm text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors">
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {% if page_obj %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200" id="logsTable">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Timestamp</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Level</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Actor</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Object</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Message</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for log in page_obj %}
+                <tr class="hover:bg-gray-50 transition-colors log-level-{{ log.level|lower }}">
+                    <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-900">
+                        <div class="flex flex-col">
+                            <span class="font-medium">{{ log.timestamp|date:"M d, Y" }}</span>
+                            <span class="text-gray-500 font-mono">{{ log.timestamp|date:"H:i:s" }}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if log.level == 'ERROR' or log.level == 'CRITICAL' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {{ log.level }}
+                        </span>
+                        {% elif log.level == 'WARNING' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.99-.833-2.76 0L3.054 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                            </svg>
+                            {{ log.level }}
+                        </span>
+                        {% elif log.level == 'DEBUG' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
+                            </svg>
+                            {{ log.level }}
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {{ log.level }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                            <span class="text-sm text-gray-900 font-mono">{{ log.actor }}</span>
+                        </div>
+                        {% if log.user and log.user.username != log.actor %}
+                            <div class="text-xs text-gray-500 mt-1">{{ log.user.username }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if log.content_object %}
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
+                                <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="text-sm font-medium text-gray-900">{{ log.content_type.model|title }}</div>
+                                <div class="text-sm text-gray-500">
+                                    {% if log.content_object.domain_name %}
+                                        {{ log.content_object.domain_name }}
+                                    {% elif log.content_object.name %}
+                                        {{ log.content_object.name }}
+                                    {% else %}
+                                        ID {{ log.object_id }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <span class="text-gray-400 text-sm">System</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm text-gray-900">{{ log.message }}</div>
+                        {% if log.data %}
+                            <div class="text-xs text-gray-500 mt-1 flex items-center">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                </svg>
+                                Has additional data
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center space-x-2">
+                            <a href="{% url 'log_detail' log.id %}" 
+                               class="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                </svg>
+                            </a>
+                            {% if log.content_object %}
+                                <a href="{% url 'object_logs' log.content_type.id log.object_id %}" 
+                                   class="text-gray-600 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                                    </svg>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="px-6 py-12 text-center">
+                        <div class="flex flex-col items-center">
+                            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">No log entries found</h3>
+                            <p class="text-gray-500">Try adjusting your filters or check back later.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <nav class="flex items-center justify-between">
+            <div class="flex-1 flex justify-between sm:hidden">
+                <!-- Mobile pagination -->
+                {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}{% if current_level %}&level={{ current_level }}{% endif %}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_days %}&days={{ current_days }}{% endif %}"
+                       class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Previous
+                    </a>
+                {% else %}
+                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-300 bg-gray-100">
+                        Previous
+                    </span>
+                {% endif %}
+
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if current_level %}&level={{ current_level }}{% endif %}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_days %}&days={{ current_days }}{% endif %}"
+                       class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Next
+                    </a>
+                {% else %}
+                    <span class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-300 bg-gray-100">
+                        Next
+                    </span>
+                {% endif %}
+            </div>
+
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm text-gray-700">
+                        Showing <span class="font-medium">{{ page_obj.start_index }}</span> to
+                        <span class="font-medium">{{ page_obj.end_index }}</span> of
+                        <span class="font-medium">{{ page_obj.paginator.count }}</span> results
+                    </p>
+                </div>
+                <div>
+                    <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                        <!-- Pagination buttons similar to your existing pattern -->
+                        {% if page_obj.has_previous %}
+                            <a href="?page=1{% if current_level %}&level={{ current_level }}{% endif %}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_days %}&days={{ current_days }}{% endif %}"
+                               class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <span class="sr-only">First</span>
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path>
+                                </svg>
+                            </a>
+                            <a href="?page={{ page_obj.previous_page_number }}{% if current_level %}&level={{ current_level }}{% endif %}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_days %}&days={{ current_days }}{% endif %}"
+                               class="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <span class="sr-only">Previous</span>
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                            </a>
+                        {% endif %}
+
+                        <span class="relative inline-flex items-center px-4 py-2 border border-primary-500 bg-primary-50 text-sm font-medium text-primary-600">
+                            {{ page_obj.number }}
+                        </span>
+
+                        {% if page_obj.has_next %}
+                            <a href="?page={{ page_obj.next_page_number }}{% if current_level %}&level={{ current_level }}{% endif %}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_days %}&days={{ current_days }}{% endif %}"
+                               class="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <span class="sr-only">Next</span>
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </a>
+                            <a href="?page={{ page_obj.paginator.num_pages }}{% if current_level %}&level={{ current_level }}{% endif %}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_days %}&days={{ current_days }}{% endif %}"
+                               class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <span class="sr-only">Last</span>
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path>
+                                </svg>
+                            </a>
+                        {% endif %}
+                    </nav>
+                </div>
+            </div>
+        </nav>
+    </div>
+    {% endif %}
+    {% else %}
+    <!-- Empty State -->
+    <div class="px-6 py-12 text-center">
+        <div class="flex flex-col items-center">
+            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No log entries found</h3>
+            <p class="text-gray-500 mb-4">No system activity has been logged yet, or all logs have been filtered out.</p>
+            <a href="{% url 'system_logs' %}" class="btn-primary text-white px-4 py-2 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200">
+                Clear All Filters
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Update stats based on visible rows
+        function updateStats() {
+            const table = document.getElementById('logsTable');
+            if (!table) return;
+
+            const rows = table.querySelectorAll('tbody tr:not([style*="display: none"])');
+            let infoCount = 0, warningCount = 0, errorCount = 0;
+
+            rows.forEach(row => {
+                const levelCell = row.querySelector('td:nth-child(2)');
+                if (levelCell) {
+                    const levelText = levelCell.textContent.trim();
+                    if (levelText.includes('INFO') || levelText.includes('DEBUG')) {
+                        infoCount++;
+                    } else if (levelText.includes('WARNING')) {
+                        warningCount++;
+                    } else if (levelText.includes('ERROR') || levelText.includes('CRITICAL')) {
+                        errorCount++;
+                    }
+                }
+            });
+
+            const infoEl = document.getElementById('info-logs');
+            const warningEl = document.getElementById('warning-logs');
+            const errorEl = document.getElementById('error-logs');
+
+            if (infoEl) infoEl.textContent = infoCount;
+            if (warningEl) warningEl.textContent = warningCount;
+            if (errorEl) errorEl.textContent = errorCount;
+        }
+
+        // Initialize stats
+        updateStats();
+
+        // Search functionality
+        const searchInput = document.getElementById('log-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                const form = this.closest('form') || document.querySelector('form');
+                if (form) {
+                    const searchField = form.querySelector('input[name="search"]');
+                    if (searchField) {
+                        searchField.value = this.value;
+                    }
+                }
+            });
+        }
+    });
+</script>
+
+<style>
+.log-level-error, .log-level-critical {
+    background-color: rgba(254, 242, 242, 0.5);
+}
+.log-level-warning {
+    background-color: rgba(255, 251, 235, 0.5);
+}
+.log-level-debug {
+    background-color: rgba(249, 250, 251, 0.5);
+}
+</style>
+{% endblock %}
+{% endblock %}

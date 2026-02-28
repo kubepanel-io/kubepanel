@@ -1,0 +1,562 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Edit DNS Record | KubePanel{% endblock %}
+
+{% block page_title %}Edit DNS Record{% endblock %}
+{% block page_subtitle %}Update DNS record in {{ zone.name }}{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'list_dns_records' zone.id %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to DNS Records</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl mx-auto">
+    <!-- Edit Form Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Update DNS Record</h3>
+                    <p class="text-sm text-gray-600">Modify DNS record settings</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="post" id="edit-dns-form">
+                {% csrf_token %}
+                
+                <!-- Hidden zone field (since it's in the form but we don't want users to change it) -->
+                <input type="hidden" name="zone" value="{{ zone.id }}">
+
+                <!-- Zone Information (Read-only display) -->
+                <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                            </svg>
+                            <span class="text-sm font-medium text-gray-700">DNS Zone:</span>
+                        </div>
+                        <span class="text-sm font-semibold text-gray-900">{{ zone.name }}</span>
+                    </div>
+                </div>
+
+                <!-- Record Type and Name Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <!-- Record Type -->
+                    <div>
+                        <label for="id_record_type" class="block text-sm font-medium text-gray-700 mb-2">
+                            <div class="flex items-center">
+                                <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                </svg>
+                                Record Type
+                            </div>
+                        </label>
+                        {{ form.record_type }}
+                        {% for error in form.record_type.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Name -->
+                    <div>
+                        <label for="id_name" class="block text-sm font-medium text-gray-700 mb-2">
+                            <div class="flex items-center">
+                                <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                Name
+                            </div>
+                        </label>
+                        {{ form.name }}
+                        {% for error in form.name.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                        <p class="mt-1 text-xs text-gray-500">Use @ for root domain, or enter subdomain (e.g., www, mail)</p>
+                    </div>
+                </div>
+
+                <!-- Content -->
+                <div class="mb-6">
+                    <label for="id_content" class="block text-sm font-medium text-gray-700 mb-2">
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            Content
+                        </div>
+                    </label>
+                    {{ form.content }}
+                    {% for error in form.content.errors %}
+                        <p class="mt-1 text-sm text-red-600 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {{ error }}
+                        </p>
+                    {% endfor %}
+                    <p class="mt-1 text-xs text-gray-500" id="content-hint">Enter the target value for this record</p>
+                </div>
+
+                <!-- TTL and Priority Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <!-- TTL -->
+                    <div>
+                        <label for="id_ttl" class="block text-sm font-medium text-gray-700 mb-2">
+                            <div class="flex items-center">
+                                <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                TTL (seconds)
+                            </div>
+                        </label>
+                        {{ form.ttl }}
+                        {% for error in form.ttl.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                        <p class="mt-1 text-xs text-gray-500">Time to live (1-86400)</p>
+                    </div>
+
+                    <!-- Priority (conditional) -->
+                    <div id="priority-field" {% if record.record_type not in 'MX,SRV' %}style="display: none;"{% endif %}>
+                        <label for="id_priority" class="block text-sm font-medium text-gray-700 mb-2">
+                            <div class="flex items-center">
+                                <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                </svg>
+                                Priority
+                            </div>
+                        </label>
+                        {{ form.priority }}
+                        {% for error in form.priority.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                        <p class="mt-1 text-xs text-gray-500">Lower values = higher priority</p>
+                    </div>
+                </div>
+
+                <!-- Proxied Setting (for A/AAAA/CNAME) -->
+                <div id="proxied-field" class="mb-6" {% if record.record_type not in 'A,AAAA,CNAME' %}style="display: none;"{% endif %}>
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 text-gray-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                            <div>
+                                <label for="id_proxied" class="text-sm font-medium text-gray-900 cursor-pointer">Proxy through Cloudflare</label>
+                                <p class="text-xs text-gray-500">Enable Cloudflare's performance and security features</p>
+                            </div>
+                        </div>
+                        <div class="relative">
+                            {{ form.proxied }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'list_dns_records' zone.id %}" 
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit" 
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <span>Save Changes</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Record Information Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Record Information</h3>
+                    <p class="text-sm text-gray-600">Current DNS record details</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <div class="space-y-4">
+                <!-- Current Record -->
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <h4 class="text-sm font-medium text-gray-700 mb-3">Current Configuration</h4>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">Type:</span>
+                            <span class="text-sm font-medium text-gray-900">{{ record.record_type }}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">Name:</span>
+                            <span class="text-sm font-medium text-gray-900">{{ record.name }}</span>
+                        </div>
+                        <div class="flex items-start justify-between">
+                            <span class="text-sm text-gray-600">Content:</span>
+                            <span class="text-sm font-medium text-gray-900 text-right break-all max-w-xs">{{ record.content }}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">TTL:</span>
+                            <span class="text-sm font-medium text-gray-900">{{ record.ttl }}s</span>
+                        </div>
+                        {% if record.priority is not None %}
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">Priority:</span>
+                            <span class="text-sm font-medium text-gray-900">{{ record.priority }}</span>
+                        </div>
+                        {% endif %}
+                        {% if record.record_type in 'A,AAAA,CNAME' %}
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-600">Proxied:</span>
+                            <span class="text-sm font-medium text-gray-900">
+                                {% if record.proxied %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                    <span class="w-1.5 h-1.5 bg-orange-500 rounded-full mr-1"></span>
+                                    Yes
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1"></span>
+                                    No
+                                </span>
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Help Text -->
+                <div class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div class="flex">
+                        <svg class="w-5 h-5 text-blue-400 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div class="text-sm text-blue-700">
+                            <p class="font-medium mb-1">Quick Tips:</p>
+                            <ul class="list-disc list-inside space-y-1 text-xs">
+                                <li>Changes will be applied to Cloudflare immediately</li>
+                                <li>DNS propagation may take up to 48 hours globally</li>
+                                <li>Use low TTL values (120-300s) when testing changes</li>
+                                {% if record.record_type == 'A' or record.record_type == 'AAAA' %}
+                                <li>Enable proxy for DDoS protection and CDN benefits</li>
+                                {% endif %}
+                                {% if record.record_type == 'MX' %}
+                                <li>Lower priority numbers = higher preference</li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Record Type Reference -->
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <h4 class="text-sm font-medium text-gray-700 mb-3">Record Type Reference</h4>
+                    <div class="space-y-2 text-xs">
+                        <div><span class="font-medium">A:</span> Maps domain to IPv4 address</div>
+                        <div><span class="font-medium">AAAA:</span> Maps domain to IPv6 address</div>
+                        <div><span class="font-medium">CNAME:</span> Alias to another domain</div>
+                        <div><span class="font-medium">MX:</span> Mail server (with priority)</div>
+                        <div><span class="font-medium">TXT:</span> Text data (SPF, DKIM, etc.)</div>
+                        <div><span class="font-medium">SRV:</span> Service location (with priority)</div>
+                        <div><span class="font-medium">NS:</span> Nameserver delegation</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const recordTypeSelect = document.getElementById('id_record_type');
+    const priorityField = document.getElementById('priority-field');
+    const proxiedField = document.getElementById('proxied-field');
+    const proxiedCheckbox = document.getElementById('id_proxied');
+    const contentHint = document.getElementById('content-hint');
+    
+    // Function to update field visibility based on record type
+    function updateFieldVisibility() {
+        const recordType = recordTypeSelect.value;
+        
+        // Show/hide priority field
+        if (recordType === 'MX' || recordType === 'SRV') {
+            priorityField.style.display = 'block';
+            document.getElementById('id_priority').required = true;
+        } else {
+            priorityField.style.display = 'none';
+            document.getElementById('id_priority').required = false;
+            document.getElementById('id_priority').value = '';
+        }
+        
+        // Show/hide proxied field
+        if (recordType === 'A' || recordType === 'AAAA' || recordType === 'CNAME') {
+            proxiedField.style.display = 'block';
+        } else {
+            proxiedField.style.display = 'none';
+            proxiedCheckbox.checked = false;
+        }
+        
+        // Update content hint based on record type
+        updateContentHint(recordType);
+    }
+    
+    // Function to update content hint
+    function updateContentHint(recordType) {
+        const hints = {
+            'A': 'Enter IPv4 address (e.g., 192.168.1.1)',
+            'AAAA': 'Enter IPv6 address (e.g., 2001:0db8:85a3::8a2e:0370:7334)',
+            'CNAME': 'Enter target domain (e.g., example.com)',
+            'MX': 'Enter mail server hostname (e.g., mail.example.com)',
+            'TXT': 'Enter text content (e.g., SPF record, verification string)',
+            'SRV': 'Enter target hostname with port and weight',
+            'NS': 'Enter nameserver hostname (e.g., ns1.example.com)'
+        };
+        
+        contentHint.textContent = hints[recordType] || 'Enter the target value for this record';
+    }
+    
+    // Add event listener for record type changes
+    recordTypeSelect.addEventListener('change', updateFieldVisibility);
+    
+    // Initialize field visibility on page load
+    updateFieldVisibility();
+    
+    // Form submission with loading state
+    const form = document.getElementById('edit-dns-form');
+    const submitButton = form.querySelector('button[type="submit"]');
+    
+    form.addEventListener('submit', function(e) {
+        // Show loading state
+        const originalContent = submitButton.innerHTML;
+        submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Saving...';
+        submitButton.disabled = true;
+        
+        // Reset after a delay in case of validation errors
+        setTimeout(() => {
+            submitButton.innerHTML = originalContent;
+            submitButton.disabled = false;
+        }, 5000);
+    });
+    
+    // Enhanced focus states
+    const inputs = document.querySelectorAll('input, select, textarea');
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            this.classList.add('ring-2', 'ring-primary-500');
+        });
+        
+        input.addEventListener('blur', function() {
+            this.classList.remove('ring-2', 'ring-primary-500');
+        });
+    });
+    
+    // Cloudflare proxy toggle animation
+    if (proxiedCheckbox) {
+        const label = proxiedCheckbox.parentElement.parentElement.parentElement;
+        proxiedCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                label.classList.add('bg-orange-50', 'border-orange-200');
+                label.classList.remove('bg-gray-50');
+            } else {
+                label.classList.remove('bg-orange-50', 'border-orange-200');
+                label.classList.add('bg-gray-50');
+            }
+        });
+        
+        // Set initial state
+        if (proxiedCheckbox.checked) {
+            label.classList.add('bg-orange-50', 'border-orange-200');
+            label.classList.remove('bg-gray-50');
+        }
+    }
+    
+    // Real-time validation feedback
+    const nameInput = document.getElementById('id_name');
+    const contentInput = document.getElementById('id_content');
+    
+    if (nameInput) {
+        nameInput.addEventListener('blur', function() {
+            if (this.value && !this.value.match(/^[a-zA-Z0-9._@-]*$/)) {
+                this.classList.add('border-red-500');
+                // Show inline error if not already present
+                if (!this.nextElementSibling || !this.nextElementSibling.classList.contains('text-red-600')) {
+                    const error = document.createElement('p');
+                    error.className = 'mt-1 text-sm text-red-600 flex items-center';
+                    error.innerHTML = '<svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Invalid characters in name';
+                    this.parentNode.insertBefore(error, this.nextSibling);
+                }
+            } else {
+                this.classList.remove('border-red-500');
+                // Remove error message if it exists
+                if (this.nextElementSibling && this.nextElementSibling.classList.contains('text-red-600')) {
+                    this.nextElementSibling.remove();
+                }
+            }
+        });
+    }
+    
+    // TTL validation
+    const ttlInput = document.getElementById('id_ttl');
+    if (ttlInput) {
+        ttlInput.addEventListener('blur', function() {
+            const value = parseInt(this.value);
+            if (value < 1 || value > 86400) {
+                this.classList.add('border-red-500');
+            } else {
+                this.classList.remove('border-red-500');
+            }
+        });
+    }
+    
+    // Priority validation
+    const priorityInput = document.getElementById('id_priority');
+    if (priorityInput) {
+        priorityInput.addEventListener('blur', function() {
+            const recordType = recordTypeSelect.value;
+            if ((recordType === 'MX' || recordType === 'SRV') && !this.value) {
+                this.classList.add('border-red-500');
+            } else {
+                this.classList.remove('border-red-500');
+            }
+        });
+    }
+    
+    // Add confirmation dialog for certain changes
+    form.addEventListener('submit', function(e) {
+        const recordType = recordTypeSelect.value;
+        const originalType = '{{ record.record_type }}';
+        
+        // Warn if changing record type
+        if (recordType !== originalType) {
+            if (!confirm('Warning: You are changing the record type. This may affect DNS resolution. Are you sure you want to continue?')) {
+                e.preventDefault();
+                submitButton.innerHTML = originalContent;
+                submitButton.disabled = false;
+                return false;
+            }
+        }
+        
+        // Warn if disabling proxy on A/AAAA/CNAME records
+        if ((recordType === 'A' || recordType === 'AAAA' || recordType === 'CNAME') && 
+            !proxiedCheckbox.checked && {{ record.proxied|lower }}) {
+            if (!confirm('Warning: Disabling Cloudflare proxy will expose your origin server IP and disable DDoS protection. Are you sure?')) {
+                e.preventDefault();
+                submitButton.innerHTML = originalContent;
+                submitButton.disabled = false;
+                return false;
+            }
+        }
+    });
+    
+    // Auto-format content based on record type
+    if (contentInput) {
+        contentInput.addEventListener('blur', function() {
+            const recordType = recordTypeSelect.value;
+            let value = this.value.trim();
+            
+            // Auto-format based on record type
+            if (recordType === 'A') {
+                // Validate IPv4
+                const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+                if (value && !ipv4Regex.test(value)) {
+                    this.classList.add('border-red-500');
+                } else {
+                    this.classList.remove('border-red-500');
+                }
+            } else if (recordType === 'AAAA') {
+                // Basic IPv6 validation
+                const ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
+                if (value && !ipv6Regex.test(value)) {
+                    this.classList.add('border-red-500');
+                } else {
+                    this.classList.remove('border-red-500');
+                }
+            } else if (recordType === 'CNAME' || recordType === 'MX' || recordType === 'NS') {
+                // Remove trailing dot if present
+                if (value.endsWith('.')) {
+                    this.value = value.slice(0, -1);
+                }
+            }
+        });
+    }
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        // Ctrl/Cmd + S to save
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            form.dispatchEvent(new Event('submit'));
+        }
+        
+        // ESC to cancel
+        if (e.key === 'Escape') {
+            window.location.href = '{% url "list_dns_records" zone.id %}';
+        }
+    });
+    
+    // Add tooltips for complex fields
+    const tooltips = {
+        'id_ttl': 'Time in seconds that DNS resolvers should cache this record',
+        'id_priority': 'Used for MX and SRV records to determine preference order',
+        'id_proxied': 'Route traffic through Cloudflare\'s network for performance and security'
+    };
+    
+    Object.entries(tooltips).forEach(([id, text]) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.setAttribute('title', text);
+        }
+    });
+});
+</script>
+{% endblock %}
+{% endblock %}

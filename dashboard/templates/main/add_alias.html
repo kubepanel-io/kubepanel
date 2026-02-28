@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Add Domain Alias | KubePanel{% endblock %}
+
+{% block page_title %}Add Domain Alias{% endblock %}
+{% block page_subtitle %}{{ domain.domain_name }} - Create an alias domain{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'alias_list' domain.pk %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Aliases</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Create Domain Alias</h3>
+                    <p class="text-sm text-gray-600">Add an alternative domain name that points to {{ domain.domain_name }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <!-- Display non-field errors -->
+            {% if form.non_field_errors %}
+            <div class="mb-6">
+                {% for error in form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-red-700">{{ error }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="POST" novalidate id="alias-form">
+                {% csrf_token %}
+
+                <!-- Domain Information Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Domain Information
+                    </h4>
+
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <h4 class="text-sm font-medium text-blue-800">How Domain Aliases Work</h4>
+                                <div class="mt-2 text-sm text-blue-700">
+                                    <ul class="list-disc list-inside space-y-1">
+                                        <li>The alias domain will point to and serve the same content as the main domain</li>
+                                        <li>Both domains will share the same files, database, and configuration</li>
+                                        <li>SSL certificates and DNS records need to be configured separately</li>
+                                        <li>The alias domain becomes an alternative way to access your website</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                    </svg>
+                                    Primary Domain
+                                </div>
+                            </label>
+                            <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                <p class="text-lg font-mono font-semibold text-gray-900">{{ domain.domain_name }}</p>
+                                <p class="text-sm text-gray-500 mt-1">Main domain that will serve the content</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alias Configuration Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Alias Configuration
+                    </h4>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label for="{{ form.alias_name.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Alias Domain Name <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.alias_name }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Enter the domain name that will serve as an alias (e.g., www.example.com, alternate.com)</p>
+                            {% if form.alias_name.errors %}
+                                {% for error in form.alias_name.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Email Configuration Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        Email Configuration
+                    </h4>
+
+                    <div class="flex items-center mb-3">
+                        <input type="checkbox" name="email_enabled" value="1" id="email_enabled"
+                               class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                        <label for="email_enabled" class="ml-2 text-sm text-gray-700">Enable email for this alias domain</label>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-4">Generates DKIM keys and configures the alias as a valid email domain. Mail users can then be created on this alias.</p>
+
+                    <!-- DNS Configuration (shown when email is enabled) -->
+                    <div id="dns-section" class="hidden mt-4 pl-4 border-l-2 border-indigo-200">
+                        <div class="flex items-center mb-3">
+                            <input type="checkbox" name="auto_dns" value="1" id="auto_dns"
+                                   class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                            <label for="auto_dns" class="ml-2 text-sm text-gray-700">Auto-create CloudFlare DNS records (A, MX, SPF, DMARC, DKIM)</label>
+                        </div>
+
+                        <div id="token-section" class="hidden mt-3">
+                            <label for="api_token" class="block text-sm font-medium text-gray-700 mb-2">CloudFlare API Token</label>
+                            <select name="api_token" id="api_token"
+                                    class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm">
+                                <option value="">-- Select Token --</option>
+                                {% for token in api_tokens %}
+                                <option value="{{ token.pk }}">{{ token.name }}</option>
+                                {% endfor %}
+                            </select>
+                            {% if not api_tokens %}
+                            <p class="mt-1 text-xs text-yellow-600">No CloudFlare API tokens configured. <a href="{% url 'add_api_token' %}" class="underline">Add one first</a>.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alias Preview -->
+                <div id="alias-preview" class="mb-8 p-4 bg-green-50 border border-green-200 rounded-lg hidden">
+                    <div class="flex items-center mb-3">
+                        <svg class="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <h5 class="text-sm font-medium text-green-900">Alias Configuration</h5>
+                    </div>
+                    <div id="alias-details" class="text-sm text-green-800">
+                        <!-- Alias details will be inserted here via JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Next Steps Information -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                        </svg>
+                        Next Steps After Creation
+                    </h4>
+
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <h4 class="text-sm font-medium text-yellow-800">Required Configuration</h4>
+                                <div class="mt-2 text-sm text-yellow-700">
+                                    <p class="mb-2">After creating the alias, you'll need to:</p>
+                                    <ol class="list-decimal list-inside space-y-1">
+                                        <li><strong>Configure DNS:</strong> Point the alias domain to your server's IP</li>
+                                        <li><strong>Set up SSL:</strong> Generate SSL certificates for the new domain</li>
+                                        <li><strong>Test functionality:</strong> Verify the alias works correctly</li>
+                                        <li><strong>Update redirects:</strong> Configure any necessary redirects</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'alias_list' domain.pk %}"
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        <span>Create Alias</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Style Django form fields
+    const formFields = document.querySelectorAll('.form-field-wrapper input, .form-field-wrapper select');
+    formFields.forEach(field => {
+        field.className = 'w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm font-mono';
+    });
+
+    // Alias preview functionality
+    const form = document.getElementById('alias-form');
+    const aliasInput = document.getElementById('{{ form.alias_name.id_for_label }}');
+    const previewContainer = document.getElementById('alias-preview');
+    const previewDetails = document.getElementById('alias-details');
+    
+    function updateAliasPreview() {
+        const aliasName = aliasInput.value.trim();
+        const primaryDomain = '{{ domain.domain_name }}';
+        
+        if (aliasName) {
+            previewDetails.innerHTML = `
+                <div class="space-y-2">
+                    <p><strong>Alias Domain:</strong> ${aliasName}</p>
+                    <p><strong>Points to:</strong> ${primaryDomain}</p>
+                    <p><strong>Result:</strong> Visitors to ${aliasName} will see content from ${primaryDomain}</p>
+                </div>
+            `;
+            previewContainer.classList.remove('hidden');
+        } else {
+            previewContainer.classList.add('hidden');
+        }
+    }
+
+    // Update preview on input changes
+    aliasInput.addEventListener('input', updateAliasPreview);
+
+    // Form submission with loading state
+    const submitButton = form.querySelector('button[type="submit"]');
+    form.addEventListener('submit', function(e) {
+        // Basic client-side validation
+        const aliasName = aliasInput.value.trim();
+
+        if (!aliasName) {
+            e.preventDefault();
+            alert('Please enter an alias domain name.');
+            return;
+        }
+
+        // Basic domain name validation
+        const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])*$/;
+        if (!domainRegex.test(aliasName)) {
+            e.preventDefault();
+            alert('Please enter a valid domain name (e.g., example.com, www.example.com).');
+            return;
+        }
+
+        // Check if alias is the same as primary domain
+        if (aliasName.toLowerCase() === '{{ domain.domain_name }}'.toLowerCase()) {
+            e.preventDefault();
+            alert('The alias domain cannot be the same as the primary domain.');
+            return;
+        }
+
+        // Show loading state
+        const originalContent = submitButton.innerHTML;
+        submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Creating Alias...';
+        submitButton.disabled = true;
+
+        // Reset after delay in case of validation errors
+        setTimeout(() => {
+            submitButton.innerHTML = originalContent;
+            submitButton.disabled = false;
+        }, 3000);
+    });
+
+    // Focus enhancement
+    const inputs = document.querySelectorAll('input, select');
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            if (!this.classList.contains('border-red-500')) {
+                this.classList.add('ring-2', 'ring-primary-500');
+            }
+        });
+
+        input.addEventListener('blur', function() {
+            this.classList.remove('ring-2', 'ring-primary-500');
+        });
+    });
+
+    // Email/DNS toggle logic
+    const emailCheckbox = document.getElementById('email_enabled');
+    const dnsSection = document.getElementById('dns-section');
+    const autoDnsCheckbox = document.getElementById('auto_dns');
+    const tokenSection = document.getElementById('token-section');
+
+    emailCheckbox.addEventListener('change', function() {
+        dnsSection.classList.toggle('hidden', !this.checked);
+        if (!this.checked) {
+            autoDnsCheckbox.checked = false;
+            tokenSection.classList.add('hidden');
+        }
+    });
+
+    autoDnsCheckbox.addEventListener('change', function() {
+        tokenSection.classList.toggle('hidden', !this.checked);
+    });
+
+    // Auto-focus alias name field
+    aliasInput.focus();
+
+    // Add paste event handler
+    aliasInput.addEventListener('paste', function() {
+        setTimeout(updateAliasPreview, 10); // Small delay to allow paste to complete
+    });
+});
+</script>
+{% endblock %}
+{% endblock %}

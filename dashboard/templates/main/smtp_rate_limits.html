@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}SMTP Rate Limits | KubePanel{% endblock %}
+
+{% block page_title %}SMTP Rate Limits{% endblock %}
+{% block page_subtitle %}Manage per-user email sending limits{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <!-- Link back to SMTP Firewall -->
+    <a href="{% url 'smtp_firewall_list' %}"
+       class="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+        </svg>
+        <span>Block Rules</span>
+    </a>
+    <!-- Link to Traffic View -->
+    <a href="{% url 'smtp_traffic' %}"
+       class="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+        </svg>
+        <span>View Traffic</span>
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Error Message -->
+{% if error_message %}
+<div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+    <div class="flex">
+        <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+        </div>
+        <div class="ml-3">
+            <p class="text-sm text-red-700">{{ error_message }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Global Default Limits -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900 flex items-center">
+            <div class="w-3 h-3 bg-blue-500 rounded-full mr-3"></div>
+            Global Default Limits
+        </h3>
+        <p class="text-sm text-gray-500 mt-1">These defaults apply to all users without custom limits (configured in rspamd).</p>
+    </div>
+    <div class="px-6 py-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {% for key, info in global_defaults.items %}
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h4 class="text-sm font-medium text-gray-700">{{ info.description }}</h4>
+                <p class="text-lg font-semibold text-gray-900">{{ info.rate }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Custom Rate Limit -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900 flex items-center">
+            <div class="w-3 h-3 bg-primary-500 rounded-full mr-3"></div>
+            Add Custom Rate Limit
+        </h3>
+        <p class="text-sm text-gray-500 mt-1">Override the default limit for a specific user or email address.</p>
+    </div>
+    <div class="px-6 py-4">
+        <form method="POST" action="{% url 'smtp_rate_limit_add' %}" class="flex flex-wrap items-end gap-4">
+            {% csrf_token %}
+            <div class="flex-[2] min-w-[250px]">
+                <label for="user" class="block text-sm font-medium text-gray-700 mb-1">User / Email Address</label>
+                <input type="text" name="user" id="user" required
+                       placeholder="e.g., user@example.com"
+                       class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+            </div>
+            <div class="flex-1 min-w-[120px]">
+                <label for="rate" class="block text-sm font-medium text-gray-700 mb-1">Max Emails</label>
+                <input type="number" name="rate" id="rate" required min="1" max="10000"
+                       placeholder="e.g., 50"
+                       class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+            </div>
+            <div class="flex-1 min-w-[120px]">
+                <label for="period" class="block text-sm font-medium text-gray-700 mb-1">Per Period</label>
+                <select name="period" id="period" class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+                    <option value="1h" selected>1 hour</option>
+                    <option value="30m">30 minutes</option>
+                    <option value="15m">15 minutes</option>
+                    <option value="1d">1 day</option>
+                </select>
+            </div>
+            <button type="submit"
+                    class="btn-primary text-white px-6 py-2 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                <span>Add Limit</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Per-User Rate Limits -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900 flex items-center">
+            <div class="w-3 h-3 bg-green-500 rounded-full mr-3"></div>
+            Custom User Limits
+            <span class="ml-3 text-sm font-normal text-gray-500">({{ user_limits|length }} configured)</span>
+        </h3>
+        <p class="text-sm text-gray-500 mt-1">Users with custom rate limits that override the default.</p>
+    </div>
+
+    {% if user_limits %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        User / Email
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Rate Limit
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                    </th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for limit in user_limits %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="font-mono text-sm text-gray-900">{{ limit.user }}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {{ limit.rate }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
+                        <form method="POST" action="{% url 'smtp_rate_limit_delete' limit.user %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="text-red-600 hover:text-red-800 font-medium"
+                                    onclick="return confirm('Remove custom rate limit for {{ limit.user }}? They will use the default limit.')">
+                                <svg class="h-5 w-5 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                <span class="ml-1">Remove</span>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="px-6 py-8 text-center text-gray-500">
+        <svg class="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <p class="text-lg font-medium text-gray-900">No custom limits configured</p>
+        <p class="text-sm text-gray-500 mt-1">All users are using the global default limits.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Help Section -->
+<div class="bg-blue-50 rounded-xl p-6 border border-blue-200">
+    <h4 class="text-lg font-medium text-blue-900 mb-4">How Rate Limits Work</h4>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-blue-800">
+        <div>
+            <h5 class="font-medium mb-2">Rate Limit Format</h5>
+            <ul class="list-disc list-inside space-y-1">
+                <li><strong>50 / 1h</strong> = 50 emails per hour</li>
+                <li><strong>100 / 30m</strong> = 100 emails per 30 minutes</li>
+                <li><strong>500 / 1d</strong> = 500 emails per day</li>
+            </ul>
+        </div>
+        <div>
+            <h5 class="font-medium mb-2">Enforcement</h5>
+            <ul class="list-disc list-inside space-y-1">
+                <li>Rate limits are enforced by rspamd in real-time</li>
+                <li>Counters are stored in Redis</li>
+                <li>Limits reset after the specified period</li>
+            </ul>
+        </div>
+        <div>
+            <h5 class="font-medium mb-2">Priority</h5>
+            <ul class="list-disc list-inside space-y-1">
+                <li>Custom user limits override global defaults</li>
+                <li>Removing a custom limit reverts to the default</li>
+                <li>Changes take effect immediately</li>
+            </ul>
+        </div>
+        <div>
+            <h5 class="font-medium mb-2">Tips</h5>
+            <ul class="list-disc list-inside space-y-1">
+                <li>Set lower limits for untrusted users</li>
+                <li>Increase limits for legitimate bulk senders</li>
+                <li>Monitor traffic to identify appropriate limits</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

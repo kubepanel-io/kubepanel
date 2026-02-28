@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Delete Alias</h1>
+<p>Are you sure you want to delete the alias <strong>{{ alias.alias_name }}</strong> from <em>{{ alias.domain.domain_name }}</em>?</p>
+<form method="post">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-danger">Yes, delete</button>
+  <a href="{% url 'alias_list' alias.domain.pk %}" class="btn btn-secondary">Cancel</a>
+</form>
+{% endblock %}
+

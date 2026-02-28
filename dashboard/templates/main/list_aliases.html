@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Aliases for {{ domain.domain_name }}</h1>
+
+<a href="{% url 'alias_add' domain.pk %}" class="btn btn-primary">Add Alias</a>
+
+{% if aliases %}
+<table class="table">
+  <thead><tr><th>Alias</th><th>Email</th><th>Created</th><th>Actions</th></tr></thead>
+  <tbody>
+    {% for a in aliases %}
+    <tr>
+      <td>{{ a.alias_name }}</td>
+      <td>
+        {% if a.email_enabled %}
+          <span class="badge bg-success">Enabled</span>
+        {% else %}
+          <span class="badge bg-secondary">Disabled</span>
+        {% endif %}
+      </td>
+      <td>{{ a.created_at|date:"SHORT_DATETIME_FORMAT" }}</td>
+      <td>
+        <a href="{% url 'view_alias' a.pk %}" class="btn btn-info btn-sm">View</a>
+        <a href="{% url 'alias_delete' a.pk %}" class="btn btn-danger btn-sm">Delete</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p>No aliases defined.</p>
+{% endif %}
+{% endblock %}
+

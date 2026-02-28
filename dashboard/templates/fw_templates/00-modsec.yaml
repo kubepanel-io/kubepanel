@@ -1,0 +1,20 @@
+apiVersion: v1
+data:
+  modsecurity-snippet: |
+    SecRuleEngine On
+    SecAuditLog /var/log/nginx/modsec_audit/
+    SecAuditLogFormat JSON
+    SecAuditEngine RelevantOnly
+    SecAuditLogParts ABCEFHZ
+    SecAuditLogType Serial
+    {% autoescape off %}
+    {% for rule in rules %}
+    {% for line in rule.splitlines %}
+    {{ line }}
+    {% endfor %}
+    {% endfor %}
+    {% endautoescape %}
+kind: ConfigMap
+metadata:
+  name: nginx-load-balancer-microk8s-conf
+  namespace: ingress

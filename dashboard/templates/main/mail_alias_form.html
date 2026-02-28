@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if alias %}Edit{% else %}Add{% endif %} Mail Alias | KubePanel{% endblock %}
+
+{% block page_title %}{% if alias %}Edit Mail Alias{% else %}Add Mail Alias{% endif %}{% endblock %}
+{% block page_subtitle %}{% if alias %}Update alias configuration{% else %}Create a new email alias to forward messages{% endif %}{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'list_mail_users' %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Mail Users</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Alias Configuration</h3>
+                    <p class="text-sm text-gray-600">Configure email forwarding settings</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form action="{% if alias %}{% url 'mail_alias_edit' alias.id %}{% else %}{% url 'mail_alias_add' %}{% endif %}"
+                  method="post" 
+                  novalidate 
+                  id="alias-form">
+                {% csrf_token %}
+
+                <!-- Domain Selection -->
+                <div class="mb-6">
+                    <label for="id_mail_domain" class="block text-sm font-medium text-gray-700 mb-2">
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                            </svg>
+                            Domain
+                        </div>
+                    </label>
+                    <select id="id_mail_domain"
+                            name="{{ form.mail_domain.html_name }}"
+                            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.mail_domain.errors %} border-red-500 focus:ring-red-500{% endif %}">
+                        <option value="">Select a domain...</option>
+                        {% for value, label in form.mail_domain.field.choices %}
+                            <option value="{{ value }}"{% if form.mail_domain.value|stringformat:"s" == value|stringformat:"s" %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">Choose the domain for this alias (includes email-enabled domain aliases)</p>
+                    {% for error in form.mail_domain.errors %}
+                        <p class="mt-1 text-sm text-red-600 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {{ error }}
+                        </p>
+                    {% endfor %}
+                </div>
+
+                <!-- Source Email -->
+                <div class="mb-6">
+                    <label for="id_source" class="block text-sm font-medium text-gray-700 mb-2">
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
+                            </svg>
+                            Source Email (Alias)
+                        </div>
+                    </label>
+                    <input type="text" 
+                           name="{{ form.source.html_name }}" 
+                           id="id_source"
+                           value="{{ form.source.value|default_if_none:'' }}"
+                           class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.source.errors %} border-red-500 focus:ring-red-500{% endif %}" 
+                           placeholder="info@example.com">
+                    <p class="mt-1 text-xs text-gray-500">The email address that will receive and forward messages</p>
+                    {% for error in form.source.errors %}
+                        <p class="mt-1 text-sm text-red-600 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {{ error }}
+                        </p>
+                    {% endfor %}
+                </div>
+
+                <!-- Destination Email -->
+                <div class="mb-6">
+                    <label for="id_destination" class="block text-sm font-medium text-gray-700 mb-2">
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
+                            </svg>
+                            Destination Email
+                        </div>
+                    </label>
+                    <input type="text" 
+                           name="{{ form.destination.html_name }}" 
+                           id="id_destination"
+                           value="{{ form.destination.value|default_if_none:'' }}"
+                           class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.destination.errors %} border-red-500 focus:ring-red-500{% endif %}" 
+                           placeholder="user@domain.com">
+                    <p class="mt-1 text-xs text-gray-500">The email address where messages will be forwarded to</p>
+                    {% for error in form.destination.errors %}
+                        <p class="mt-1 text-sm text-red-600 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {{ error }}
+                        </p>
+                    {% endfor %}
+                </div>
+
+                <!-- Alias Flow Visualization -->
+                <div class="mb-6 p-4 bg-gray-50 rounded-lg border">
+                    <h4 class="text-sm font-medium text-gray-900 mb-3 flex items-center">
+                        <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                        </svg>
+                        Alias Flow Preview
+                    </h4>
+                    <div class="flex items-center justify-center space-x-4">
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                                <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                </svg>
+                            </div>
+                            <p class="text-xs text-gray-600">Email sent to</p>
+                            <p class="text-sm font-medium text-gray-900" id="source-preview">Source Email</p>
+                        </div>
+                        <div class="flex-1 flex justify-center">
+                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
+                            </svg>
+                        </div>
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                                <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                                </svg>
+                            </div>
+                            <p class="text-xs text-gray-600">Forwarded to</p>
+                            <p class="text-sm font-medium text-gray-900" id="destination-preview">Destination Email</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Toggle -->
+                <div class="mb-8">
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 text-gray-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <div>
+                                <label for="id_active" class="text-sm font-medium text-gray-900 cursor-pointer">Alias Active</label>
+                                <p class="text-xs text-gray-500">Enable this alias to start forwarding emails</p>
+                            </div>
+                        </div>
+                        <div class="relative">
+                            <input type="checkbox" 
+                                   name="{{ form.active.html_name }}" 
+                                   id="id_active"
+                                   {% if form.active.value %}checked{% endif %}
+                                   class="sr-only peer{% if form.active.errors %} border-red-500{% endif %}">
+                            <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 cursor-pointer"></div>
+                        </div>
+                    </div>
+                    {% for error in form.active.errors %}
+                        <p class="mt-1 text-sm text-red-600 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {{ error }}
+                        </p>
+                    {% endfor %}
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'list_mail_users' %}"
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit" 
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>{% if alias %}Save Changes{% else %}Create Alias{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Real-time preview updates
+        const sourceInput = document.getElementById('id_source');
+        const destinationInput = document.getElementById('id_destination');
+        const sourcePreview = document.getElementById('source-preview');
+        const destinationPreview = document.getElementById('destination-preview');
+        
+        function updatePreviews() {
+            const sourceValue = sourceInput.value.trim();
+            const destinationValue = destinationInput.value.trim();
+            
+            sourcePreview.textContent = sourceValue || 'Source Email';
+            destinationPreview.textContent = destinationValue || 'Destination Email';
+        }
+        
+        sourceInput.addEventListener('input', updatePreviews);
+        destinationInput.addEventListener('input', updatePreviews);
+        updatePreviews(); // Initial update
+        
+        // Email validation
+        function validateEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+        
+        function showFieldError(field, message) {
+            // Remove existing error
+            const existingError = field.parentNode.querySelector('.custom-error');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            // Create error element
+            const errorDiv = document.createElement('p');
+            errorDiv.className = 'mt-1 text-sm text-red-600 flex items-center custom-error';
+            errorDiv.innerHTML = `
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                ${message}
+            `;
+            
+            // Insert after the field
+            field.parentNode.insertBefore(errorDiv, field.nextSibling.nextSibling);
+            
+            // Add error styling
+            field.classList.add('border-red-500', 'focus:ring-red-500');
+        }
+        
+        function clearFieldError(field) {
+            const customError = field.parentNode.querySelector('.custom-error');
+            if (customError) {
+                customError.remove();
+            }
+            field.classList.remove('border-red-500', 'focus:ring-red-500');
+        }
+        
+        // Real-time validation
+        sourceInput.addEventListener('blur', function() {
+            const value = this.value.trim();
+            if (value && !validateEmail(value)) {
+                showFieldError(this, 'Please enter a valid email address');
+            } else {
+                clearFieldError(this);
+            }
+        });
+        
+        destinationInput.addEventListener('blur', function() {
+            const value = this.value.trim();
+            if (value && !validateEmail(value)) {
+                showFieldError(this, 'Please enter a valid email address');
+            } else {
+                clearFieldError(this);
+            }
+        });
+        
+        // Clear errors on input
+        sourceInput.addEventListener('input', function() {
+            clearFieldError(this);
+        });
+        
+        destinationInput.addEventListener('input', function() {
+            clearFieldError(this);
+        });
+        
+        // Form submission
+        const form = document.getElementById('alias-form');
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        form.addEventListener('submit', function(e) {
+            let hasErrors = false;
+            
+            // Validate domain
+            const domainSelect = document.getElementById('id_mail_domain');
+            if (!domainSelect.value) {
+                showFieldError(domainSelect, 'Please select a domain');
+                hasErrors = true;
+            }
+            
+            // Validate source
+            const sourceValue = sourceInput.value.trim();
+            if (!sourceValue) {
+                showFieldError(sourceInput, 'Source email is required');
+                hasErrors = true;
+            } else if (!validateEmail(sourceValue)) {
+                showFieldError(sourceInput, 'Please enter a valid source email address');
+                hasErrors = true;
+            }
+            
+            // Validate destination
+            const destinationValue = destinationInput.value.trim();
+            if (!destinationValue) {
+                showFieldError(destinationInput, 'Destination email is required');
+                hasErrors = true;
+            } else if (!validateEmail(destinationValue)) {
+                showFieldError(destinationInput, 'Please enter a valid destination email address');
+                hasErrors = true;
+            }
+            
+            if (hasErrors) {
+                e.preventDefault();
+                return;
+            }
+            
+            // Show loading state
+            const originalContent = submitButton.innerHTML;
+            submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Saving...';
+            submitButton.disabled = true;
+            
+            // Reset after a delay in case of validation errors
+            setTimeout(() => {
+                submitButton.innerHTML = originalContent;
+                submitButton.disabled = false;
+            }, 3000);
+        });
+        
+        // Focus enhancement
+        const inputs = document.querySelectorAll('input, select');
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                if (!this.classList.contains('border-red-500')) {
+                    this.classList.add('ring-2', 'ring-primary-500');
+                }
+            });
+            
+            input.addEventListener('blur', function() {
+                this.classList.remove('ring-2', 'ring-primary-500');
+            });
+        });
+        
+        // Auto-focus first empty field
+        const firstEmptyField = Array.from(inputs).find(input => !input.value);
+        if (firstEmptyField) {
+            firstEmptyField.focus();
+        }
+    });
+</script>
+{% endblock %}
+{% endblock %}

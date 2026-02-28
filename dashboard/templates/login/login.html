@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - KubePanel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #dbeafe 100%);
+        }
+        .input-focus:focus {
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            border-color: #3b82f6;
+        }
+        .login-animation {
+            animation: slideUp 0.6s ease-out;
+        }
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .floating-k8s {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+        }
+        .k8s-icon {
+            position: absolute;
+            opacity: 0.08;
+            animation: float 8s ease-in-out infinite;
+            color: #3b82f6;
+        }
+        .k8s-icon:nth-child(1) {
+            top: 15%;
+            left: 10%;
+            font-size: 2rem;
+            animation-delay: 0s;
+        }
+        .k8s-icon:nth-child(2) {
+            top: 60%;
+            right: 15%;
+            font-size: 1.5rem;
+            animation-delay: 3s;
+        }
+        .k8s-icon:nth-child(3) {
+            top: 80%;
+            left: 20%;
+            font-size: 1.8rem;
+            animation-delay: 6s;
+        }
+        .k8s-icon:nth-child(4) {
+            top: 25%;
+            right: 25%;
+            font-size: 1.3rem;
+            animation-delay: 2s;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(15deg); }
+        }
+        .card-shadow {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen flex items-center justify-center p-4 relative">
+    <!-- Floating Kubernetes Icons -->
+    <div class="floating-k8s">
+        <i class="fas fa-dharmachakra k8s-icon"></i>
+        <i class="fab fa-docker k8s-icon"></i>
+        <i class="fas fa-cube k8s-icon"></i>
+        <i class="fas fa-server k8s-icon"></i>
+    </div>
+
+    <!-- Login Container -->
+    <div class="w-full max-w-md relative z-10">
+        <!-- Header -->
+        <div class="text-center mb-8 login-animation">
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl shadow-lg mb-6 border border-blue-200">
+                <i class="fas fa-dharmachakra text-3xl text-blue-600"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-slate-700 mb-2">KubePanel</h1>
+            <p class="text-slate-500 font-medium">Kubernetes Management Platform</p>
+        </div>
+
+        <!-- Login Card -->
+        <div class="bg-white rounded-2xl card-shadow overflow-hidden border border-gray-200 login-animation">
+            <!-- Card Header -->
+            <div class="bg-blue-50 px-8 py-6 border-b border-blue-200">
+                <div class="flex items-center justify-center">
+                    <i class="fas fa-shield-alt text-blue-600 text-lg mr-3"></i>
+                    <h2 class="text-lg font-semibold text-slate-700">Secure Access</h2>
+                </div>
+            </div>
+
+            <!-- Login Form -->
+            <div class="px-8 py-8">
+                <form action="{% url 'kplogin' %}" method="post" id="loginForm">
+                    {% csrf_token %}
+                    
+                    <!-- Username Field -->
+                    <div class="mb-6">
+                        <label for="username" class="block text-sm font-medium text-slate-700 mb-2">
+                            <i class="fas fa-user text-slate-400 mr-2"></i>Username
+                        </label>
+                        <div class="relative">
+                            <input 
+                                type="text" 
+                                id="username"
+                                name="username" 
+                                class="input-focus w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 pl-12 bg-gray-50 focus:bg-white"
+                                placeholder="Enter your username"
+                                required
+                            >
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <i class="fas fa-user text-slate-400"></i>
+                            </div>
+                        </div>
+                        <div class="invalid-feedback text-red-500 text-sm mt-1 hidden" id="usernameError">
+                            Please enter a valid username
+                        </div>
+                    </div>
+
+                    <!-- Password Field -->
+                    <div class="mb-6">
+                        <label for="password" class="block text-sm font-medium text-slate-700 mb-2">
+                            <i class="fas fa-lock text-slate-400 mr-2"></i>Password
+                        </label>
+                        <div class="relative">
+                            <input 
+                                type="password" 
+                                id="password"
+                                name="password" 
+                                class="input-focus w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 pl-12 pr-12 bg-gray-50 focus:bg-white"
+                                placeholder="Enter your password"
+                                required
+                            >
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <i class="fas fa-lock text-slate-400"></i>
+                            </div>
+                            <button 
+                                type="button" 
+                                class="absolute inset-y-0 right-0 pr-4 flex items-center"
+                                onclick="togglePassword()"
+                            >
+                                <i class="fas fa-eye text-slate-400 hover:text-slate-600 transition-colors" id="toggleIcon"></i>
+                            </button>
+                        </div>
+                        <div class="invalid-feedback text-red-500 text-sm mt-1 hidden" id="passwordError">
+                            Please enter your password
+                        </div>
+                    </div>
+
+                    <!-- Remember Me -->
+                    <div class="flex items-center justify-between mb-6">
+                        <label class="hidden flex items-center">
+                            <input type="checkbox" class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                            <span class="ml-2 text-sm text-slate-600">Remember me</span>
+                        </label>
+                        <a href="#" class="hidden text-sm text-blue-600 hover:text-blue-500 transition-colors">
+                            Forgot password?
+                        </a>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button 
+                        type="submit" 
+                        class="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg"
+                        id="submitBtn"
+                    >
+                        <span id="submitText">
+                            <i class="fas fa-sign-in-alt mr-2"></i>Sign In
+                        </span>
+                        <span id="loadingText" class="hidden">
+                            <i class="fas fa-spinner fa-spin mr-2"></i>Signing in...
+                        </span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Security Notice -->
+            <div class="bg-blue-50 px-8 py-4 border-t border-blue-200">
+                <div class="flex items-center text-sm text-slate-600">
+                    <i class="fas fa-shield-alt text-blue-500 mr-2"></i>
+                    <span>Your connection is secured with SSL encryption</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-8 login-animation">
+            <div class="flex items-center justify-center text-slate-500 mb-2">
+                <i class="fas fa-building mr-2"></i>
+                <span class="text-sm font-medium">ait.hu Web Services Kft.</span>
+            </div>
+            <p class="text-xs text-slate-400">© 2025 All rights reserved</p>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // Password toggle functionality
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const toggleIcon = document.getElementById('toggleIcon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleIcon.classList.remove('fa-eye');
+                toggleIcon.classList.add('fa-eye-slash');
+            } else {
+                passwordInput.type = 'password';
+                toggleIcon.classList.remove('fa-eye-slash');
+                toggleIcon.classList.add('fa-eye');
+            }
+        }
+
+        // Form validation and submission
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const submitBtn = document.getElementById('submitBtn');
+            const submitText = document.getElementById('submitText');
+            const loadingText = document.getElementById('loadingText');
+            
+            let isValid = true;
+
+            // Reset previous errors
+            document.getElementById('usernameError').classList.add('hidden');
+            document.getElementById('passwordError').classList.add('hidden');
+            document.getElementById('username').classList.remove('border-red-500');
+            document.getElementById('password').classList.remove('border-red-500');
+
+            // Validate username
+            if (!username) {
+                document.getElementById('usernameError').classList.remove('hidden');
+                document.getElementById('username').classList.add('border-red-500');
+                isValid = false;
+            }
+
+            // Validate password
+            if (!password) {
+                document.getElementById('passwordError').classList.remove('hidden');
+                document.getElementById('password').classList.add('border-red-500');
+                isValid = false;
+            }
+
+            if (!isValid) {
+                e.preventDefault();
+                return;
+            }
+
+            // Show loading state
+            submitBtn.disabled = true;
+            submitText.classList.add('hidden');
+            loadingText.classList.remove('hidden');
+            submitBtn.classList.add('opacity-75');
+        });
+
+        // Input field animations
+        document.querySelectorAll('input').forEach(input => {
+            input.addEventListener('focus', function() {
+                this.parentNode.querySelector('i').classList.add('text-blue-500');
+            });
+            
+            input.addEventListener('blur', function() {
+                if (!this.value) {
+                    this.parentNode.querySelector('i').classList.remove('text-blue-500');
+                }
+            });
+        });
+
+        // Add some interactive feedback
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add subtle hover effects to form elements
+            const formElements = document.querySelectorAll('input, button');
+            formElements.forEach(element => {
+                element.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-1px)';
+                });
+                element.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                });
+            });
+        });
+    </script>
+</body>
+</html>

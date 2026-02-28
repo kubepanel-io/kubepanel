@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block head %}
+<meta http-equiv="refresh" content="5">
+{% endblock %}
+
+{% block title %}Backup Logs | KubePanel{% endblock %}
+
+{% block page_title %}Backup Logs{% endblock %}
+{% block page_subtitle %}{{ domain }} - Real-time backup progress monitoring{% endblock %}
+
+{% block header_search %}
+<div class="relative">
+    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+    </div>
+    <input type="text"
+           class="pl-12 pr-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl w-96 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 text-white placeholder-white/60 text-sm"
+           placeholder="Search logs..."
+           id="log-search">
+</div>
+{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <div class="flex items-center space-x-2 px-3 py-2 bg-white/10 backdrop-blur-sm rounded-lg border border-white/20">
+        <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+        <span class="text-white text-sm font-medium">Auto-refresh: 5s</span>
+    </div>
+    <a href="{% url 'view_domain' domain=domain %}"
+       class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400 bg-white">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        <span>Back to Domain</span>
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Backup Status Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Backup Job -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Backup Job</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ pod_name|default:"Starting..." }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Namespace -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Namespace</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ namespace|default:"default" }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        {% if logs_by_container %}
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        {% else %}
+                        <div class="w-6 h-6 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Status</p>
+                    <p class="text-2xl font-semibold text-gray-900">
+                        {% if logs_by_container %}Running{% else %}Starting{% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Display -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Backup Logs
+                    </h3>
+                    <p class="text-sm text-gray-600 mt-1">Real-time backup process monitoring</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button onclick="scrollToBottom()" 
+                            class="text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium">
+                        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                        </svg>
+                        Scroll to Bottom
+                    </button>
+                    <div class="text-xs text-gray-500">
+                        Auto-refresh: <span id="countdown">5</span>s
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-6">
+            {% if logs_by_container %}
+                {% for container, lines in logs_by_container.items %}
+                <div class="mb-6 {% if not forloop.last %}border-b border-gray-200 pb-6{% endif %}">
+                    <div class="flex items-center mb-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                            <h4 class="text-sm font-semibold text-gray-900">Container: <code class="bg-gray-100 px-2 py-1 rounded text-blue-600">{{ container }}</code></h4>
+                        </div>
+                        <div class="ml-auto">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                                Active
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-900 rounded-lg overflow-hidden">
+                        <div class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+                            <div class="flex items-center space-x-2">
+                                <div class="flex space-x-1">
+                                    <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                                    <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                    <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                                </div>
+                                <span class="text-gray-300 text-sm font-medium">{{ container }} logs</span>
+                            </div>
+                            <button onclick="copyLogs('{{ container }}')"
+                                    class="text-gray-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-gray-700">
+                                Copy
+                            </button>
+                        </div>
+                        <pre class="log-container p-4 text-green-400 text-sm overflow-auto max-h-96 bg-black/30" 
+                             id="logs-{{ container }}" 
+                             style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; line-height: 1.4;">{% for line in lines %}{{ line }}
+{% endfor %}</pre>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <!-- No logs yet - waiting state -->
+                <div class="flex flex-col items-center justify-center py-16">
+                    <div class="relative">
+                        <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                            <div class="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                        <div class="absolute -top-1 -right-1">
+                            <div class="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center animate-pulse">
+                                <div class="w-2 h-2 bg-white rounded-full"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">Backup Job Starting</h3>
+                    <p class="text-gray-500 text-center max-w-md">
+                        The backup job is being initialized. This page will refresh automatically every 5 seconds to show the latest progress.
+                    </p>
+                    <div class="mt-4 flex items-center space-x-2 text-sm text-gray-400">
+                        <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                        <span>Waiting for backup pod to start...</span>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+// Countdown timer for page refresh
+let countdown = 5;
+const countdownElement = document.getElementById('countdown');
+
+const timer = setInterval(function() {
+    countdown--;
+    if (countdownElement) {
+        countdownElement.textContent = countdown;
+    }
+    
+    if (countdown <= 0) {
+        window.location.reload();
+    }
+}, 1000);
+
+// Scroll to bottom function
+function scrollToBottom() {
+    const logContainers = document.querySelectorAll('.log-container');
+    logContainers.forEach(container => {
+        container.scrollTop = container.scrollHeight;
+    });
+}
+
+// Auto-scroll to bottom on page load if there are logs
+document.addEventListener('DOMContentLoaded', function() {
+    {% if logs_by_container %}
+    setTimeout(scrollToBottom, 100); // Small delay to ensure content is rendered
+    {% endif %}
+    
+    // Search functionality
+    const searchInput = document.getElementById('log-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const logLines = document.querySelectorAll('.log-container');
+            
+            logLines.forEach(container => {
+                const text = container.textContent.toLowerCase();
+                const lines = container.innerHTML.split('\n');
+                
+                if (searchTerm === '') {
+                    // Show all lines
+                    container.innerHTML = lines.join('\n');
+                } else {
+                    // Highlight matching lines
+                    const filteredLines = lines.filter(line => 
+                        line.toLowerCase().includes(searchTerm)
+                    );
+                    container.innerHTML = filteredLines.join('\n');
+                }
+            });
+        });
+    }
+});
+
+// Copy logs function
+function copyLogs(containerName) {
+    const logElement = document.getElementById('logs-' + containerName);
+    if (logElement) {
+        const text = logElement.textContent;
+        navigator.clipboard.writeText(text).then(function() {
+            // Show temporary success message
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = 'Copied!';
+            button.classList.add('text-green-400');
+            
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.classList.remove('text-green-400');
+            }, 2000);
+        }).catch(function(err) {
+            console.error('Could not copy text: ', err);
+        });
+    }
+}
+
+// Pause auto-refresh when user is actively viewing logs
+let isUserInteracting = false;
+let interactionTimer;
+
+document.addEventListener('scroll', function() {
+    isUserInteracting = true;
+    clearTimeout(interactionTimer);
+    
+    interactionTimer = setTimeout(() => {
+        isUserInteracting = false;
+    }, 3000); // Resume auto-refresh after 3 seconds of no interaction
+});
+
+// Modify the refresh behavior to respect user interaction
+function checkRefresh() {
+    if (!isUserInteracting && countdown <= 0) {
+        window.location.reload();
+    }
+}
+</script>
+{% endblock %}
+{% endblock %}

@@ -1,0 +1,427 @@
+"""
+Dashboard views package
+
+Re-exports all views for backwards compatibility with existing imports.
+"""
+
+# Auth views
+from .auth import (
+    kplogin,
+    logout_view,
+    # 2FA views
+    verify_2fa,
+    verify_2fa_recovery,
+    setup_2fa,
+    disable_2fa,
+    regenerate_recovery_codes,
+)
+
+# Domain views
+from .domains import (
+    kpmain,
+    add_domain,
+    view_domain,
+    save_domain,
+    save_preferred_nodes,
+    delete_domain,
+    startstop_domain,
+    volumesnapshots,
+    restore_backup,
+    start_backup,
+    domain_logs,
+    settings,
+    change_password,
+    validate_package_limits,
+    get_mariadb_root_password,
+    update_mariadb_user_password,
+    user_can_change_password,
+    alias_list,
+    alias_add,
+    alias_delete,
+    view_alias,
+    enable_alias_dns,
+    purge_cache,
+    enable_dns,
+)
+
+# Mail views
+from .mail import (
+    list_mail_users,
+    create_mail_user,
+    edit_mail_user,
+    delete_mail_user,
+    download_mailbox,
+    import_mailbox,
+    mail_alias_list,
+    mail_alias_create,
+    mail_alias_edit,
+    mail_alias_delete,
+)
+
+# DNS views
+from .dns import (
+    zones_list,
+    create_zone,
+    delete_zone,
+    list_dns_records,
+    create_dns_record,
+    edit_dns_record,
+    delete_dns_record,
+    bulk_delete_dns_records,
+    add_api_token,
+    list_api_tokens,
+    delete_api_token,
+    create_dns_record_in_cloudflare,
+    create_cf_zone,
+    edit_dns_record_simple,
+    # Domain-centric DNS views
+    domain_dns_records,
+    add_domain_dns_record,
+    edit_domain_dns_record,
+    delete_domain_dns_record,
+    # Alias DNS views
+    alias_dns_records,
+    add_alias_dns_record,
+    edit_alias_dns_record,
+    delete_alias_dns_record,
+)
+
+# Node views
+from .nodes import (
+    node_list,
+    node_detail,
+    node_cordon,
+    node_drain,
+    node_uncordon,
+    pod_logs,
+    delete_pod,
+    backup_logs,
+    get_pods_status,
+)
+
+# Admin views (CBVs)
+from .admin import (
+    PackageListView,
+    PackageCreateView,
+    PackageUpdateView,
+    UserProfileListView,
+    UserProfileCreateView,
+    UserProfileUpdateView,
+    UserCreateView,
+    UserProfilePackageUpdateView,
+    UploadRestoreFilesView,
+    reset_user_password,
+    delete_user,
+    delete_package,
+)
+
+# Backup download views
+from .backup_download import (
+    download_backup_archive,
+    download_backup_sql,
+)
+
+# Security views
+from .security import (
+    manage_ips,
+    add_ip,
+    delete_ip,
+)
+
+# Monitoring views
+from .monitoring import (
+    livetraffic,
+    livetraffic_api,
+    user_livetraffic,
+    user_livetraffic_api,
+)
+
+# GlobalWAF views
+from .global_waf import (
+    global_waf_list,
+    global_waf_toggle,
+    global_waf_add_rule,
+    global_waf_edit_rule,
+    global_waf_delete_rule,
+    global_waf_toggle_geo,
+    global_waf_add_country,
+    global_waf_remove_country,
+)
+
+# L3 Firewall views
+from .l3_firewall import (
+    l3_firewall_list,
+    l3_firewall_toggle,
+    l3_firewall_add_rule,
+    l3_firewall_edit_rule,
+    l3_firewall_delete_rule,
+)
+
+# DomainWAF views
+from .domain_waf import (
+    domain_waf_overview,
+    domain_waf_list,
+    domain_waf_toggle,
+    domain_waf_add_rule,
+    domain_waf_edit_rule,
+    domain_waf_delete_rule,
+    domain_waf_toggle_geo,
+    domain_waf_add_country,
+    domain_waf_remove_country,
+    domain_waf_add_protected_path,
+    domain_waf_edit_protected_path,
+    domain_waf_delete_protected_path,
+)
+
+# Metrics views
+from .metrics import (
+    domain_metrics_page,
+    domain_metrics_api,
+    domain_metrics_summary,
+    global_metrics_page,
+    global_metrics_api,
+)
+
+# API views
+from .api import (
+    get_workload_versions,
+    get_workload_types,
+)
+
+# Storage views
+from .storage import (
+    storage_list,
+)
+
+# SMTP Firewall views
+from .smtp_firewall import (
+    smtp_traffic,
+    smtp_traffic_api,
+    smtp_firewall_list,
+    smtp_firewall_add_rule,
+    smtp_firewall_delete_rule,
+    smtp_rate_limits,
+    smtp_rate_limit_add,
+    smtp_rate_limit_delete,
+    smtp_quick_block,
+)
+
+# Migration views
+from .migration import (
+    MigrationListView,
+    MigrationConnectView,
+    MigrationSelectView,
+    MigrationDetailView,
+    migration_test_connection,
+    migration_status_api,
+    migration_cancel,
+    migration_retry_failed,
+    migration_delete,
+)
+
+# Utility exports
+from .utils import (
+    SuperuserRequiredMixin,
+    random_string,
+    get_country_info,
+    get_countries_list,
+    COUNTRIES,
+    is_static_file,
+    get_client_ip,
+    get_user_agent,
+    _load_k8s_auth,
+)
+
+__all__ = [
+    # Auth
+    'kplogin',
+    'logout_view',
+    # 2FA
+    'verify_2fa',
+    'verify_2fa_recovery',
+    'setup_2fa',
+    'disable_2fa',
+    'regenerate_recovery_codes',
+
+    # Domains
+    'kpmain',
+    'add_domain',
+    'view_domain',
+    'save_domain',
+    'save_preferred_nodes',
+    'delete_domain',
+    'startstop_domain',
+    'volumesnapshots',
+    'restore_backup',
+    'start_backup',
+    'domain_logs',
+    'settings',
+    'change_password',
+    'validate_package_limits',
+    'get_mariadb_root_password',
+    'update_mariadb_user_password',
+    'user_can_change_password',
+    'alias_list',
+    'alias_add',
+    'alias_delete',
+    'view_alias',
+    'enable_alias_dns',
+    'purge_cache',
+    'enable_dns',
+
+    # Mail
+    'list_mail_users',
+    'create_mail_user',
+    'edit_mail_user',
+    'delete_mail_user',
+    'download_mailbox',
+    'import_mailbox',
+    'mail_alias_list',
+    'mail_alias_create',
+    'mail_alias_edit',
+    'mail_alias_delete',
+
+    # DNS
+    'zones_list',
+    'create_zone',
+    'delete_zone',
+    'list_dns_records',
+    'create_dns_record',
+    'edit_dns_record',
+    'delete_dns_record',
+    'bulk_delete_dns_records',
+    'add_api_token',
+    'list_api_tokens',
+    'delete_api_token',
+    'create_dns_record_in_cloudflare',
+    'create_cf_zone',
+    'edit_dns_record_simple',
+    # Domain-centric DNS
+    'domain_dns_records',
+    'add_domain_dns_record',
+    'edit_domain_dns_record',
+    'delete_domain_dns_record',
+    # Alias DNS
+    'alias_dns_records',
+    'add_alias_dns_record',
+    'edit_alias_dns_record',
+    'delete_alias_dns_record',
+
+    # Nodes
+    'node_list',
+    'node_detail',
+    'node_cordon',
+    'node_drain',
+    'node_uncordon',
+    'pod_logs',
+    'delete_pod',
+    'backup_logs',
+    'get_pods_status',
+
+    # Admin CBVs
+    'PackageListView',
+    'PackageCreateView',
+    'PackageUpdateView',
+    'UserProfileListView',
+    'UserProfileCreateView',
+    'UserProfileUpdateView',
+    'UserCreateView',
+    'UserProfilePackageUpdateView',
+    'UploadRestoreFilesView',
+    'reset_user_password',
+    'delete_user',
+    'delete_package',
+
+    # Backup download views
+    'download_backup_archive',
+    'download_backup_sql',
+
+    # Security
+    'manage_ips',
+    'add_ip',
+    'delete_ip',
+
+    # Monitoring
+    'livetraffic',
+    'livetraffic_api',
+    'user_livetraffic',
+    'user_livetraffic_api',
+
+    # GlobalWAF
+    'global_waf_list',
+    'global_waf_toggle',
+    'global_waf_add_rule',
+    'global_waf_edit_rule',
+    'global_waf_delete_rule',
+    'global_waf_toggle_geo',
+    'global_waf_add_country',
+    'global_waf_remove_country',
+
+    # L3 Firewall
+    'l3_firewall_list',
+    'l3_firewall_toggle',
+    'l3_firewall_add_rule',
+    'l3_firewall_edit_rule',
+    'l3_firewall_delete_rule',
+
+    # DomainWAF
+    'domain_waf_overview',
+    'domain_waf_list',
+    'domain_waf_toggle',
+    'domain_waf_add_rule',
+    'domain_waf_edit_rule',
+    'domain_waf_delete_rule',
+    'domain_waf_toggle_geo',
+    'domain_waf_add_country',
+    'domain_waf_remove_country',
+    'domain_waf_add_protected_path',
+    'domain_waf_edit_protected_path',
+    'domain_waf_delete_protected_path',
+
+    # Metrics
+    'domain_metrics_page',
+    'domain_metrics_api',
+    'domain_metrics_summary',
+    'global_metrics_page',
+    'global_metrics_api',
+
+    # API
+    'get_workload_versions',
+    'get_workload_types',
+
+    # Storage
+    'storage_list',
+
+    # SMTP Firewall
+    'smtp_traffic',
+    'smtp_traffic_api',
+    'smtp_firewall_list',
+    'smtp_firewall_add_rule',
+    'smtp_firewall_delete_rule',
+    'smtp_rate_limits',
+    'smtp_rate_limit_add',
+    'smtp_rate_limit_delete',
+    'smtp_quick_block',
+
+    # Utils
+    'SuperuserRequiredMixin',
+    'random_string',
+    'get_country_info',
+    'get_countries_list',
+    'COUNTRIES',
+    'is_static_file',
+    'get_client_ip',
+    'get_user_agent',
+    '_load_k8s_auth',
+
+    # Migration
+    'MigrationListView',
+    'MigrationConnectView',
+    'MigrationSelectView',
+    'MigrationDetailView',
+    'migration_test_connection',
+    'migration_status_api',
+    'migration_cancel',
+    'migration_retry_failed',
+    'migration_delete',
+]

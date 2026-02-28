@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Select Domains | KubePanel{% endblock %}
+
+{% block page_title %}Select Domains to Migrate{% endblock %}
+{% block page_subtitle %}Choose which domains to migrate from {{ batch.cpanel_hostname }}{% endblock %}
+
+{% block header_actions %}
+<span id="selected-count" class="text-white/80 mr-4">0 of {{ domains|length }} selected</span>
+<a href="{% url 'migration_list' %}"
+   class="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+    </svg>
+    <span>Cancel</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<form method="post" id="migration-form">
+    {% csrf_token %}
+
+    <div class="space-y-4">
+        <!-- Bulk Actions -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <button type="button" onclick="selectAll()" class="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                        Select All
+                    </button>
+                    <button type="button" onclick="deselectAll()" class="text-sm text-gray-600 hover:text-gray-700 font-medium">
+                        Deselect All
+                    </button>
+                </div>
+                <div class="text-sm text-gray-500">
+                    Found {{ domains|length }} domain{{ domains|length|pluralize }} on {{ batch.cpanel_hostname }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Domain Cards -->
+        {% for domain in domains %}
+        {% with safe_name=domain.name|slugify %}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden domain-card" data-domain="{{ domain.name }}">
+            <!-- Domain Header -->
+            <div class="px-6 py-4 flex items-center justify-between border-b border-gray-100">
+                <div class="flex items-center space-x-4">
+                    <input type="checkbox"
+                           name="select_{{ safe_name }}"
+                           id="select_{{ safe_name }}"
+                           class="domain-checkbox h-5 w-5 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                           onchange="updateSelectedCount()">
+                    <label for="select_{{ safe_name }}" class="flex items-center cursor-pointer">
+                        <div class="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mr-3">
+                            <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="text-sm font-medium text-gray-900">{{ domain.name }}</div>
+                            <div class="text-xs text-gray-500">
+                                {{ domain.type|title }} domain
+                                {% if domain.databases %} &bull; {{ domain.databases|length }} DB{% endif %}
+                                {% if domain.mailboxes %} &bull; {{ domain.mailboxes|length }} mailbox{{ domain.mailboxes|length|pluralize:"es" }}{% endif %}
+                            </div>
+                        </div>
+                    </label>
+                </div>
+                <button type="button"
+                        onclick="toggleExpand('{{ safe_name }}')"
+                        class="expand-btn text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg class="w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Domain Details (Expandable) -->
+            <div id="details_{{ safe_name }}" class="hidden border-t border-gray-100">
+                <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Left Column: Database & Email Method -->
+                    <div class="space-y-6">
+                        <!-- Database Selection -->
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Database (select ONE)</h4>
+                            {% if domain.databases %}
+                            <div class="space-y-2">
+                                {% for db in domain.databases %}
+                                <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                    <input type="radio"
+                                           name="database_{{ safe_name }}"
+                                           value="{{ db.name }}"
+                                           class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300">
+                                    <span class="ml-3">
+                                        <span class="text-sm font-medium text-gray-900">{{ db.name }}</span>
+                                        <span class="text-xs text-gray-500 ml-2">({{ db.size_mb|floatformat:1 }} MB)</span>
+                                    </span>
+                                </label>
+                                {% endfor %}
+                                <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                    <input type="radio"
+                                           name="database_{{ safe_name }}"
+                                           value=""
+                                           checked
+                                           class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300">
+                                    <span class="ml-3 text-sm text-gray-500">None - skip database</span>
+                                </label>
+                            </div>
+                            {% else %}
+                            <p class="text-sm text-gray-500 italic">No databases found</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Email Method -->
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Email Migration Method</h4>
+                            <div class="space-y-2">
+                                <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                    <input type="radio"
+                                           name="email_method_{{ safe_name }}"
+                                           value="backup"
+                                           checked
+                                           class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300">
+                                    <span class="ml-3">
+                                        <span class="text-sm font-medium text-gray-900">From backup file</span>
+                                        <span class="block text-xs text-gray-500">Extract mailboxes from cPanel backup</span>
+                                    </span>
+                                </label>
+                                <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                    <input type="radio"
+                                           name="email_method_{{ safe_name }}"
+                                           value="imap"
+                                           class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300">
+                                    <span class="ml-3">
+                                        <span class="text-sm font-medium text-gray-900">Live IMAP sync</span>
+                                        <span class="block text-xs text-gray-500">Incremental sync via IMAP (requires passwords)</span>
+                                    </span>
+                                </label>
+                                <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                    <input type="radio"
+                                           name="email_method_{{ safe_name }}"
+                                           value="none"
+                                           class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300">
+                                    <span class="ml-3 text-sm text-gray-500">Skip email migration</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Mailboxes & Target Settings -->
+                    <div class="space-y-6">
+                        <!-- Mailbox Selection -->
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Mailboxes to Migrate</h4>
+                            {% if domain.mailboxes %}
+                            <div class="space-y-2 max-h-48 overflow-y-auto">
+                                {% for mb in domain.mailboxes %}
+                                <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                    <input type="checkbox"
+                                           name="mailboxes_{{ safe_name }}"
+                                           value="{{ mb.email }}"
+                                           checked
+                                           class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                                    <span class="ml-3">
+                                        <span class="text-sm font-medium text-gray-900">{{ mb.email }}</span>
+                                        <span class="text-xs text-gray-500 ml-2">({{ mb.size_mb|floatformat:1 }} MB)</span>
+                                    </span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <p class="text-sm text-gray-500 italic">No mailboxes found</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Target Settings -->
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Target Settings</h4>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">Owner</label>
+                                    <select name="owner_{{ safe_name }}"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm">
+                                        <option value="">Select owner...</option>
+                                        {% for user in users %}
+                                        <option value="{{ user.id }}">{{ user.username }}{% if user.email %} ({{ user.email }}){% endif %}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 mb-1">Package</label>
+                                    <select name="package_{{ safe_name }}"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm">
+                                        <option value="">Default limits</option>
+                                        {% for pkg in packages %}
+                                        <option value="{{ pkg.id }}">{{ pkg.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endwith %}
+        {% empty %}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+            <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No domains found</h3>
+            <p class="text-gray-500">The cPanel server doesn't have any domains configured.</p>
+        </div>
+        {% endfor %}
+
+        <!-- Submit Button -->
+        {% if domains %}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <div class="flex items-center justify-between">
+                <p class="text-sm text-gray-500">
+                    Selected domains will be created in KubePanel and their data will be imported.
+                </p>
+                <button type="submit"
+                        class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                    <span>Start Migration</span>
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</form>
+
+<script>
+function toggleExpand(safeName) {
+    const details = document.getElementById('details_' + safeName);
+    const card = details.closest('.domain-card');
+    const btn = card.querySelector('.expand-btn svg');
+
+    if (details.classList.contains('hidden')) {
+        details.classList.remove('hidden');
+        btn.classList.add('rotate-180');
+    } else {
+        details.classList.add('hidden');
+        btn.classList.remove('rotate-180');
+    }
+}
+
+function selectAll() {
+    document.querySelectorAll('.domain-checkbox').forEach(cb => {
+        cb.checked = true;
+    });
+    updateSelectedCount();
+}
+
+function deselectAll() {
+    document.querySelectorAll('.domain-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const total = document.querySelectorAll('.domain-checkbox').length;
+    const selected = document.querySelectorAll('.domain-checkbox:checked').length;
+    document.getElementById('selected-count').textContent = `${selected} of ${total} selected`;
+}
+
+// Helper function to convert domain name to safe name (same as Django's slugify)
+function slugify(text) {
+    return text.toString().toLowerCase()
+        .replace(/\s+/g, '-')           // Replace spaces with -
+        .replace(/[^\w\-]+/g, '')       // Remove all non-word chars (including dots)
+        .replace(/\-\-+/g, '-')         // Replace multiple - with single -
+        .replace(/^-+/, '')             // Trim - from start of text
+        .replace(/-+$/, '');            // Trim - from end of text
+}
+
+// Auto-expand when checkbox is checked
+document.querySelectorAll('.domain-checkbox').forEach(cb => {
+    cb.addEventListener('change', function() {
+        if (this.checked) {
+            const card = this.closest('.domain-card');
+            const safeName = slugify(card.dataset.domain);
+            const details = document.getElementById('details_' + safeName);
+            if (details && details.classList.contains('hidden')) {
+                toggleExpand(safeName);
+            }
+        }
+    });
+});
+
+// Form validation handled by backend - no client-side validation needed
+</script>
+{% endblock %}

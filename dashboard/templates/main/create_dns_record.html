@@ -1,0 +1,426 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Create DNS Record | KubePanel{% endblock %}
+
+{% block page_title %}Create DNS Record{% endblock %}
+{% block page_subtitle %}{% if zone %}{{ zone.name }}{% else %}Add a new DNS record to your zone{% endif %}{% endblock %}
+
+{% block header_actions %}
+{% if zone_id %}
+<a href="{% url 'list_dns_records' zone_id %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Records</span>
+</a>
+{% else %}
+<a href="{% url 'zones_list' %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Zones</span>
+</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">New DNS Record</h3>
+                    <p class="text-sm text-gray-600">{% if zone %}Add a new DNS record to {{ zone.name }}{% else %}Create a new DNS record for your zone{% endif %}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="POST" novalidate id="create-dns-record-form">
+                {% csrf_token %}
+
+                <!-- Record Type Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                        </svg>
+                        Record Type
+                    </h4>
+
+                    <div class="grid grid-cols-1 gap-6">
+                        <div>
+                            <label for="id_record_type" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                                    </svg>
+                                    DNS Record Type <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <select name="{{ form.record_type.html_name }}"
+                                    id="id_record_type"
+                                    class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.record_type.errors %} border-red-500 focus:ring-red-500{% endif %}"
+                                    required>
+                                <option value="">Select record type...</option>
+                                <option value="A">A - IPv4 Address</option>
+                                <option value="AAAA">AAAA - IPv6 Address</option>
+                                <option value="CNAME">CNAME - Canonical Name</option>
+                                <option value="MX">MX - Mail Exchange</option>
+                                <option value="TXT">TXT - Text Record</option>
+                                <option value="NS">NS - Name Server</option>
+                                <option value="SRV">SRV - Service Record</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Choose the type of DNS record to create</p>
+                            {% for error in form.record_type.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Record Details Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Record Details
+                    </h4>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Record Name -->
+                        <div>
+                            <label for="id_name" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                                    </svg>
+                                    Record Name <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <input type="text"
+                                   name="{{ form.name.html_name }}"
+                                   id="id_name"
+                                   value="{{ form.name.value|default_if_none:'' }}"
+                                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm font-mono{% if form.name.errors %} border-red-500 focus:ring-red-500{% endif %}"
+                                   placeholder="subdomain or @ for root"
+                                   required>
+                            <p class="mt-1 text-xs text-gray-500">The subdomain name or @ for the root domain</p>
+                            {% for error in form.name.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+
+                        <!-- TTL -->
+                        {% if form.ttl %}
+                        <div>
+                            <label for="id_ttl" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    TTL (Time to Live)
+                                </div>
+                            </label>
+                            <input type="number"
+                                   name="{{ form.ttl.html_name }}"
+                                   id="id_ttl"
+                                   value="{{ form.ttl.value|default:'3600' }}"
+                                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.ttl.errors %} border-red-500 focus:ring-red-500{% endif %}"
+                                   placeholder="3600">
+                            <p class="mt-1 text-xs text-gray-500">Cache time in seconds (default: 3600)</p>
+                            {% for error in form.ttl.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Record Content Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Record Content
+                    </h4>
+
+                    <div class="grid grid-cols-1 gap-6">
+                        <!-- Content Field -->
+                        <div>
+                            <label for="id_content" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                    </svg>
+                                    Target Value <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <textarea name="{{ form.content.html_name }}"
+                                      id="id_content"
+                                      rows="3"
+                                      class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm font-mono resize-none{% if form.content.errors %} border-red-500 focus:ring-red-500{% endif %}"
+                                      placeholder="Enter the target value for this record"
+                                      required>{{ form.content.value|default_if_none:'' }}</textarea>
+                            <p class="mt-1 text-xs text-gray-500" id="content-help">Enter the target value for this DNS record</p>
+                            {% for error in form.content.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Priority Field (for MX records) -->
+                        {% if form.priority %}
+                        <div id="priority-field" class="hidden">
+                            <label for="id_priority" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"></path>
+                                    </svg>
+                                    Priority (MX Records)
+                                </div>
+                            </label>
+                            <input type="number"
+                                   name="{{ form.priority.html_name }}"
+                                   id="id_priority"
+                                   value="{{ form.priority.value|default:'10' }}"
+                                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.priority.errors %} border-red-500 focus:ring-red-500{% endif %}"
+                                   placeholder="10">
+                            <p class="mt-1 text-xs text-gray-500">Lower values have higher priority</p>
+                            {% for error in form.priority.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Record Type Help -->
+                <div id="record-type-help" class="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg hidden">
+                    <div class="flex items-center mb-3">
+                        <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <h5 class="text-sm font-medium text-blue-900">Record Type Information</h5>
+                    </div>
+                    <div id="record-type-details" class="text-sm text-blue-800">
+                        <!-- Record type details will be inserted here via JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    {% if zone_id %}
+                    <a href="{% url 'list_dns_records' zone_id %}"
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    {% else %}
+                    <a href="{% url 'zones_list' %}"
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    {% endif %}
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        <span>Create DNS Record</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const recordTypeSelect = document.getElementById('id_record_type');
+        const contentField = document.getElementById('id_content');
+        const contentHelp = document.getElementById('content-help');
+        const recordTypeHelp = document.getElementById('record-type-help');
+        const recordTypeDetails = document.getElementById('record-type-details');
+        const priorityField = document.getElementById('priority-field');
+
+        // Record type information
+        const recordTypeInfo = {
+            'A': {
+                placeholder: '192.168.1.1',
+                help: 'IPv4 address (e.g., 192.168.1.1)',
+                description: 'A records point a domain or subdomain to an IPv4 address. This is the most common type of DNS record.'
+            },
+            'AAAA': {
+                placeholder: '2001:db8::1',
+                help: 'IPv6 address (e.g., 2001:db8::1)',
+                description: 'AAAA records point a domain or subdomain to an IPv6 address. Used for modern IPv6 connectivity.'
+            },
+            'CNAME': {
+                placeholder: 'target.example.com',
+                help: 'Canonical name (e.g., target.example.com)',
+                description: 'CNAME records create an alias that points to another domain name. Cannot be used with other record types on the same name.'
+            },
+            'MX': {
+                placeholder: 'mail.example.com',
+                help: 'Mail server hostname (e.g., mail.example.com)',
+                description: 'MX records specify mail exchange servers for a domain. Priority determines the order of mail delivery attempts.'
+            },
+            'TXT': {
+                placeholder: '"v=spf1 include:_spf.google.com ~all"',
+                help: 'Text content (e.g., SPF, DKIM, verification codes)',
+                description: 'TXT records store arbitrary text data. Commonly used for SPF, DKIM, domain verification, and other metadata.'
+            },
+            'NS': {
+                placeholder: 'ns1.example.com',
+                help: 'Name server hostname (e.g., ns1.example.com)',
+                description: 'NS records delegate a subdomain to a set of name servers. Used for subdomain delegation.'
+            },
+            'SRV': {
+                placeholder: '10 20 443 target.example.com',
+                help: 'Priority, weight, port, target (e.g., 10 20 443 target.example.com)',
+                description: 'SRV records specify the location of servers for specific services. Format: priority weight port target.'
+            }
+        };
+
+        // Update placeholder and help text based on record type
+        function updateRecordTypeHelp() {
+            const recordType = recordTypeSelect.value;
+
+            if (recordType && recordTypeInfo[recordType]) {
+                const info = recordTypeInfo[recordType];
+
+                // Update placeholder and help
+                contentField.placeholder = info.placeholder;
+                contentHelp.textContent = info.help;
+
+                // Show record type information
+                recordTypeDetails.innerHTML = `
+                    <p><strong>Type:</strong> ${recordType}</p>
+                    <p><strong>Description:</strong> ${info.description}</p>
+                    <p><strong>Example:</strong> ${info.placeholder}</p>
+                `;
+                recordTypeHelp.classList.remove('hidden');
+
+                // Show/hide priority field for MX records
+                if (priorityField) {
+                    if (recordType === 'MX') {
+                        priorityField.classList.remove('hidden');
+                    } else {
+                        priorityField.classList.add('hidden');
+                    }
+                }
+            } else {
+                // Reset to default
+                contentField.placeholder = 'Enter the target value for this record';
+                contentHelp.textContent = 'Enter the target value for this DNS record';
+                recordTypeHelp.classList.add('hidden');
+
+                if (priorityField) {
+                    priorityField.classList.add('hidden');
+                }
+            }
+        }
+
+        recordTypeSelect.addEventListener('change', updateRecordTypeHelp);
+
+        // Form submission with loading state
+        const form = document.getElementById('create-dns-record-form');
+        const submitButton = form.querySelector('button[type="submit"]');
+
+        form.addEventListener('submit', function(e) {
+            // Basic client-side validation
+            const recordType = recordTypeSelect.value;
+            const name = document.getElementById('id_name').value.trim();
+            const content = contentField.value.trim();
+
+            if (!recordType) {
+                e.preventDefault();
+                alert('Please select a record type');
+                return;
+            }
+
+            if (!name) {
+                e.preventDefault();
+                alert('Record name is required');
+                return;
+            }
+
+            if (!content) {
+                e.preventDefault();
+                alert('Record content is required');
+                return;
+            }
+
+            // Show loading state
+            const originalContent = submitButton.innerHTML;
+            submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Creating...';
+            submitButton.disabled = true;
+
+            // Reset after a delay in case of validation errors
+            setTimeout(() => {
+                submitButton.innerHTML = originalContent;
+                submitButton.disabled = false;
+            }, 3000);
+        });
+
+        // Focus enhancement
+        const inputs = document.querySelectorAll('input, select, textarea');
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                if (!this.classList.contains('border-red-500')) {
+                    this.classList.add('ring-2', 'ring-primary-500');
+                }
+            });
+
+            input.addEventListener('blur', function() {
+                this.classList.remove('ring-2', 'ring-primary-500');
+            });
+        });
+
+        // Auto-focus record type field
+        recordTypeSelect.focus();
+    });
+</script>
+{% endblock %}
+{% endblock %}

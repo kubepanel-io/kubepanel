@@ -1,0 +1,498 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}My Traffic | KubePanel{% endblock %}
+
+{% block page_title %}My Traffic{% endblock %}
+{% block page_subtitle %}Monitor HTTP traffic for your domains{% endblock %}
+
+{% block header_search %}
+<div class="relative">
+    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+    </div>
+    <input type="text"
+           class="pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg w-80 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+           placeholder="Quick search across all fields..."
+           id="global-search">
+</div>
+{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <button id="auto-refresh-toggle"
+            class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+        <svg class="h-5 w-5" id="refresh-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        <span id="refresh-text">Auto Refresh: Off</span>
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Traffic Stats Overview -->
+{% if logs %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Total Requests</p>
+                <p class="text-2xl font-semibold text-gray-900" id="total-requests">{{ logs|length }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">2xx Success</p>
+                <p class="text-2xl font-semibold text-gray-900" id="success-requests">0</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.99-.833-2.76 0L3.054 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">4xx Errors</p>
+                <p class="text-2xl font-semibold text-gray-900" id="client-errors">0</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">5xx Errors</p>
+                <p class="text-2xl font-semibold text-gray-900" id="server-errors">0</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Timeframe Selection -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 p-4">
+    <div class="flex flex-wrap items-center gap-4">
+        <div class="flex items-center gap-2">
+            <label class="text-sm font-medium text-gray-700">Show logs since:</label>
+            <input type="datetime-local"
+                   id="since-time"
+                   class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                   value="{{ since_time|default:'' }}">
+            <button onclick="applyTimeFilter()"
+                    class="btn-primary text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all">
+                Apply
+            </button>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-500">Quick select:</span>
+            <button onclick="setQuickTime(5)"
+                    class="px-3 py-1.5 text-sm rounded-lg border {% if since_minutes == 5 %}bg-primary-50 border-primary-300 text-primary-700{% else %}border-gray-300 text-gray-600 hover:bg-gray-50{% endif %} transition-colors">
+                5 min
+            </button>
+            <button onclick="setQuickTime(15)"
+                    class="px-3 py-1.5 text-sm rounded-lg border {% if since_minutes == 15 %}bg-primary-50 border-primary-300 text-primary-700{% else %}border-gray-300 text-gray-600 hover:bg-gray-50{% endif %} transition-colors">
+                15 min
+            </button>
+            <button onclick="setQuickTime(30)"
+                    class="px-3 py-1.5 text-sm rounded-lg border {% if since_minutes == 30 %}bg-primary-50 border-primary-300 text-primary-700{% else %}border-gray-300 text-gray-600 hover:bg-gray-50{% endif %} transition-colors">
+                30 min
+            </button>
+            <button onclick="setQuickTime(60)"
+                    class="px-3 py-1.5 text-sm rounded-lg border {% if since_minutes == 60 %}bg-primary-50 border-primary-300 text-primary-700{% else %}border-gray-300 text-gray-600 hover:bg-gray-50{% endif %} transition-colors">
+                1 hour
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Live Traffic Table -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                <div class="w-3 h-3 bg-green-500 rounded-full mr-3 animate-pulse"></div>
+                Traffic Monitor
+            </h3>
+            <div class="flex items-center space-x-3">
+                <span class="text-sm text-gray-500" id="last-updated">Last updated: Just now</span>
+                <button onclick="clearFilters()"
+                        class="text-sm text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors">
+                    Clear Filters
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {% if logs %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200" id="logsTable">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Time</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Host</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client IP</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Country</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Status</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Method</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Path</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Duration</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28 relative">
+                        Block
+                        <button type="button" onclick="toggleBlockInfo(event)" class="ml-1 text-gray-400 hover:text-gray-600 align-middle">
+                            <svg class="w-4 h-4 inline" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                        <!-- Info popup -->
+                        <div id="block-info-popup" class="hidden absolute right-0 top-full mt-2 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-4 w-72 text-left normal-case font-normal">
+                            <h4 class="font-semibold mb-2 text-gray-900 text-sm">Domain WAF Blocking</h4>
+                            <div class="text-xs text-gray-600">
+                                <p class="mb-2">Click WAF to add a blocking rule to your domain's Web Application Firewall.</p>
+                                <p>You can block by IP address, path, or user agent. The rule will apply only to your domain.</p>
+                            </div>
+                        </div>
+                    </th>
+                </tr>
+                <!-- Filter Row -->
+                <tr class="bg-gray-100">
+                    <th class="px-4 py-2">
+                        <input type="text" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                               data-col="0" placeholder="Filter time">
+                    </th>
+                    <th class="px-4 py-2">
+                        <input type="text" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                               data-col="1" placeholder="Filter host">
+                    </th>
+                    <th class="px-4 py-2">
+                        <input type="text" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                               data-col="2" placeholder="Filter IP">
+                    </th>
+                    <th class="px-4 py-2">
+                        <input type="text" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                               data-col="3" placeholder="Filter country">
+                    </th>
+                    <th class="px-4 py-2">
+                        <input type="text" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                               data-col="4" placeholder="Status">
+                    </th>
+                    <th class="px-4 py-2">
+                        <input type="text" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                               data-col="5" placeholder="Method">
+                    </th>
+                    <th class="px-4 py-2">
+                        <input type="text" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                               data-col="6" placeholder="Filter path">
+                    </th>
+                    <th class="px-4 py-2">
+                        <input type="text" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                               data-col="7" placeholder="Duration">
+                    </th>
+                    <th class="px-4 py-2"></th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for log in logs %}
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-900 font-mono">{{ log.time }}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                        <div class="flex items-center">
+                            <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                            {{ log.vhost }}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-900">{{ log.x_forwarded_for }}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                        <div class="flex items-center">
+                            {% if log.flag_url %}
+                                <img class="w-4 h-3 mr-2 rounded-sm" src="{{ log.flag_url }}" alt="{{ log.country_name }}">
+                            {% endif %}
+                            <span class="text-xs">{{ log.country_name|default:"Unknown" }}</span>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm">
+                        {% if log.status >= 200 and log.status < 300 %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {{ log.status }}
+                        </span>
+                        {% elif log.status >= 300 and log.status < 400 %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {{ log.status }}
+                        </span>
+                        {% elif log.status >= 400 and log.status < 500 %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            {{ log.status }}
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            {{ log.status }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                     {% if log.method == 'GET' %}bg-blue-100 text-blue-800
+                                     {% elif log.method == 'POST' %}bg-green-100 text-green-800
+                                     {% elif log.method == 'PUT' %}bg-yellow-100 text-yellow-800
+                                     {% elif log.method == 'DELETE' %}bg-red-100 text-red-800
+                                     {% else %}bg-gray-100 text-gray-800{% endif %}">
+                            {{ log.method }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900">
+                        <div class="max-w-xs truncate" title="{{ log.path }}">{{ log.path }}</div>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-xs font-mono text-gray-900">{{ log.duration }}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm">
+                        {% if log.domain_name and log.x_forwarded_for %}
+                        <a href="{% url 'domain_waf_add_rule' log.domain_name %}?ip={{ log.x_forwarded_for|urlencode }}&path={{ log.path|urlencode }}&comment=Block%20from%20livetraffic"
+                           class="text-xs font-medium bg-orange-50 text-orange-700 hover:bg-orange-100 px-2 py-1 rounded transition-colors"
+                           title="Block with Domain WAF">
+                            WAF
+                        </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="px-6 py-12 text-center">
+        <div class="flex flex-col items-center">
+            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No traffic detected</h3>
+            <p class="text-gray-500 mb-4">Traffic logs for your domains will appear here as requests are received</p>
+            {% if not user_domains %}
+            <p class="text-sm text-yellow-600">You don't have any domains yet. <a href="{% url 'add_domain' %}" class="underline">Add a domain</a> to start monitoring traffic.</p>
+            {% else %}
+            <div class="flex items-center text-sm text-gray-400">
+                <div class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                Monitoring active...
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto-refresh functionality
+        let autoRefresh = localStorage.getItem('user_livetraffic_autorefresh') === 'true';
+        let refreshInterval;
+        const REFRESH_INTERVAL = 30000; // 30 seconds
+        const refreshButton = document.getElementById('auto-refresh-toggle');
+        const refreshIcon = document.getElementById('refresh-icon');
+        const refreshText = document.getElementById('refresh-text');
+        const lastUpdated = document.getElementById('last-updated');
+
+        // Timeframe functions
+        window.applyTimeFilter = function() {
+            const sinceTime = document.getElementById('since-time').value;
+            if (sinceTime) {
+                window.location.href = '{% url "user_livetraffic" %}?since_time=' + encodeURIComponent(sinceTime);
+            }
+        };
+
+        window.setQuickTime = function(minutes) {
+            window.location.href = '{% url "user_livetraffic" %}?since_minutes=' + minutes;
+        };
+
+        // Info popup toggle
+        window.toggleBlockInfo = function(event) {
+            event.stopPropagation();
+            const popup = document.getElementById('block-info-popup');
+            popup.classList.toggle('hidden');
+        };
+
+        // Close popup when clicking outside
+        document.addEventListener('click', function(e) {
+            const popup = document.getElementById('block-info-popup');
+            if (popup && !popup.contains(e.target)) {
+                popup.classList.add('hidden');
+            }
+        });
+
+        // Auto-refresh - reload page to get fresh data
+        function refreshPage() {
+            const sinceTime = document.getElementById('since-time').value;
+            let url = '{% url "user_livetraffic" %}';
+
+            if (sinceTime) {
+                url += '?since_time=' + encodeURIComponent(sinceTime);
+            } else {
+                url += '?since_minutes={{ since_minutes|default:5 }}';
+            }
+
+            window.location.href = url;
+        }
+
+        function setAutoRefreshState(enabled) {
+            autoRefresh = enabled;
+            localStorage.setItem('user_livetraffic_autorefresh', enabled);
+
+            if (enabled) {
+                refreshText.textContent = 'Auto Refresh: On (30s)';
+                refreshButton.classList.add('bg-green-50', 'border-green-300', 'text-green-700');
+                refreshButton.classList.remove('border-gray-300', 'text-gray-600');
+                refreshIcon.classList.add('animate-spin');
+
+                refreshInterval = setInterval(refreshPage, REFRESH_INTERVAL);
+            } else {
+                refreshText.textContent = 'Auto Refresh: Off';
+                refreshButton.classList.remove('bg-green-50', 'border-green-300', 'text-green-700');
+                refreshButton.classList.add('border-gray-300', 'text-gray-600');
+                refreshIcon.classList.remove('animate-spin');
+
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                }
+            }
+        }
+
+        function toggleAutoRefresh() {
+            setAutoRefreshState(!autoRefresh);
+        }
+
+        // Initialize auto-refresh state from localStorage
+        if (autoRefresh) {
+            setAutoRefreshState(true);
+        }
+
+        refreshButton.addEventListener('click', toggleAutoRefresh);
+
+        // Table filtering functionality
+        const table = document.getElementById('logsTable');
+        const globalSearch = document.getElementById('global-search');
+        const filterInputs = table ? table.querySelectorAll('thead tr:nth-child(2) input') : [];
+
+        function filterTable() {
+            if (!table) return;
+
+            const globalTerm = globalSearch.value.trim().toLowerCase();
+            const filters = Array.from(filterInputs).map(input => {
+                const raw = input.value.trim().toLowerCase();
+                if (!raw) return null;
+                return raw.startsWith('!')
+                    ? { term: raw.slice(1), invert: true }
+                    : { term: raw, invert: false };
+            });
+
+            table.querySelectorAll('tbody tr').forEach(row => {
+                let show = true;
+
+                if (globalTerm) {
+                    const rowText = row.textContent.toLowerCase();
+                    if (!rowText.includes(globalTerm)) {
+                        show = false;
+                    }
+                }
+
+                if (show) {
+                    filters.forEach((flt, idx) => {
+                        if (!flt) return;
+                        const cell = row.children[idx];
+                        if (!cell) return;
+                        const text = cell.textContent.toLowerCase();
+                        const match = text.includes(flt.term);
+
+                        if (flt.invert ? match : !match) {
+                            show = false;
+                        }
+                    });
+                }
+
+                row.style.display = show ? '' : 'none';
+            });
+
+            updateVisibleStats();
+        }
+
+        if (globalSearch) {
+            globalSearch.addEventListener('input', filterTable);
+        }
+
+        filterInputs.forEach(input => {
+            input.addEventListener('input', filterTable);
+        });
+
+        window.clearFilters = function() {
+            if (globalSearch) globalSearch.value = '';
+            filterInputs.forEach(input => input.value = '');
+            filterTable();
+        };
+
+        function updateStats() {
+            if (!table) return;
+
+            const rows = table.querySelectorAll('tbody tr');
+            let total = 0, success = 0, clientErrors = 0, serverErrors = 0;
+
+            rows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    total++;
+                    const statusCell = row.children[4];
+                    if (statusCell) {
+                        const statusText = statusCell.textContent.trim();
+                        const status = parseInt(statusText);
+
+                        if (status >= 200 && status < 300) success++;
+                        else if (status >= 400 && status < 500) clientErrors++;
+                        else if (status >= 500) serverErrors++;
+                    }
+                }
+            });
+
+            document.getElementById('total-requests').textContent = total;
+            document.getElementById('success-requests').textContent = success;
+            document.getElementById('client-errors').textContent = clientErrors;
+            document.getElementById('server-errors').textContent = serverErrors;
+        }
+
+        function updateVisibleStats() {
+            updateStats();
+        }
+
+        // Initial stats calculation
+        updateStats();
+    });
+</script>
+{% endblock %}
+{% endblock %}

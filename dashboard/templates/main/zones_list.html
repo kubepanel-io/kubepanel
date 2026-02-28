@@ -1,0 +1,468 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}DNS Zones | KubePanel{% endblock %}
+
+{% block page_title %}DNS Zones{% endblock %}
+{% block page_subtitle %}Manage DNS zones and domain configurations{% endblock %}
+
+{% block header_search %}
+<div class="relative">
+    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+    </div>
+    <input type="text"
+           class="pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg w-80 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+           placeholder="Search zones, Zone IDs..."
+           id="zone-search">
+</div>
+{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'create_zone' %}"
+   class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+    </svg>
+    <span>Create Zone</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- DNS Zones Overview -->
+{% if zones %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Total Zones</p>
+                <p class="text-2xl font-semibold text-gray-900" id="total-zones">{{ zones|length }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Active Zones</p>
+                <p class="text-2xl font-semibold text-gray-900" id="active-zones">{{ zones|length }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">DNS Records</p>
+                <p class="text-2xl font-semibold text-gray-900" id="total-records">—</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Cloudflare</p>
+                <p class="text-lg font-semibold text-gray-900">Protected</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- DNS Zones Table -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                <div class="w-3 h-3 bg-blue-500 rounded-full mr-3"></div>
+                DNS Zones
+            </h3>
+            <div class="flex items-center space-x-3">
+                <span class="text-sm text-gray-500">
+                    {% if zones %}{{ zones|length }} zone{{ zones|length|pluralize }}{% else %}No zones{% endif %}
+                </span>
+                <button onclick="clearSearch()" 
+                        class="text-sm text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors">
+                    Clear Search
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {% if zones %}
+    <div>
+        <table class="min-w-full divide-y divide-gray-200" id="zonesTable">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Zone Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Zone ID</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Records</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for zone in zones %}
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 w-10 h-10">
+                                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <a href="{% url 'list_dns_records' zone.id %}" 
+                                   class="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">
+                                    {{ zone.name }}
+                                </a>
+                                <div class="text-sm text-gray-500">DNS Zone</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center space-x-2">
+                            <code class="text-sm font-mono bg-gray-100 px-2 py-1 rounded text-gray-800">{{ zone.zone_id }}</code>
+                            <button type="button" 
+                                    onclick="copyZoneId('{{ zone.zone_id }}')"
+                                    class="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100 transition-colors"
+                                    title="Copy Zone ID">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                            Active
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-2">
+                                <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                                </svg>
+                            </div>
+                            <a href="{% url 'list_dns_records' zone.id %}" 
+                               class="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors">
+                                View Records
+                            </a>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center space-x-2">
+                            <!-- View Records Button -->
+                            <a href="{% url 'list_dns_records' zone.id %}"
+                               class="text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                </svg>
+                                <span>Manage</span>
+                            </a>
+                            
+                            <!-- Actions Dropdown -->
+                            <div class="relative dropdown">
+                                <button class="text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
+                                    </svg>
+                                    <span>Actions</span>
+                                </button>
+                                <div class="dropdown-menu absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                                    <a href="{% url 'list_dns_records' zone.id %}"
+                                       class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                                        </svg>
+                                        <span>DNS Records</span>
+                                    </a>
+                                    <a href="#"
+                                       class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        </svg>
+                                        <span>Zone Settings</span>
+                                    </a>
+                                    <a href="#"
+                                       class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                        </svg>
+                                        <span>Analytics</span>
+                                    </a>
+                                    <a href="#"
+                                       class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                        </svg>
+                                        <span>Export Zone</span>
+                                    </a>
+                                    <hr class="my-1 border-gray-200">
+                                    <a href="{% url 'delete_zone' zone.id %}"
+                                       class="flex items-center space-x-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                                       onclick="return confirm('Are you sure you want to delete the zone \'{{ zone.name }}\'? This will delete all DNS records and cannot be undone.')">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                        </svg>
+                                        <span>Delete Zone</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="px-6 py-12 text-center">
+        <div class="flex flex-col items-center">
+            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No DNS zones configured</h3>
+            <p class="text-gray-500 mb-4">Create your first DNS zone to start managing domain records</p>
+            <div class="space-y-2">
+                <a href="{% url 'create_zone' %}"
+                   class="btn-primary text-white px-4 py-2 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 justify-center">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    <span>Create Your First Zone</span>
+                </a>
+                <p class="text-xs text-gray-400">
+                    Need help? 
+                    <a href="https://developers.cloudflare.com/dns/" 
+                       target="_blank" 
+                       class="text-blue-600 hover:text-blue-800">
+                        View DNS documentation
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Search functionality
+        const searchInput = document.getElementById('zone-search');
+        const table = document.getElementById('zonesTable');
+        
+        function filterTable() {
+            if (!table || !searchInput) return;
+            
+            const searchTerm = searchInput.value.toLowerCase();
+            const rows = table.querySelectorAll('tbody tr');
+            let visibleCount = 0;
+            
+            rows.forEach(row => {
+                const zoneName = row.children[0].textContent.toLowerCase();
+                const zoneId = row.children[1].textContent.toLowerCase();
+                
+                if (zoneName.includes(searchTerm) || zoneId.includes(searchTerm)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            // Update stats
+            document.getElementById('total-zones').textContent = visibleCount;
+            document.getElementById('active-zones').textContent = visibleCount;
+        }
+        
+        if (searchInput) {
+            searchInput.addEventListener('input', filterTable);
+        }
+        
+        // Clear search function
+        window.clearSearch = function() {
+            if (searchInput) {
+                searchInput.value = '';
+                filterTable();
+            }
+        };
+        
+        // Dropdown functionality
+        const dropdowns = document.querySelectorAll('.dropdown');
+
+        dropdowns.forEach(dropdown => {
+            const button = dropdown.querySelector('button');
+            const menu = dropdown.querySelector('.dropdown-menu');
+
+            if (button && menu) {
+                // Set initial state
+                menu.style.transform = 'translateY(-5px)';
+                menu.style.opacity = '0';
+                menu.style.visibility = 'hidden';
+                menu.style.transition = 'all 0.2s ease-in-out';
+
+                let isClickOpen = false;
+                let hoverTimeout;
+
+                // Show dropdown function
+                function showDropdown() {
+                    // Close all other dropdowns first
+                    dropdowns.forEach(otherDropdown => {
+                        if (otherDropdown !== dropdown) {
+                            const otherMenu = otherDropdown.querySelector('.dropdown-menu');
+                            if (otherMenu) {
+                                otherMenu.style.transform = 'translateY(-5px)';
+                                otherMenu.style.opacity = '0';
+                                otherMenu.style.visibility = 'hidden';
+                                otherDropdown.isClickOpen = false;
+                            }
+                        }
+                    });
+
+                    menu.style.transform = 'translateY(0)';
+                    menu.style.opacity = '1';
+                    menu.style.visibility = 'visible';
+                }
+
+                // Hide dropdown function
+                function hideDropdown() {
+                    if (!isClickOpen) {
+                        menu.style.transform = 'translateY(-5px)';
+                        menu.style.opacity = '0';
+                        menu.style.visibility = 'hidden';
+                    }
+                }
+
+                // Click handler
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation();
+
+                    if (isClickOpen) {
+                        menu.style.transform = 'translateY(-5px)';
+                        menu.style.opacity = '0';
+                        menu.style.visibility = 'hidden';
+                        isClickOpen = false;
+                    } else {
+                        showDropdown();
+                        isClickOpen = true;
+                    }
+
+                    dropdown.isClickOpen = isClickOpen;
+                });
+
+                // Hover handlers
+                dropdown.addEventListener('mouseenter', function() {
+                    clearTimeout(hoverTimeout);
+                    showDropdown();
+                });
+
+                dropdown.addEventListener('mouseleave', function() {
+                    hoverTimeout = setTimeout(() => {
+                        hideDropdown();
+                    }, 100);
+                });
+
+                dropdown.isClickOpen = isClickOpen;
+            }
+        });
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function() {
+            dropdowns.forEach(dropdown => {
+                const menu = dropdown.querySelector('.dropdown-menu');
+                if (menu) {
+                    menu.style.transform = 'translateY(-5px)';
+                    menu.style.opacity = '0';
+                    menu.style.visibility = 'hidden';
+                    dropdown.isClickOpen = false;
+                }
+            });
+        });
+        
+        // Enhanced delete confirmations
+        const deleteLinks = document.querySelectorAll('a[href*="delete_zone"]');
+        deleteLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                const zoneName = this.closest('tr').querySelector('a').textContent.trim();
+                const confirmed = confirm(`Are you sure you want to delete the DNS zone "${zoneName}"?\n\nThis will permanently delete:\n• All DNS records in this zone\n• Zone configuration\n• This action cannot be undone\n\nType YES to confirm:`);
+                if (!confirmed) {
+                    e.preventDefault();
+                } else {
+                    // Show loading state
+                    const originalContent = this.innerHTML;
+                    this.innerHTML = '<svg class="animate-spin w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Deleting...';
+                    this.style.pointerEvents = 'none';
+                }
+            });
+        });
+    });
+    
+    // Copy Zone ID to clipboard
+    function copyZoneId(zoneId) {
+        navigator.clipboard.writeText(zoneId).then(function() {
+            // Show success feedback
+            const notification = document.createElement('div');
+            notification.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+            notification.innerHTML = '✅ Zone ID copied to clipboard';
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }).catch(function(err) {
+            alert('Failed to copy Zone ID: ' + err);
+        });
+    }
+    
+    // Zone health check (placeholder function)
+    function checkZoneHealth(zoneName) {
+        alert('Zone health check for "' + zoneName + '" would be implemented here');
+    }
+    
+    // Export zone function (placeholder)
+    function exportZone(zoneName) {
+        alert('Export functionality for zone "' + zoneName + '" would be implemented here');
+    }
+</script>
+{% endblock %}
+{% endblock %}

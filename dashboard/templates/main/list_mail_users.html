@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Mail Users | KubePanel{% endblock %}
+
+{% block page_title %}Mail Users{% endblock %}
+{% block page_subtitle %}Manage email accounts and aliases{% endblock %}
+
+{% block header_search %}
+<div class="relative">
+    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+    </div>
+    <input type="text"
+           class="pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg w-80 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+           placeholder="Search email addresses..."
+           id="mail-user-search">
+</div>
+{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-4">
+    {% if max_mail_users is not None %}
+    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium {% if at_limit %}bg-red-100 text-red-700 border border-red-200{% else %}bg-green-100 text-green-700 border border-green-200{% endif %}">
+        <svg class="w-3.5 h-3.5 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"></path>
+        </svg>
+        {{ mail_user_count }}/{{ max_mail_users }} Mail Users
+    </span>
+    {% endif %}
+
+    {% if at_limit %}
+    <span class="relative group">
+        <span class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm opacity-50 cursor-not-allowed flex items-center space-x-2">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+            <span>Add Mail User</span>
+        </span>
+        <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            Mail user limit reached ({{ mail_user_count }}/{{ max_mail_users }})
+        </span>
+    </span>
+    {% else %}
+    <a href="{% url 'create_mail_user' %}"
+       class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        <span>Add Mail User</span>
+    </a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Mail Users Table -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900">Email Accounts</h3>
+            <div class="flex items-center space-x-3">
+                <select class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        id="status-filter">
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+                <button class="text-gray-500 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                        title="Export list">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {% if mail_users %}
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button class="group flex items-center space-x-1 hover:text-gray-900">
+                        <span>Email Address</span>
+                        <svg class="w-4 h-4 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
+                        </svg>
+                    </button>
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aliases</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            {% for mu in mail_users %}
+            <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 w-10 h-10">
+                            <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <div class="text-sm font-medium text-gray-900">{{ mu.email }}</div>
+                            <div class="text-sm text-gray-500">Email Account</div>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4">
+                    {% if mu.aliases %}
+                    <div class="space-y-1">
+                        {% for alias in mu.aliases %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {{ alias.source }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <span class="text-sm text-gray-500 italic">No aliases</span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    {% if mu.active %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                        Active
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                        Inactive
+                    </span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center space-x-2">
+                        <!-- Add Alias Button -->
+                        <a href="{% url 'mail_alias_add' %}?destination={{ mu.email|urlencode }}"
+                           class="text-sm bg-green-50 hover:bg-green-100 text-green-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-1"
+                           title="Add alias">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            <span>Add Alias</span>
+                        </a>
+
+                        <!-- Export Mailbox Button -->
+                        <a href="{% url 'download_mailbox' mu.id %}"
+                           class="text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-1"
+                           title="Export mailbox as .tar.gz">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                            </svg>
+                            <span>Export</span>
+                        </a>
+
+                        <!-- Import Mailbox Button -->
+                        <a href="{% url 'import_mailbox' mu.id %}"
+                           class="text-sm bg-purple-50 hover:bg-purple-100 text-purple-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-1"
+                           title="Import mailbox from .tar.gz">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                            </svg>
+                            <span>Import</span>
+                        </a>
+
+                        <!-- Actions Dropdown -->
+                        <div class="relative dropdown">
+                            <button class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
+                                </svg>
+                                <span>Actions</span>
+                            </button>
+                            <div class="dropdown-menu absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                                <a href="{% url 'edit_mail_user' mu.id %}"
+                                   class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                    </svg>
+                                    <span>Edit</span>
+                                </a>
+                                <hr class="my-1 border-gray-200">
+                                <a href="{% url 'delete_mail_user' mu.id %}"
+                                   class="flex items-center space-x-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                                   onclick="return confirm('Are you sure you want to delete {{ mu.email }}? This action cannot be undone.')">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                    <span>Delete</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <!-- Empty State -->
+    <div class="px-6 py-12 text-center">
+        <div class="flex flex-col items-center">
+            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No mail users yet</h3>
+            <p class="text-gray-500 mb-4">Get started by creating your first email account</p>
+            <a href="{% url 'create_mail_user' %}"
+               class="btn-primary text-white px-4 py-2 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                <span>Add Mail User</span>
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Search functionality
+        const searchInput = document.getElementById('mail-user-search');
+        const statusFilter = document.getElementById('status-filter');
+        const tableRows = document.querySelectorAll('tbody tr');
+
+        function filterTable() {
+            const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+            const selectedStatus = statusFilter ? statusFilter.value : 'all';
+
+            tableRows.forEach(row => {
+                const emailCell = row.querySelector('td:first-child .font-medium');
+                const statusCell = row.querySelector('td:nth-child(3) span');
+                
+                if (!emailCell || !statusCell) return;
+
+                const emailText = emailCell.textContent.toLowerCase();
+                const statusText = statusCell.textContent.toLowerCase();
+
+                const matchesSearch = emailText.includes(searchTerm);
+                const matchesStatus = selectedStatus === 'all' || 
+                    (selectedStatus === 'active' && statusText.includes('active')) ||
+                    (selectedStatus === 'inactive' && statusText.includes('inactive'));
+
+                if (matchesSearch && matchesStatus) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', filterTable);
+        }
+
+        if (statusFilter) {
+            statusFilter.addEventListener('change', filterTable);
+        }
+
+        // Dropdown functionality
+        const dropdowns = document.querySelectorAll('.dropdown');
+
+        dropdowns.forEach(dropdown => {
+            const button = dropdown.querySelector('button');
+            const menu = dropdown.querySelector('.dropdown-menu');
+
+            if (button && menu) {
+                // Set initial state
+                menu.style.transform = 'translateY(-5px)';
+                menu.style.opacity = '0';
+                menu.style.visibility = 'hidden';
+                menu.style.transition = 'all 0.2s ease-in-out';
+
+                let isClickOpen = false;
+                let hoverTimeout;
+
+                // Show dropdown function
+                function showDropdown() {
+                    // Close all other dropdowns first
+                    dropdowns.forEach(otherDropdown => {
+                        if (otherDropdown !== dropdown) {
+                            const otherMenu = otherDropdown.querySelector('.dropdown-menu');
+                            if (otherMenu) {
+                                otherMenu.style.transform = 'translateY(-5px)';
+                                otherMenu.style.opacity = '0';
+                                otherMenu.style.visibility = 'hidden';
+                                otherDropdown.isClickOpen = false;
+                            }
+                        }
+                    });
+
+                    menu.style.transform = 'translateY(0)';
+                    menu.style.opacity = '1';
+                    menu.style.visibility = 'visible';
+                }
+
+                // Hide dropdown function
+                function hideDropdown() {
+                    if (!isClickOpen) {
+                        menu.style.transform = 'translateY(-5px)';
+                        menu.style.opacity = '0';
+                        menu.style.visibility = 'hidden';
+                    }
+                }
+
+                // Click handler
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation();
+
+                    if (isClickOpen) {
+                        menu.style.transform = 'translateY(-5px)';
+                        menu.style.opacity = '0';
+                        menu.style.visibility = 'hidden';
+                        isClickOpen = false;
+                    } else {
+                        showDropdown();
+                        isClickOpen = true;
+                    }
+
+                    dropdown.isClickOpen = isClickOpen;
+                });
+
+                // Hover handlers
+                dropdown.addEventListener('mouseenter', function() {
+                    clearTimeout(hoverTimeout);
+                    showDropdown();
+                });
+
+                dropdown.addEventListener('mouseleave', function() {
+                    hoverTimeout = setTimeout(() => {
+                        hideDropdown();
+                    }, 100);
+                });
+
+                dropdown.isClickOpen = isClickOpen;
+            }
+        });
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function() {
+            dropdowns.forEach(dropdown => {
+                const menu = dropdown.querySelector('.dropdown-menu');
+                if (menu) {
+                    menu.style.transform = 'translateY(-5px)';
+                    menu.style.opacity = '0';
+                    menu.style.visibility = 'hidden';
+                    dropdown.isClickOpen = false;
+                }
+            });
+        });
+
+        // Sorting functionality
+        const sortButtons = document.querySelectorAll('th button');
+        sortButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                console.log(`Sorting by ${this.textContent.trim()}`);
+                // Add visual feedback for sorting
+                sortButtons.forEach(btn => btn.classList.remove('text-primary-600'));
+                this.classList.add('text-primary-600');
+            });
+        });
+
+        // Add loading states for action buttons
+        const actionLinks = document.querySelectorAll('a[href*="edit_mail_user"], a[href*="delete_mail_user"], a[href*="mail_alias_add"]');
+        actionLinks.forEach(link => {
+            if (!link.onclick) { // Don't add loading state to delete buttons (they have confirmations)
+                link.addEventListener('click', function() {
+                    const originalText = this.innerHTML;
+                    if (!this.href.includes('delete_mail_user')) {
+                        this.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Loading...';
+                        this.style.pointerEvents = 'none';
+
+                        setTimeout(() => {
+                            this.innerHTML = originalText;
+                            this.style.pointerEvents = '';
+                        }, 3000);
+                    }
+                });
+            }
+        });
+
+        // Add confirmation for delete actions
+        const deleteLinks = document.querySelectorAll('a[href*="delete_mail_user"]');
+        deleteLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                const emailAddress = this.closest('tr').querySelector('td:first-child .font-medium').textContent;
+                if (!confirm(`Are you sure you want to delete "${emailAddress}"? This action cannot be undone.`)) {
+                    e.preventDefault();
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

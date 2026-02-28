@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Node Details: {{ node.metadata.name }} | KubePanel{% endblock %}
+
+{% block page_title %}Node Details{% endblock %}
+{% block page_subtitle %}{{ node.metadata.name }} - Kubernetes cluster node information{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'node_list' %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Nodes</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- Node Status Overview -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Node Status</p>
+                <p class="text-lg font-semibold text-gray-900">
+                    {% if node.spec.unschedulable %}
+                    <span class="text-yellow-600">Unschedulable</span>
+                    {% else %}
+                    <span class="text-green-600">Ready</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">CPU Capacity</p>
+                <p class="text-lg font-semibold text-gray-900">{{ node.status.capacity.cpu|default:"—" }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Memory Capacity</p>
+                <p class="text-lg font-semibold text-gray-900">{{ node.status.capacity.memory|default:"—" }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Uptime</p>
+                <p class="text-lg font-semibold text-gray-900">
+                    {% if node.metadata.creation_timestamp %}
+                    {{ node.metadata.creation_timestamp|timesince }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Node Information Cards -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <!-- General Information -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">General Information</h3>
+                    <p class="text-sm text-gray-600">Basic node metadata and configuration</p>
+                </div>
+            </div>
+        </div>
+        <div class="px-6 py-6">
+            <dl class="space-y-4">
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-600">Node Name</dt>
+                    <dd class="text-sm text-gray-900 font-mono">{{ node.metadata.name }}</dd>
+                </div>
+                
+                <div class="flex justify-between items-start">
+                    <dt class="text-sm font-medium text-gray-600">Labels</dt>
+                    <dd class="text-sm text-right max-w-xs">
+                        {% if node.metadata.labels %}
+                        <div class="flex flex-wrap gap-1 justify-end">
+                            {% for key, val in node.metadata.labels.items %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                {{ key }}={{ val }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span class="text-gray-400 italic">No labels</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-600">Creation Time</dt>
+                    <dd class="text-sm text-gray-900">
+                        {% if node.metadata.creation_timestamp %}
+                        <div class="text-right">
+                            <div class="font-medium">{{ node.metadata.creation_timestamp|date:"M d, Y" }}</div>
+                            <div class="text-gray-500 text-xs">{{ node.metadata.creation_timestamp|date:"H:i:s" }}</div>
+                        </div>
+                        {% else %}
+                        <span class="text-gray-400">—</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                
+                <div class="flex justify-between">
+                    <dt class="text-sm font-medium text-gray-600">Schedulable</dt>
+                    <dd class="text-sm">
+                        {% if node.spec.unschedulable %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1"></span>
+                            Unschedulable
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1"></span>
+                            Schedulable
+                        </span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Status & Capacity -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Status & Resources</h3>
+                    <p class="text-sm text-gray-600">Node conditions and resource capacity</p>
+                </div>
+            </div>
+        </div>
+        <div class="px-6 py-6">
+            <!-- Node Conditions -->
+            <div class="mb-6">
+                <h4 class="text-sm font-medium text-gray-900 mb-3">Node Conditions</h4>
+                <div class="space-y-2">
+                    {% for cond in node.status.conditions %}
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div class="flex items-center">
+                            {% if cond.status == "True" %}
+                            <div class="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                            {% elif cond.status == "False" %}
+                            <div class="w-2 h-2 bg-red-500 rounded-full mr-3"></div>
+                            {% else %}
+                            <div class="w-2 h-2 bg-yellow-500 rounded-full mr-3"></div>
+                            {% endif %}
+                            <span class="text-sm font-medium text-gray-900">{{ cond.type }}</span>
+                        </div>
+                        <span class="text-sm text-gray-600">{{ cond.status }}</span>
+                    </div>
+                    {% empty %}
+                    <p class="text-sm text-gray-500 italic">No conditions available</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Resource Capacity -->
+            <div>
+                <h4 class="text-sm font-medium text-gray-900 mb-3">Resource Capacity</h4>
+                <dl class="space-y-3">
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                        <dt class="text-sm font-medium text-gray-600 flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                            CPU
+                        </dt>
+                        <dd class="text-sm font-mono text-gray-900">{{ node.status.capacity.cpu|default:"—" }}</dd>
+                    </div>
+                    
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                        <dt class="text-sm font-medium text-gray-600 flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                            </svg>
+                            Memory
+                        </dt>
+                        <dd class="text-sm font-mono text-gray-900">{{ node.status.capacity.memory|default:"—" }}</dd>
+                    </div>
+                    
+                    {% if node.status.capacity.pods %}
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                        <dt class="text-sm font-medium text-gray-600 flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                            </svg>
+                            Max Pods
+                        </dt>
+                        <dd class="text-sm font-mono text-gray-900">{{ node.status.capacity.pods }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Events -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                <div class="w-3 h-3 bg-blue-500 rounded-full mr-3"></div>
+                Recent Events
+            </h3>
+            <span class="text-sm text-gray-500">Last 24 hours</span>
+        </div>
+    </div>
+
+    {% if events %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Message</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for ev in events %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if ev.type == "Normal" %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1"></span>
+                            Normal
+                        </span>
+                        {% elif ev.type == "Warning" %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1"></span>
+                            Warning
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1"></span>
+                            {{ ev.type }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {{ ev.reason }}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900">
+                        <div class="max-w-xs truncate" title="{{ ev.message }}">
+                            {{ ev.message }}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {% if ev.last_timestamp %}
+                        <div class="flex flex-col">
+                            <span class="font-medium">{{ ev.last_timestamp|date:"M d, Y" }}</span>
+                            <span class="text-gray-500 text-xs">{{ ev.last_timestamp|date:"H:i:s" }}</span>
+                        </div>
+                        {% else %}
+                        <span class="text-gray-400">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <!-- Empty Events State -->
+    <div class="px-6 py-8 text-center">
+        <div class="flex flex-col items-center">
+            <svg class="w-8 h-8 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+            </svg>
+            <h3 class="text-sm font-medium text-gray-900 mb-1">No recent events</h3>
+            <p class="text-sm text-gray-500">No events have been recorded for this node in the last 24 hours</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto-refresh functionality for live node details
+        let autoRefresh = false;
+        let refreshInterval;
+        
+        function startAutoRefresh() {
+            if (!autoRefresh) {
+                autoRefresh = true;
+                refreshInterval = setInterval(() => {
+                    // In a real implementation, this would refresh node data
+                    console.log('Refreshing node details...');
+                }, 30000); // 30 second refresh for node details
+            }
+        }
+        
+        function stopAutoRefresh() {
+            if (autoRefresh) {
+                autoRefresh = false;
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                }
+            }
+        }
+        
+        // Start auto-refresh by default for node details
+        startAutoRefresh();
+        
+        // Stop refresh when page is hidden
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                stopAutoRefresh();
+            } else {
+                startAutoRefresh();
+            }
+        });
+        
+        // Tooltip functionality for truncated messages
+        const truncatedElements = document.querySelectorAll('.truncate');
+        truncatedElements.forEach(element => {
+            element.addEventListener('mouseenter', function() {
+                const tooltip = document.createElement('div');
+                tooltip.className = 'absolute z-50 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg';
+                tooltip.textContent = this.getAttribute('title');
+                tooltip.style.left = '0';
+                tooltip.style.top = '-30px';
+                
+                this.style.position = 'relative';
+                this.appendChild(tooltip);
+            });
+            
+            element.addEventListener('mouseleave', function() {
+                const tooltip = this.querySelector('.absolute');
+                if (tooltip) {
+                    tooltip.remove();
+                }
+            });
+        });
+        
+        // Smooth scroll to events section if there are events
+        const eventsSection = document.querySelector('.bg-white.rounded-xl.shadow-sm:last-child');
+        if (eventsSection && {{ events|length }} > 0) {
+            // Add a subtle highlight animation for new events
+            eventsSection.classList.add('transition-all', 'duration-300');
+        }
+    });
+</script>
+{% endblock %}
+{% endblock %}

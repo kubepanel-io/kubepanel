@@ -1,0 +1,1502 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ domain.domain_name }} | KubePanel{% endblock %}
+
+{% block page_title %}{{ domain.domain_name }}{% endblock %}
+{% block page_subtitle %}Domain configuration and details{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <a href="{% url 'kpmain' %}"
+       class="text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        <span>Back to Domains</span>
+    </a>
+    <a href="{% url 'domain_metrics_page' domain=domain.domain_name %}"
+       class="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200 flex items-center space-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+        </svg>
+        <span>View Metrics</span>
+    </a>
+    <button type="submit" form="domain-form"
+            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        <span>Save Changes</span>
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<form method="POST" id="domain-form" action="{% url 'save_domain' domain=domain.domain_name %}">
+    {% csrf_token %}
+
+    <!-- Error Messages -->
+    {% if form.errors %}
+    <div class="bg-red-50 border border-red-200 rounded-xl p-6 mb-8">
+        <div class="flex items-center mb-3">
+            <svg class="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 9.5c-.77.833.192 2.5 1.732 2.5z"></path>
+            </svg>
+            <h3 class="text-lg font-medium text-red-800">Please fix the following errors</h3>
+        </div>
+        <div class="text-red-700">{{ form.errors }}</div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Left Column -->
+        <div class="space-y-8">
+            {% if request.user.is_superuser %}
+            <!-- Preferred Servers (superuser only) -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">Preferred Servers</h3>
+                        <button type="button" id="preferred-servers-info-btn"
+                                class="text-gray-400 hover:text-gray-600 transition-colors"
+                                title="How to move workload to a different server">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <!-- Info panel (hidden by default) -->
+                    <div id="preferred-servers-info" class="hidden mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div class="flex">
+                            <svg class="w-5 h-5 text-amber-500 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                            <div class="text-sm text-amber-800">
+                                <p class="font-medium mb-2">How to move your workload to a different server:</p>
+                                <ol class="list-decimal list-inside space-y-1 text-amber-700">
+                                    <li>Select your preferred server(s) and click <strong>Save Changes</strong></li>
+                                    <li><strong>Stop the domain</strong> using the suspend button</li>
+                                    <li>Wait until the domain is fully stopped (check <em>Live Cluster Status</em> - the web deployment should disappear)</li>
+                                    <li><strong>Start the domain</strong> again - it will now run on your preferred server</li>
+                                </ol>
+                                <p class="mt-2 text-xs text-amber-600">
+                                    <strong>Why?</strong> The storage volume can only be attached to one server at a time.
+                                    The workload must fully stop before it can be moved to a different server.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="text-sm text-gray-600 mb-4">
+                        Select which servers this domain should preferably run on.
+                        If none selected, any available server will be used.
+                    </p>
+                    {% if nodes %}
+                    <div class="space-y-3">
+                        {% for node in nodes %}
+                        <label class="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors">
+                            <input type="checkbox"
+                                   name="preferred_nodes"
+                                   value="{{ node.name }}"
+                                   {% if node.selected %}checked{% endif %}
+                                   class="h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500">
+                            <div class="ml-3 flex-1">
+                                <span class="font-medium text-gray-900">{{ node.name }}</span>
+                            </div>
+                            <span class="px-2 py-1 text-xs rounded-full
+                                {% if node.status == 'Ready' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                                {{ node.status }}
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-8">
+                        <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                        </svg>
+                        <p class="text-gray-500 text-sm">No cluster nodes available</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Database Details -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Database Details</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-4">
+                        <div class="flex items-start justify-between py-3 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Database Name</p>
+                                    <p class="text-xs text-gray-500">MariaDB database identifier</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ k8s.database_name|default:"Provisioning..." }}</code>
+                                {% if k8s.database_name %}
+                                <button type="button" onclick="copyToClipboard('{{ k8s.database_name|escapejs }}')"
+                                        class="ml-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="flex items-start justify-between py-3 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Database User</p>
+                                    <p class="text-xs text-gray-500">Database access username</p>
+                                </div>
+                            </div>
+                            <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ k8s.database_username|default:"Provisioning..." }}</code>
+                        </div>
+                        <div class="flex items-start justify-between py-3 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Database Password</p>
+                                    <p class="text-xs text-gray-500">Secure access credentials</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded font-mono">{{ k8s.database_password|default:"Provisioning..." }}</code>
+                                <div class="flex items-center ml-2 space-x-1">
+                                    {% if k8s.database_password %}
+                                    <button type="button" onclick="copyToClipboard('{{ k8s.database_password|escapejs }}')"
+                                            class="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                        </svg>
+                                    </button>
+                                    <a href="{% url 'change_password' domain=domain.domain_name password_type='mariadb' %}"
+                                       class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                       title="Change database password">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                        </svg>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SFTP/SCP Connection Details -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">SFTP/SCP Connection</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-4">
+                        <div class="flex items-start justify-between py-3 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">SFTP/SCP Port</p>
+                                    <p class="text-xs text-gray-500">Secure file transfer port</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ k8s.sftp_port|default:"Provisioning..." }}</code>
+                                {% if k8s.sftp_port %}
+                                <button type="button" onclick="copyToClipboard('{{ k8s.sftp_port }}')"
+                                        class="ml-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="flex items-start justify-between py-3 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Username</p>
+                                    <p class="text-xs text-gray-500">SFTP access username</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded">webuser</code>
+                                <button type="button" onclick="copyToClipboard('webuser')"
+                                        class="ml-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex items-start justify-between py-3 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Password</p>
+                                    <p class="text-xs text-gray-500">SFTP access password</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <code class="text-sm bg-gray-100 px-2 py-1 rounded font-mono">{{ k8s.sftp_password|default:"Provisioning..." }}</code>
+                                <div class="flex items-center ml-2 space-x-1">
+                                    {% if k8s.sftp_password %}
+                                    <button type="button" onclick="copyToClipboard('{{ k8s.sftp_password|escapejs }}')"
+                                            class="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                        </svg>
+                                    </button>
+                                    <a href="{% url 'change_password' domain=domain.domain_name password_type='sftp' %}"
+                                       class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                       title="Change SFTP password">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                        </svg>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="py-3">
+                            <div class="flex items-start mb-3">
+                                <div class="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Private Key</p>
+                                    <p class="text-xs text-gray-500">SSH private key for authentication</p>
+                                </div>
+                            </div>
+                            <div class="relative">
+                                <pre class="text-xs bg-gray-50 p-3 pr-12 rounded-lg border overflow-x-auto font-mono">{{ k8s.sftp_privkey|default:"Provisioning..." }}</pre>
+                                {% if k8s.sftp_privkey %}
+                                <button type="button" onclick="copyToClipboard('{{ k8s.sftp_privkey|escapejs }}')"
+                                        class="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DKIM Details -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">DKIM Configuration</h3>
+                </div>
+                <div class="p-6">
+                    <div class="flex items-start">
+                        <div class="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
+                            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-sm font-medium text-gray-900 mb-1">DKIM Public Key</p>
+                            <p class="text-xs text-gray-500 mb-3">Email authentication public key</p>
+                            <div class="relative">
+                                <pre class="text-xs bg-gray-50 p-3 rounded-lg border overflow-x-auto font-mono break-all whitespace-pre-wrap">{{ k8s.dkim_pubkey|default:"Provisioning..." }}</pre>
+                                {% if k8s.dkim_pubkey %}
+                                <button type="button" onclick="copyToClipboard('{{ k8s.dkim_pubkey|escapejs }}')"
+                                        class="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Storage Usage -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Storage Usage</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-4">
+                        <!-- Usage Bar -->
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium text-gray-700">Disk Space</span>
+                                <span class="text-sm text-gray-500">
+                                    {% if storage.has_data %}
+                                        {{ storage.storage_gb }} GB / {{ storage.storage_limit_gb }} GB
+                                    {% else %}
+                                        -- / {{ storage.storage_limit_gb }} GB
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-3">
+                                {% if storage.has_data %}
+                                    <div class="h-3 rounded-full transition-all duration-300
+                                        {% if storage.storage_percent >= 90 %}
+                                            bg-red-500
+                                        {% elif storage.storage_percent >= 75 %}
+                                            bg-amber-500
+                                        {% else %}
+                                            bg-green-500
+                                        {% endif %}"
+                                        style="width: {{ storage.storage_percent|default:0 }}%">
+                                    </div>
+                                {% else %}
+                                    <div class="h-3 rounded-full bg-gray-300" style="width: 0%"></div>
+                                {% endif %}
+                            </div>
+                            <div class="flex items-center justify-between mt-2">
+                                <span class="text-xs text-gray-500">
+                                    {% if storage.has_data %}
+                                        {{ storage.storage_percent }}% used
+                                    {% else %}
+                                        No usage data yet
+                                    {% endif %}
+                                </span>
+                                {% if storage.last_updated %}
+                                    <span class="text-xs text-gray-400">
+                                        Updated {{ storage.last_updated|timesince }} ago
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Storage Details -->
+                        <div class="pt-4 border-t border-gray-100">
+                            <div class="flex items-center justify-between py-2">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm font-medium text-gray-700">Allocated</span>
+                                </div>
+                                <span class="text-sm text-gray-900">{{ storage.storage_limit_gb }} GB</span>
+                            </div>
+                            {% if storage.has_data %}
+                            <div class="flex items-center justify-between py-2">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                                        <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm font-medium text-gray-700">Used</span>
+                                </div>
+                                <span class="text-sm text-gray-900">{{ storage.storage_gb }} GB</span>
+                            </div>
+                            <div class="flex items-center justify-between py-2">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
+                                        <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm font-medium text-gray-700">Available</span>
+                                </div>
+                                <span class="text-sm text-gray-900">{{ storage.storage_available_gb }} GB</span>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        {% if storage.storage_percent >= 90 %}
+                        <div class="mt-4 p-3 bg-red-50 rounded-lg">
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                <span class="text-sm text-red-700 font-medium">Storage nearly full. Consider increasing storage allocation.</span>
+                            </div>
+                        </div>
+                        {% elif storage.storage_percent >= 75 %}
+                        <div class="mt-4 p-3 bg-amber-50 rounded-lg">
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-amber-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                <span class="text-sm text-amber-700 font-medium">Storage usage is high. Monitor disk space.</span>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- External Storage Usage (Email & Database) -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Email & Database Storage</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-4">
+                        <!-- Email Storage -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-900">Email Storage</span>
+                                    <p class="text-xs text-gray-500">Mailbox data for this domain</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-sm font-medium text-gray-900">
+                                    {% if external_storage.has_data %}
+                                        {{ external_storage.email_display }}
+                                    {% else %}
+                                        --
+                                    {% endif %}
+                                </span>
+                                {% if external_storage.email_checked_at %}
+                                <p class="text-xs text-gray-400">{{ external_storage.email_checked_at|timesince }} ago</p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Database Storage -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-4">
+                                    <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-900">Database Storage</span>
+                                    <p class="text-xs text-gray-500">MariaDB database size</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-sm font-medium text-gray-900">
+                                    {% if external_storage.has_data %}
+                                        {{ external_storage.database_display }}
+                                    {% else %}
+                                        --
+                                    {% endif %}
+                                </span>
+                                {% if external_storage.database_checked_at %}
+                                <p class="text-xs text-gray-400">{{ external_storage.database_checked_at|timesince }} ago</p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Total -->
+                        <div class="flex items-center justify-between py-3">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mr-4">
+                                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-sm font-medium text-gray-900">Total External</span>
+                            </div>
+                            <span class="text-sm font-bold text-gray-900">
+                                {% if external_storage.has_data %}
+                                    {{ external_storage.total_display }}
+                                {% else %}
+                                    --
+                                {% endif %}
+                            </span>
+                        </div>
+
+                        {% if not external_storage.has_data %}
+                        <div class="mt-2 p-3 bg-gray-50 rounded-lg">
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span class="text-sm text-gray-500">Storage usage data will be available after the next health check.</span>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="space-y-8">
+            <!-- DNS Status -->
+            {% if k8s.dns_enabled %}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">DNS Management</h3>
+                        <a href="{% url 'domain_dns_records' domain=domain.domain_name %}"
+                           class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            <span>Manage Records</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 {% if k8s.dns_phase == 'Ready' %}bg-green-100{% elif k8s.dns_phase == 'Failed' %}bg-red-100{% else %}bg-yellow-100{% endif %} rounded-lg flex items-center justify-center mr-3">
+                                <svg class="w-4 h-4 {% if k8s.dns_phase == 'Ready' %}text-green-600{% elif k8s.dns_phase == 'Failed' %}text-red-600{% else %}text-yellow-600{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium text-gray-900">Status: {{ k8s.dns_phase|default:"Not configured" }}</p>
+                                <p class="text-xs text-gray-500">{{ k8s.dns_record_count|default:0 }} DNS records</p>
+                            </div>
+                        </div>
+                        {% if k8s.dns_phase == 'Ready' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                            Active
+                        </span>
+                        {% elif k8s.dns_phase == 'Failed' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                            Failed
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% if k8s.dns_zone_id %}
+                    <div class="text-xs text-gray-500">
+                        Zone ID: <code class="bg-gray-100 px-1 rounded">{{ k8s.dns_zone_id }}</code>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <!-- Enable DNS Management (Collapsed) -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <button type="button" id="dns-enable-toggle"
+                        class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors rounded-xl">
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
+                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                            </svg>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="text-sm font-medium text-gray-900">DNS Management</h3>
+                            <p class="text-xs text-gray-500">Click to enable CloudFlare DNS</p>
+                        </div>
+                    </div>
+                    <svg id="dns-toggle-icon" class="w-5 h-5 text-gray-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+
+                <!-- Expandable Form Section -->
+                <div id="dns-enable-form" class="hidden border-t border-gray-200">
+                    <div class="p-6">
+                        {% if api_tokens %}
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">CloudFlare API Token</label>
+                                <select id="dns-api-token" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                                    <option value="">Select a token...</option>
+                                    {% for token in api_tokens %}
+                                    <option value="{{ token.pk }}">{{ token.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="flex items-start">
+                                <div class="flex items-center h-5">
+                                    <input type="checkbox" id="dns-auto-records" value="1" checked
+                                           class="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500">
+                                </div>
+                                <div class="ml-3">
+                                    <label for="dns-auto-records" class="text-sm font-medium text-gray-700">Create default DNS records</label>
+                                    <p class="text-xs text-gray-500 mt-0.5">A, MX, SPF, DMARC, DKIM records</p>
+                                </div>
+                            </div>
+
+                            <button type="button" id="dns-enable-btn"
+                                    class="w-full bg-primary-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-700 transition-colors text-sm">
+                                Enable DNS Management
+                            </button>
+                        </div>
+                        {% else %}
+                        <div class="text-center py-2">
+                            <p class="text-sm text-gray-600 mb-2">No CloudFlare API tokens configured.</p>
+                            <a href="{% url 'add_api_token' %}" class="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                                Add a CloudFlare API Token
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- TLS Certificate Status -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">HTTPS Certificate</h3>
+                        {% if certificate.status == 'valid' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                            Valid
+                        </span>
+                        {% elif certificate.status == 'expiring_soon' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
+                            Expiring Soon
+                        </span>
+                        {% elif certificate.status == 'expired' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                            Expired
+                        </span>
+                        {% elif certificate.status == 'not_found' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                            Pending
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                            Unknown
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="p-6">
+                    {% if certificate.exists %}
+                    <div class="space-y-4">
+                        <!-- Status Message -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 {% if certificate.status == 'valid' %}bg-green-100{% elif certificate.status == 'expiring_soon' %}bg-yellow-100{% else %}bg-red-100{% endif %} rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 {% if certificate.status == 'valid' %}text-green-600{% elif certificate.status == 'expiring_soon' %}text-yellow-600{% else %}text-red-600{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Status</p>
+                                    <p class="text-xs text-gray-500">Certificate health</p>
+                                </div>
+                            </div>
+                            <span class="text-sm {% if certificate.status == 'valid' %}text-green-700{% elif certificate.status == 'expiring_soon' %}text-yellow-700{% else %}text-red-700{% endif %} font-medium">
+                                {{ certificate.status_message }}
+                            </span>
+                        </div>
+
+                        <!-- Expiry Date -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Expires</p>
+                                    <p class="text-xs text-gray-500">Certificate expiry date</p>
+                                </div>
+                            </div>
+                            <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ certificate.not_after|date:"Y-m-d H:i" }} UTC</code>
+                        </div>
+
+                        <!-- Issuer -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Issuer</p>
+                                    <p class="text-xs text-gray-500">Certificate authority</p>
+                                </div>
+                            </div>
+                            <span class="text-sm text-gray-700 truncate max-w-xs" title="{{ certificate.issuer }}">
+                                {% if 'Let' in certificate.issuer %}
+                                    Let's Encrypt
+                                {% else %}
+                                    {{ certificate.issuer|truncatechars:40 }}
+                                {% endif %}
+                            </span>
+                        </div>
+
+                        <!-- Valid From -->
+                        <div class="flex items-center justify-between py-3">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900">Valid From</p>
+                                    <p class="text-xs text-gray-500">Certificate start date</p>
+                                </div>
+                            </div>
+                            <code class="text-sm bg-gray-100 px-2 py-1 rounded">{{ certificate.not_before|date:"Y-m-d H:i" }} UTC</code>
+                        </div>
+                    </div>
+
+                    {% if certificate.status == 'expiring_soon' and certificate.days_until_expiry <= 7 %}
+                    <div class="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                            <span class="text-sm text-yellow-700 font-medium">Certificate renewal is imminent. cert-manager should renew it automatically.</span>
+                        </div>
+                    </div>
+                    {% elif certificate.status == 'expired' %}
+                    <div class="mt-4 p-3 bg-red-50 rounded-lg border border-red-200">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                            <span class="text-sm text-red-700 font-medium">Certificate has expired! Check cert-manager logs for renewal issues.</span>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% else %}
+                    <div class="text-center py-8">
+                        <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                            </svg>
+                        </div>
+                        <p class="text-gray-500 text-sm">{{ certificate.status_message }}</p>
+                        {% if certificate.error %}
+                        <p class="text-gray-400 text-xs mt-1">{{ certificate.error }}</p>
+                        {% endif %}
+                        <p class="text-gray-400 text-xs mt-2">cert-manager will provision the certificate automatically.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Domain WAF -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">Web Application Firewall</h3>
+                        <a href="{% url 'domain_waf_list' domain=domain.domain_name %}"
+                           class="text-sm bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                            <span>Manage WAF</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
+                            <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">Per-Domain Firewall</p>
+                            <p class="text-xs text-gray-500">Block IPs, paths, and user agents. Enable geo-blocking.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resource Limits -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Resource Limits</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-6">
+                        <!-- CPU, Memory and Storage -->
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">CPU Limit (mCPU)</label>
+                                {{ form.cpu_limit }}
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Memory Limit (MB)</label>
+                                {{ form.mem_limit }}
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Storage Size (GB)</label>
+                                {{ form.storage_size }}
+                                <p class="mt-1 text-xs text-gray-500">Current: {{ domain.storage_size }}GB</p>
+                            </div>
+                        </div>
+
+                        <!-- Storage Warning -->
+                        <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <div class="flex items-start">
+                                <svg class="w-5 h-5 text-amber-600 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                <div>
+                                    <span class="text-sm text-amber-800 font-medium">Storage size changes are permanent</span>
+                                    <p class="text-xs text-amber-700 mt-1">Increasing storage size cannot be rolled back without data loss. Make sure you need the additional space before proceeding.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workload Configuration -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Workload Configuration</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-6">
+                        <!-- Workload Version and Timezone -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Workload Version</label>
+                                {{ form.workload_version }}
+                                <p class="mt-1 text-xs text-gray-500">Select the runtime version for your application</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
+                                {{ config_form.timezone }}
+                                <p class="mt-1 text-xs text-gray-500">Timezone for all containers (app, nginx, sftp)</p>
+                            </div>
+                        </div>
+
+                        <!-- PHP Settings (shown only for PHP workloads) -->
+                        <div id="php-settings" class="space-y-4" {% if domain.workload_version and domain.workload_version.workload_type.slug != 'php' %}style="display: none;"{% endif %}>
+                            <h4 class="text-sm font-medium text-gray-900 border-b pb-2">PHP Settings</h4>
+                            <!-- PHP Memory and Execution Time -->
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Memory Limit</label>
+                                    {{ config_form.php_memory_limit }}
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Max Execution Time (sec)</label>
+                                    {{ config_form.php_max_execution_time }}
+                                </div>
+                            </div>
+
+                            <!-- Upload and Post Size -->
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Upload Max Filesize</label>
+                                    {{ config_form.php_upload_max_filesize }}
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Post Max Size</label>
+                                    {{ config_form.php_post_max_size }}
+                                </div>
+                            </div>
+
+                            <!-- PHP-FPM Pool Settings -->
+                            <h4 class="text-sm font-medium text-gray-900 border-b pb-2 mt-4">PHP-FPM Pool Settings</h4>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Max Children</label>
+                                    {{ config_form.fpm_max_children }}
+                                    <p class="mt-1 text-xs text-gray-500">Maximum worker processes (default: 25)</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Process Idle Timeout (sec)</label>
+                                    {{ config_form.fpm_process_idle_timeout }}
+                                    <p class="mt-1 text-xs text-gray-500">Seconds before idle worker terminates (default: 30)</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Custom App Config (for all workloads) -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Custom App Config</label>
+                            {{ config_form.custom_app_config }}
+                            <p class="mt-1 text-xs text-gray-500">Add custom application configuration</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Webserver Configuration -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900">Webserver Configuration</h3>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-6">
+                        <!-- Document Root and Max Body Size -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Document Root</label>
+                                {{ config_form.document_root }}
+                                <p class="mt-1 text-xs text-gray-500">Path relative to domain root</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Client Max Body Size</label>
+                                {{ config_form.client_max_body_size }}
+                            </div>
+                        </div>
+
+                        <!-- Redirects -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="flex items-center">
+                                {{ config_form.ssl_redirect }}
+                                <label class="ml-2 text-sm font-medium text-gray-700">Redirect HTTP to HTTPS</label>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">WWW Redirect</label>
+                                {{ config_form.www_redirect }}
+                            </div>
+                        </div>
+
+                        <!-- Custom Nginx Config -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Custom Nginx Config</label>
+                            {{ config_form.custom_nginx_config }}
+                            <p class="mt-1 text-xs text-gray-500">Add custom nginx location directives</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FastCGI Cache Settings -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" id="cache-section">
+                    <div class="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-white">
+                        <h3 class="text-base font-semibold text-gray-900 flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                            Page Caching (FastCGI Cache)
+                        </h3>
+                        <p class="text-sm text-gray-500 mt-1">Cache PHP responses for faster page loads. WordPress-aware caching with automatic exclusions.</p>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <!-- Enable Cache Toggle -->
+                        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <div>
+                                <label class="font-medium text-gray-900">Enable Page Caching</label>
+                                <p class="text-sm text-gray-500">Cache PHP responses for faster delivery (10-100x speedup)</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" name="cache_enabled" class="sr-only peer" id="cache_enabled_toggle"
+                                       {% if config.cache_enabled %}checked{% endif %}>
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300
+                                            rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white
+                                            peer-checked:bg-purple-600 after:content-[''] after:absolute
+                                            after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border
+                                            after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                            </label>
+                        </div>
+
+                        <!-- Cache Settings (shown when enabled) -->
+                        <div id="cache-settings" class="space-y-4 {% if not config.cache_enabled %}hidden{% endif %}">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Cache Size</label>
+                                    {{ config_form.cache_size }}
+                                    <p class="mt-1 text-xs text-gray-500">Maximum storage for cached pages</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Cache Duration</label>
+                                    {{ config_form.cache_valid_time }}
+                                    <p class="mt-1 text-xs text-gray-500">How long to serve cached pages</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Inactive Timeout</label>
+                                    {{ config_form.cache_inactive_time }}
+                                    <p class="mt-1 text-xs text-gray-500">Remove unaccessed items after</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Additional Bypass URIs</label>
+                                    {{ config_form.cache_bypass_uris }}
+                                    <p class="mt-1 text-xs text-gray-500">One URI pattern per line</p>
+                                </div>
+                            </div>
+
+                            <!-- Auto-excluded pages info -->
+                            <div class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                <div class="flex items-start">
+                                    <svg class="w-5 h-5 text-blue-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <div>
+                                        <p class="text-sm font-medium text-blue-800">Automatically excluded from cache:</p>
+                                        <ul class="text-xs text-blue-700 mt-1 list-disc list-inside">
+                                            <li>WordPress admin, login, and xmlrpc pages</li>
+                                            <li>Logged-in users and recent commenters</li>
+                                            <li>WooCommerce cart, checkout, and account pages</li>
+                                            <li>POST requests and pages with query strings</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Purge Cache Button -->
+                            <div class="flex items-center justify-between p-4 border border-yellow-200 bg-yellow-50 rounded-lg">
+                                <div>
+                                    <span class="font-medium text-yellow-800">Clear Cache</span>
+                                    <p class="text-sm text-yellow-600">Purge all cached pages for this domain</p>
+                                </div>
+                                <button type="button" id="purge-cache-btn"
+                                        class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-medium text-sm">
+                                    Purge Cache
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Container Options -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                        </svg>
+                        Container Options
+                    </h3>
+                </div>
+                <div class="p-6 space-y-4">
+                    <!-- SSH Access Toggle -->
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                            <div>
+                                <p class="font-medium text-gray-900">SSH Access</p>
+                                <p class="text-sm text-gray-500">SSH terminal and Git operations</p>
+                            </div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="ssh_access" value="1" class="sr-only peer"
+                                   {% if config.sftp_type == 'sshgit' %}checked{% endif %}>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                        </label>
+                    </div>
+
+                    <!-- Redis Toggle -->
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                            </svg>
+                            <div>
+                                <p class="font-medium text-gray-900">Redis Cache</p>
+                                <p class="text-sm text-gray-500">In-memory cache for performance</p>
+                            </div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="redis_enabled" value="1" class="sr-only peer"
+                                   {% if config.redis_enabled %}checked{% endif %}>
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Domain Aliases -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">Domain Aliases</h3>
+                        <a href="{% url 'alias_add' domain.pk %}"
+                           class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            <span>Add Alias</span>
+                        </a>
+                    </div>
+                </div>
+                <div class="p-6">
+                    {% if domain.aliases.exists %}
+                        <div class="space-y-3">
+                            {% for alias in domain.aliases.all %}
+                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                                        </svg>
+                                    </div>
+                                    <a href="{% url 'view_alias' alias.pk %}" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:underline">{{ alias.alias_name }}</a>
+                                    {% if alias.email_enabled %}
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 ml-2">Email</span>
+                                    {% endif %}
+                                </div>
+                                <a href="{% url 'alias_delete' alias.pk %}"
+                                   class="text-red-600 hover:text-red-800 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                                   onclick="return confirm('Are you sure you want to delete this alias?')">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </a>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-8">
+                            <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                            </svg>
+                            <p class="text-gray-500 text-sm">No aliases defined</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<style>
+/* Custom form field styling - softer borders */
+
+/* More specific selector for the select dropdown */
+form select,
+div select,
+.card select,
+input[type="text"] + select,
+select[name*="php"] {
+    width: 100% !important;
+    padding: 12px 16px !important;
+    padding-right: 2.5rem !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 12px !important;
+    font-size: 14px !important;
+    background-color: white !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    cursor: pointer !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") !important;
+    background-position: right 0.75rem center !important;
+    background-repeat: no-repeat !important;
+    background-size: 1.5em 1.5em !important;
+}
+
+input[type="text"], input[type="number"], select, textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 14px;
+    background-color: white;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+input[type="text"]:hover, input[type="number"]:hover, select:hover, textarea:hover {
+    border-color: #d1d5db;
+}
+
+input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08), 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+textarea {
+    min-height: 128px;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    font-size: 12px;
+    resize: vertical;
+}
+
+select {
+    background-color: white;
+    appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+}
+
+/* Number input styling */
+input[type="number"] {
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Copy button hover effect */
+.copy-btn {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.group:hover .copy-btn {
+    opacity: 1;
+}
+
+/* Toast notification for copy feedback */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #065f46;
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 1000;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s ease;
+}
+
+.toast.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+</style>
+
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        showToast('Copied to clipboard!');
+    }).catch(function(err) {
+        console.error('Could not copy text: ', err);
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        showToast('Copied to clipboard!');
+    });
+}
+
+function showToast(message) {
+    // Remove existing toast if any
+    const existingToast = document.querySelector('.toast');
+    if (existingToast) {
+        existingToast.remove();
+    }
+
+    // Create new toast
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    // Show toast
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 100);
+
+    // Hide toast after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 3000);
+}
+
+// Toggle Preferred Servers info panel
+document.addEventListener('DOMContentLoaded', function() {
+    const infoBtn = document.getElementById('preferred-servers-info-btn');
+    const infoPanel = document.getElementById('preferred-servers-info');
+
+    if (infoBtn && infoPanel) {
+        infoBtn.addEventListener('click', function() {
+            infoPanel.classList.toggle('hidden');
+        });
+    }
+});
+
+// Toggle DNS enable form visibility
+document.addEventListener('DOMContentLoaded', function() {
+    const dnsToggle = document.getElementById('dns-enable-toggle');
+    const dnsForm = document.getElementById('dns-enable-form');
+    const dnsIcon = document.getElementById('dns-toggle-icon');
+
+    if (dnsToggle && dnsForm) {
+        dnsToggle.addEventListener('click', function() {
+            dnsForm.classList.toggle('hidden');
+            if (dnsIcon) {
+                dnsIcon.classList.toggle('rotate-180');
+            }
+        });
+    }
+
+    // Enable DNS button handler - creates a form outside the main form and submits it
+    const dnsEnableBtn = document.getElementById('dns-enable-btn');
+    if (dnsEnableBtn) {
+        dnsEnableBtn.addEventListener('click', function() {
+            const apiToken = document.getElementById('dns-api-token').value;
+            const autoRecords = document.getElementById('dns-auto-records').checked;
+
+            if (!apiToken) {
+                showToast('Please select a CloudFlare API token');
+                return;
+            }
+
+            // Create a form outside the main form
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '{% url "enable_dns" domain=domain.domain_name %}';
+            form.style.display = 'none';
+
+            // CSRF token
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = '{{ csrf_token }}';
+            form.appendChild(csrfInput);
+
+            // API token
+            const tokenInput = document.createElement('input');
+            tokenInput.type = 'hidden';
+            tokenInput.name = 'api_token';
+            tokenInput.value = apiToken;
+            form.appendChild(tokenInput);
+
+            // Auto records
+            if (autoRecords) {
+                const autoInput = document.createElement('input');
+                autoInput.type = 'hidden';
+                autoInput.name = 'auto_records';
+                autoInput.value = '1';
+                form.appendChild(autoInput);
+            }
+
+            // Append outside main form and submit
+            document.body.appendChild(form);
+            dnsEnableBtn.disabled = true;
+            dnsEnableBtn.textContent = 'Enabling...';
+            form.submit();
+        });
+    }
+});
+
+// Toggle PHP settings visibility based on workload type
+document.addEventListener('DOMContentLoaded', function() {
+    const workloadVersionSelect = document.getElementById('id_workload_version');
+    const phpSettings = document.getElementById('php-settings');
+
+    if (workloadVersionSelect && phpSettings) {
+        workloadVersionSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const selectedText = selectedOption ? selectedOption.text : '';
+            // Check if the selected version is PHP-based
+            const isPHP = selectedText.toLowerCase().startsWith('php');
+            phpSettings.style.display = isPHP ? 'block' : 'none';
+        });
+    }
+
+    // Toggle cache settings visibility based on cache enabled checkbox
+    const cacheToggle = document.getElementById('cache_enabled_toggle');
+    const cacheSettings = document.getElementById('cache-settings');
+
+    if (cacheToggle && cacheSettings) {
+        cacheToggle.addEventListener('change', function() {
+            if (this.checked) {
+                cacheSettings.classList.remove('hidden');
+            } else {
+                cacheSettings.classList.add('hidden');
+            }
+        });
+    }
+
+    // Purge cache button handler
+    const purgeCacheBtn = document.getElementById('purge-cache-btn');
+    if (purgeCacheBtn) {
+        purgeCacheBtn.addEventListener('click', function() {
+            if (!confirm('Are you sure you want to purge all cached pages for this domain?')) {
+                return;
+            }
+
+            purgeCacheBtn.disabled = true;
+            purgeCacheBtn.textContent = 'Purging...';
+
+            fetch('{% url "purge_cache" domain=domain.domain_name %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Cache purged successfully!');
+                } else {
+                    showToast('Error: ' + (data.error || 'Failed to purge cache'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('Error: Failed to purge cache');
+            })
+            .finally(() => {
+                purgeCacheBtn.disabled = false;
+                purgeCacheBtn.textContent = 'Purge Cache';
+            });
+        });
+    }
+});
+</script>
+
+{% endblock %}

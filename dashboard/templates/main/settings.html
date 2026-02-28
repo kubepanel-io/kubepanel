@@ -1,0 +1,813 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Settings | KubePanel{% endblock %}
+
+{% block page_title %}Settings{% endblock %}
+{% block page_subtitle %}Manage your account and system preferences{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <!-- Change Password Section -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Change Password</h3>
+                    <p class="text-sm text-gray-600">Update your account password</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="POST" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="change_password" value="1">
+
+                <div class="space-y-4">
+                    <!-- Current Password -->
+                    <div>
+                        <label for="id_old_password" class="block text-sm font-medium text-gray-700 mb-2">
+                            Current Password
+                        </label>
+                        <input type="password"
+                               name="old_password"
+                               id="id_old_password"
+                               required
+                               class="w-full px-4 py-2.5 border {% if password_form.old_password.errors %}border-red-300{% else %}border-gray-300{% endif %} rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
+                        {% if password_form.old_password.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ password_form.old_password.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- New Password -->
+                    <div>
+                        <label for="id_new_password1" class="block text-sm font-medium text-gray-700 mb-2">
+                            New Password
+                        </label>
+                        <input type="password"
+                               name="new_password1"
+                               id="id_new_password1"
+                               required
+                               class="w-full px-4 py-2.5 border {% if password_form.new_password1.errors %}border-red-300{% else %}border-gray-300{% endif %} rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
+                        {% if password_form.new_password1.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ password_form.new_password1.errors.0 }}</p>
+                        {% endif %}
+                        <p class="mt-1 text-xs text-gray-500">Must be at least 8 characters</p>
+                    </div>
+
+                    <!-- Confirm New Password -->
+                    <div>
+                        <label for="id_new_password2" class="block text-sm font-medium text-gray-700 mb-2">
+                            Confirm New Password
+                        </label>
+                        <input type="password"
+                               name="new_password2"
+                               id="id_new_password2"
+                               required
+                               class="w-full px-4 py-2.5 border {% if password_form.new_password2.errors %}border-red-300{% else %}border-gray-300{% endif %} rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
+                        {% if password_form.new_password2.errors %}
+                        <p class="mt-1 text-xs text-red-600">{{ password_form.new_password2.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="flex justify-end pt-4 mt-4 border-t border-gray-200">
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                        </svg>
+                        <span>Change Password</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Two-Factor Authentication Section -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Two-Factor Authentication</h3>
+                    <p class="text-sm text-gray-600">Add an extra layer of security to your account</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            {% if user.profile.totp_enabled %}
+            <!-- 2FA is enabled -->
+            <div class="flex items-start mb-6">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <h4 class="text-md font-medium text-gray-900">Two-Factor Authentication is Enabled</h4>
+                    <p class="text-sm text-gray-600 mt-1">
+                        Your account is protected with an authenticator app. You'll need to enter a code when logging in.
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <h5 class="text-sm font-medium text-gray-700 mb-3">Recovery Codes</h5>
+                <p class="text-sm text-gray-600 mb-3">
+                    Recovery codes can be used to access your account if you lose your authenticator device.
+                    {% if user.profile.backup_codes %}
+                    You have <span class="font-medium text-gray-900">{{ user.profile.backup_codes|length }}</span> recovery codes remaining.
+                    {% else %}
+                    You have no recovery codes remaining.
+                    {% endif %}
+                </p>
+                <a href="{% url 'regenerate_recovery_codes' %}"
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Regenerate Recovery Codes
+                </a>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-gray-200">
+                <a href="{% url 'disable_2fa' %}"
+                   class="inline-flex items-center px-4 py-2.5 border border-red-300 rounded-lg text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>
+                    </svg>
+                    Disable Two-Factor Authentication
+                </a>
+            </div>
+            {% else %}
+            <!-- 2FA is not enabled -->
+            <div class="flex items-start mb-6">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <h4 class="text-md font-medium text-gray-900">Two-Factor Authentication is Not Enabled</h4>
+                    <p class="text-sm text-gray-600 mt-1">
+                        Enable two-factor authentication to add an extra layer of security to your account.
+                        You'll need an authenticator app like Google Authenticator or Authy.
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h5 class="text-sm font-medium text-blue-800 mb-2">How it works:</h5>
+                <ol class="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+                    <li>Download an authenticator app (Google Authenticator, Authy, etc.)</li>
+                    <li>Scan the QR code we provide</li>
+                    <li>Enter the 6-digit code to verify setup</li>
+                    <li>Save your recovery codes for emergencies</li>
+                </ol>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-gray-200">
+                <a href="{% url 'setup_2fa' %}"
+                   class="inline-flex items-center px-6 py-2.5 border border-transparent rounded-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm transition-all">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                    Enable Two-Factor Authentication
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if user.is_superuser and system_settings %}
+    <!-- Site Branding Section (Superuser Only) -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Site Branding</h3>
+                    <p class="text-sm text-gray-600">Customize the site name and footer text displayed in the sidebar</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="POST" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="save_branding" value="1">
+
+                <div class="space-y-6">
+                    <!-- Site Name -->
+                    <div>
+                        <label for="site_name" class="block text-sm font-medium text-gray-700 mb-2">
+                            Site Name
+                        </label>
+                        <input type="text"
+                               name="site_name"
+                               id="site_name"
+                               value="{{ system_settings.site_name }}"
+                               maxlength="100"
+                               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
+                        <p class="mt-1 text-xs text-gray-500">Displayed under the logo in the sidebar (max 100 characters)</p>
+                    </div>
+
+                    <!-- Site Footer -->
+                    <div>
+                        <label for="site_footer" class="block text-sm font-medium text-gray-700 mb-2">
+                            Footer Text
+                        </label>
+                        <input type="text"
+                               name="site_footer"
+                               id="site_footer"
+                               value="{{ system_settings.site_footer }}"
+                               maxlength="200"
+                               class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
+                        <p class="mt-1 text-xs text-gray-500">Displayed at the bottom of the sidebar (max 200 characters)</p>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex justify-end pt-6 mt-6 border-t border-gray-200">
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Save Branding</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Storage Notifications Section (Superuser Only) -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-orange-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Storage Notifications</h3>
+                    <p class="text-sm text-gray-600">Configure storage usage alerts for domain owners</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="POST" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="save_notifications" value="1">
+
+                <!-- Enable/Disable Toggle -->
+                <div class="mb-6">
+                    <div class="flex items-center">
+                        <input type="checkbox"
+                               name="storage_notifications_enabled"
+                               id="storage_notifications_enabled"
+                               {% if system_settings.storage_notifications_enabled %}checked{% endif %}
+                               class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                        <label for="storage_notifications_enabled" class="ml-3 block text-sm font-medium text-gray-700">
+                            Enable storage notifications
+                        </label>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500 ml-7">
+                        Send email alerts to domain owners when storage usage exceeds thresholds
+                    </p>
+                </div>
+
+                <!-- Thresholds Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        Threshold Levels
+                    </h4>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- INFO -->
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div class="flex items-center mb-2">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    INFO
+                                </span>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">Threshold (%)</label>
+                                    <input type="number" name="storage_info_threshold"
+                                           value="{{ system_settings.storage_info_threshold }}"
+                                           min="1" max="100"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">Frequency (days)</label>
+                                    <input type="number" name="storage_info_frequency_days"
+                                           value="{{ system_settings.storage_info_frequency_days }}"
+                                           min="1"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- WARNING -->
+                        <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                            <div class="flex items-center mb-2">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                    WARNING
+                                </span>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">Threshold (%)</label>
+                                    <input type="number" name="storage_warning_threshold"
+                                           value="{{ system_settings.storage_warning_threshold }}"
+                                           min="1" max="100"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">Frequency (days)</label>
+                                    <input type="number" name="storage_warning_frequency_days"
+                                           value="{{ system_settings.storage_warning_frequency_days }}"
+                                           min="1"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ALERT -->
+                        <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                            <div class="flex items-center mb-2">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    ALERT
+                                </span>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">Threshold (%)</label>
+                                    <input type="number" name="storage_alert_threshold"
+                                           value="{{ system_settings.storage_alert_threshold }}"
+                                           min="1" max="100"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-600 mb-1">Frequency (days)</label>
+                                    <input type="number" name="storage_alert_frequency_days"
+                                           value="{{ system_settings.storage_alert_frequency_days }}"
+                                           min="1"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Email Templates Section -->
+                <div class="mb-6">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        Email Templates
+                    </h4>
+                    <p class="text-xs text-gray-500 mb-4">
+                        Available variables: <code class="bg-gray-100 px-1 rounded">{% templatetag openvariable %}domain_name{% templatetag closevariable %}</code>,
+                        <code class="bg-gray-100 px-1 rounded">{% templatetag openvariable %}usage_percent{% templatetag closevariable %}</code>,
+                        <code class="bg-gray-100 px-1 rounded">{% templatetag openvariable %}storage_used_gb{% templatetag closevariable %}</code>,
+                        <code class="bg-gray-100 px-1 rounded">{% templatetag openvariable %}storage_limit_gb{% templatetag closevariable %}</code>,
+                        <code class="bg-gray-100 px-1 rounded">{% templatetag openvariable %}pvc_gb{% templatetag closevariable %}</code>,
+                        <code class="bg-gray-100 px-1 rounded">{% templatetag openvariable %}email_gb{% templatetag closevariable %}</code>,
+                        <code class="bg-gray-100 px-1 rounded">{% templatetag openvariable %}database_gb{% templatetag closevariable %}</code>
+                    </p>
+
+                    <!-- INFO Template -->
+                    <div class="mb-4 border border-blue-200 rounded-lg overflow-hidden">
+                        <div class="bg-blue-50 px-4 py-2 border-b border-blue-200">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                INFO Template
+                            </span>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">Subject</label>
+                                <input type="text" name="storage_info_subject"
+                                       value="{{ system_settings.storage_info_subject }}"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">Body</label>
+                                <textarea name="storage_info_template" rows="6"
+                                          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500">{{ system_settings.storage_info_template }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- WARNING Template -->
+                    <div class="mb-4 border border-amber-200 rounded-lg overflow-hidden">
+                        <div class="bg-amber-50 px-4 py-2 border-b border-amber-200">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                WARNING Template
+                            </span>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">Subject</label>
+                                <input type="text" name="storage_warning_subject"
+                                       value="{{ system_settings.storage_warning_subject }}"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">Body</label>
+                                <textarea name="storage_warning_template" rows="6"
+                                          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-amber-500">{{ system_settings.storage_warning_template }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ALERT Template -->
+                    <div class="mb-4 border border-red-200 rounded-lg overflow-hidden">
+                        <div class="bg-red-50 px-4 py-2 border-b border-red-200">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                ALERT Template
+                            </span>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">Subject</label>
+                                <input type="text" name="storage_alert_subject"
+                                       value="{{ system_settings.storage_alert_subject }}"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">Body</label>
+                                <textarea name="storage_alert_template" rows="6"
+                                          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-red-500">{{ system_settings.storage_alert_template }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end pt-4 border-t border-gray-200">
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Save Notification Settings</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Health Monitoring Section (Superuser Only) -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Health Monitoring</h3>
+                    <p class="text-sm text-gray-600">Configure health monitoring thresholds and email alerts</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="POST" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="save_health_monitoring" value="1">
+
+                <!-- Mail Queue Settings Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        Mail Queue Thresholds
+                    </h4>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Warning Threshold -->
+                        <div>
+                            <label for="mail_queue_warning" class="block text-sm font-medium text-gray-700 mb-2">
+                                Warning Threshold
+                            </label>
+                            <div class="relative">
+                                <input type="number"
+                                       name="mail_queue_warning"
+                                       id="mail_queue_warning"
+                                       value="{{ system_settings.mail_queue_warning_threshold }}"
+                                       min="1"
+                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
+                                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                    <span class="text-gray-400 text-sm">messages</span>
+                                </div>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Trigger warning when queue exceeds this count</p>
+                        </div>
+
+                        <!-- Error Threshold -->
+                        <div>
+                            <label for="mail_queue_error" class="block text-sm font-medium text-gray-700 mb-2">
+                                Error Threshold
+                            </label>
+                            <div class="relative">
+                                <input type="number"
+                                       name="mail_queue_error"
+                                       id="mail_queue_error"
+                                       value="{{ system_settings.mail_queue_error_threshold }}"
+                                       min="1"
+                                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all">
+                                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                    <span class="text-gray-400 text-sm">messages</span>
+                                </div>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Trigger error when queue exceeds this count</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Email Alerts Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                        </svg>
+                        Email Alerts
+                    </h4>
+
+                    <div class="flex items-center">
+                        <input type="checkbox"
+                               name="health_email_enabled"
+                               id="health_email_enabled"
+                               {% if system_settings.health_check_email_enabled %}checked{% endif %}
+                               class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                        <label for="health_email_enabled" class="ml-3 block text-sm text-gray-700">
+                            Enable email alerts for health issues
+                        </label>
+                    </div>
+                    <p class="mt-2 text-xs text-gray-500">
+                        When enabled, superusers will receive email notifications when system health issues are detected
+                    </p>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex justify-end pt-4 border-t border-gray-200">
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Save Health Settings</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- License Management Section (Superuser Only) -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-indigo-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">License Management</h3>
+                    <p class="text-sm text-gray-600">Manage your KubePanel license</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <!-- Current License Status -->
+            <div class="mb-6">
+                <h4 class="text-sm font-medium text-gray-700 mb-3">Current License Status</h4>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase tracking-wide">Tier</p>
+                            <p class="text-lg font-semibold {% if license.tier == 'community' %}text-blue-600{% elif license.tier == 'pro' %}text-purple-600{% elif license.tier == 'premium' %}text-indigo-600{% elif license.tier == 'enterprise' %}text-amber-600{% else %}text-gray-600{% endif %}">
+                                {{ license.tier|default:"Community"|title }}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase tracking-wide">Domains</p>
+                            <p class="text-lg font-semibold text-gray-900">
+                                {{ license_usage.current }}/{% if license.maxDomains == -1 %}∞{% else %}{{ license.maxDomains|default:5 }}{% endif %}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase tracking-wide">Status</p>
+                            <p class="text-lg font-semibold {% if license.valid %}text-green-600{% else %}text-red-600{% endif %}">
+                                {% if license.valid %}Valid{% else %}Invalid{% endif %}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase tracking-wide">Expires</p>
+                            <p class="text-lg font-semibold text-gray-900">
+                                {% if license.expiresAt %}{{ license.expiresAt|slice:":10" }}{% else %}N/A{% endif %}
+                            </p>
+                        </div>
+                    </div>
+
+                    {% if license.customerName %}
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <p class="text-sm text-gray-600">
+                            <span class="font-medium">Customer:</span> {{ license.customerName }}
+                        </p>
+                    </div>
+                    {% endif %}
+
+                    {% if license.message %}
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <p class="text-sm text-gray-600">{{ license.message }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if license.gracePeriodEndsAt %}
+                    <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p class="text-sm text-yellow-800">
+                            <span class="font-medium">Warning:</span> License verification failing. Grace period ends {{ license.gracePeriodEndsAt|slice:":10" }}.
+                        </p>
+                    </div>
+                    {% endif %}
+
+                    {% if license.lastPhoneHome %}
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <p class="text-xs text-gray-500">
+                            Last verified: {{ license.lastPhoneHome|slice:":19" }}
+                            {% if license.phoneHomeFailures > 0 %}
+                            <span class="text-yellow-600">({{ license.phoneHomeFailures }} failed attempts)</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Update License Key -->
+            <form method="POST" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="save_license" value="1">
+
+                <div class="mb-4">
+                    <label for="license_key" class="block text-sm font-medium text-gray-700 mb-2">
+                        License Key
+                    </label>
+                    <textarea name="license_key"
+                              id="license_key"
+                              rows="3"
+                              placeholder="Paste your license key here..."
+                              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"></textarea>
+                    <p class="mt-1 text-xs text-gray-500">
+                        Paste the license key you received after purchase. Leave empty and save to use Community tier.
+                    </p>
+                </div>
+
+                <div class="flex justify-between pt-4 border-t border-gray-200">
+                    {% if license.tier and license.tier != 'community' %}
+                    <button type="submit"
+                            name="remove_license"
+                            value="1"
+                            onclick="return confirm('Are you sure you want to remove the license? This will revert to Community tier (5 domains max).');"
+                            class="inline-flex items-center px-4 py-2.5 border border-red-300 rounded-lg text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        Remove License
+                    </button>
+                    {% else %}
+                    <div></div>
+                    {% endif %}
+
+                    <button type="submit"
+                            class="inline-flex items-center px-6 py-2.5 border border-transparent rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 shadow-sm transition-all">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Update License
+                    </button>
+                </div>
+            </form>
+
+            <!-- Purchase Link -->
+            {% if license.tier == 'community' %}
+            <div class="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <h5 class="text-sm font-medium text-purple-800">Upgrade to Pro</h5>
+                        <p class="text-sm text-purple-700 mt-1">
+                            Get unlimited domains, priority support, and more.
+                        </p>
+                        <a href="https://kubepanel.io/pricing" target="_blank"
+                           class="inline-flex items-center mt-2 text-sm font-medium text-purple-700 hover:text-purple-900">
+                            View pricing
+                            <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Feature Flags Section (Superuser Only) -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-amber-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Feature Flags</h3>
+                    <p class="text-sm text-gray-600">Enable or disable optional features</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="POST" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="save_feature_flags" value="1">
+
+                <div class="space-y-6">
+                    <!-- cPanel Migration Toggle -->
+                    <div class="flex items-start">
+                        <div class="flex items-center h-5">
+                            <input type="checkbox"
+                                   name="cpanel_migration_enabled"
+                                   id="cpanel_migration_enabled"
+                                   {% if system_settings.cpanel_migration_enabled %}checked{% endif %}
+                                   class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                        </div>
+                        <div class="ml-3">
+                            <label for="cpanel_migration_enabled" class="text-sm font-medium text-gray-700">
+                                cPanel Migration Tool
+                            </label>
+                            <p class="text-xs text-gray-500 mt-1">
+                                Enable bulk migration of domains, databases, and email from cPanel servers.
+                                When enabled, a "cPanel Migration" menu item will appear in the sidebar.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex justify-end pt-6 mt-6 border-t border-gray-200">
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Save Feature Flags</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

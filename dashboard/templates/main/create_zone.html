@@ -1,0 +1,392 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Create DNS Zone | KubePanel{% endblock %}
+
+{% block page_title %}Create DNS Zone{% endblock %}
+{% block page_subtitle %}Add a new DNS zone to manage domain records{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'zones_list' %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to DNS Zones</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <!-- DNS Zone Info -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div class="flex items-center">
+            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                </svg>
+            </div>
+            <div class="ml-4">
+                <h3 class="text-sm font-medium text-blue-900">DNS Zone Creation</h3>
+                <p class="text-sm text-blue-700">Create a new DNS zone to manage domain records through Cloudflare</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Form Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Zone Configuration</h3>
+                    <p class="text-sm text-gray-600">Enter the domain details for your new DNS zone</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="post" id="create-zone-form">
+                {% csrf_token %}
+
+                <!-- Domain Name Field -->
+                <div class="mb-6">
+                    <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                            </svg>
+                            {{ form.name.label|default:"Domain Name" }} <span class="text-red-500">*</span>
+                        </div>
+                    </label>
+                    <input type="{{ form.name.field.widget.input_type }}"
+                           name="{{ form.name.html_name }}" 
+                           id="{{ form.name.id_for_label }}"
+                           value="{{ form.name.value|default_if_none:'' }}"
+                           class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.name.errors %} border-red-500 focus:ring-red-500{% endif %}" 
+                           placeholder="example.com">
+                    <p class="mt-1 text-xs text-gray-500">Enter the root domain name (e.g., example.com, subdomain.example.org)</p>
+                    {% if form.name.errors %}
+                        {% for error in form.name.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+
+                <!-- Zone ID Field (if present) -->
+                {% if form.zone_id %}
+                <div class="mb-6">
+                    <label for="{{ form.zone_id.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                            </svg>
+                            {{ form.zone_id.label|default:"Cloudflare Zone ID" }}
+                        </div>
+                    </label>
+                    <input type="{{ form.zone_id.field.widget.input_type }}"
+                           name="{{ form.zone_id.html_name }}" 
+                           id="{{ form.zone_id.id_for_label }}"
+                           value="{{ form.zone_id.value|default_if_none:'' }}"
+                           class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm font-mono{% if form.zone_id.errors %} border-red-500 focus:ring-red-500{% endif %}" 
+                           placeholder="32-character Zone ID from Cloudflare">
+                    <p class="mt-1 text-xs text-gray-500">Optional: If you already have a Cloudflare zone, enter its Zone ID</p>
+                    {% if form.zone_id.errors %}
+                        {% for error in form.zone_id.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Additional Form Fields -->
+                {% for field in form %}
+                    {% if field.name != 'name' and field.name != 'zone_id' %}
+                    <div class="mb-6">
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                            <div class="flex items-center">
+                                <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                </svg>
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                            </div>
+                        </label>
+                        
+                        {% if field.field.widget.input_type == 'checkbox' %}
+                        <div class="flex items-center p-4 bg-gray-50 rounded-lg">
+                            <input type="checkbox" 
+                                   name="{{ field.html_name }}" 
+                                   id="{{ field.id_for_label }}"
+                                   {% if field.value %}checked{% endif %}
+                                   class="sr-only peer{% if field.errors %} border-red-500{% endif %}">
+                            <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 cursor-pointer mr-3"></div>
+                            <label for="{{ field.id_for_label }}" class="text-sm text-gray-900 cursor-pointer">{{ field.label }}</label>
+                        </div>
+                        {% elif field.field.widget.input_type == 'select' %}
+                        <select name="{{ field.html_name }}" 
+                                id="{{ field.id_for_label }}"
+                                class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if field.errors %} border-red-500 focus:ring-red-500{% endif %}">
+                            {% for value, label in field.field.choices %}
+                            <option value="{{ value }}"{% if field.value|stringformat:"s" == value|stringformat:"s" %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <input type="{{ field.field.widget.input_type }}"
+                               name="{{ field.html_name }}" 
+                               id="{{ field.id_for_label }}"
+                               value="{{ field.value|default_if_none:'' }}"
+                               class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if field.errors %} border-red-500 focus:ring-red-500{% endif %}">
+                        {% endif %}
+                        
+                        {% if field.help_text %}
+                        <p class="mt-1 text-xs text-gray-500">{{ field.help_text }}</p>
+                        {% endif %}
+                        
+                        {% if field.errors %}
+                            {% for error in field.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                {% endfor %}
+
+                <!-- Zone Creation Info -->
+                <div class="mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-yellow-800">Zone Creation Process</h3>
+                            <div class="mt-2 text-sm text-yellow-700">
+                                <p class="mb-2">When you create a DNS zone:</p>
+                                <ul class="list-disc list-inside space-y-1">
+                                    <li>The zone will be created in Cloudflare (if Zone ID not provided)</li>
+                                    <li>Default DNS records (NS, SOA) will be automatically created</li>
+                                    <li>You can then add A, AAAA, CNAME, MX, and other records</li>
+                                    <li>Make sure your domain's nameservers point to Cloudflare</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Domain Validation Preview -->
+                <div class="mb-8 p-4 bg-gray-50 rounded-lg border" id="domain-preview" style="display: none;">
+                    <h4 class="text-sm font-medium text-gray-900 mb-3 flex items-center">
+                        <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                        </svg>
+                        Domain Preview
+                    </h4>
+                    <div class="text-sm text-gray-700">
+                        <p><strong>Zone:</strong> <span id="preview-domain">—</span></p>
+                        <p><strong>Type:</strong> <span id="preview-type">Root Domain</span></p>
+                        <p><strong>Cloudflare Zone:</strong> <span id="preview-zone-status">Will be created</span></p>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'zones_list' %}" 
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit" 
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        <span>Create DNS Zone</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Help Section -->
+    <div class="mt-6 bg-gray-50 rounded-xl p-6 border border-gray-200">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <svg class="w-5 h-5 text-gray-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div>
+                    <h4 class="text-sm font-medium text-gray-900">Need Help?</h4>
+                    <p class="text-sm text-gray-600">Learn more about DNS zone management</p>
+                </div>
+            </div>
+            <a href="https://developers.cloudflare.com/dns/manage-dns-records/how-to/create-zone/" 
+               target="_blank"
+               class="px-4 py-2 text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                </svg>
+                <span>View Documentation</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Domain preview functionality
+        const domainInput = document.querySelector('input[name="{{ form.name.html_name }}"]');
+        const zoneIdInput = document.querySelector('input[name="{{ form.zone_id.html_name }}"]');
+        const previewSection = document.getElementById('domain-preview');
+        const previewDomain = document.getElementById('preview-domain');
+        const previewType = document.getElementById('preview-type');
+        const previewZoneStatus = document.getElementById('preview-zone-status');
+        
+        function updatePreview() {
+            const domain = domainInput ? domainInput.value.trim() : '';
+            const zoneId = zoneIdInput ? zoneIdInput.value.trim() : '';
+            
+            if (domain) {
+                previewSection.style.display = 'block';
+                previewDomain.textContent = domain;
+                
+                // Determine domain type
+                const parts = domain.split('.');
+                if (parts.length > 2) {
+                    previewType.textContent = 'Subdomain';
+                } else {
+                    previewType.textContent = 'Root Domain';
+                }
+                
+                // Zone status
+                if (zoneId) {
+                    previewZoneStatus.textContent = 'Using existing Zone ID';
+                } else {
+                    previewZoneStatus.textContent = 'Will be created in Cloudflare';
+                }
+            } else {
+                previewSection.style.display = 'none';
+            }
+        }
+        
+        if (domainInput) {
+            domainInput.addEventListener('input', updatePreview);
+        }
+        
+        if (zoneIdInput) {
+            zoneIdInput.addEventListener('input', updatePreview);
+        }
+        
+        // Initial preview update
+        updatePreview();
+        
+        // Form validation
+        const form = document.getElementById('create-zone-form');
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        form.addEventListener('submit', function(e) {
+            const domain = domainInput ? domainInput.value.trim() : '';
+            
+            if (!domain) {
+                e.preventDefault();
+                showError(domainInput, 'Domain name is required');
+                return;
+            }
+            
+            // Basic domain validation
+            const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.([a-zA-Z]{2,}\.?)+$/;
+            if (!domainRegex.test(domain)) {
+                e.preventDefault();
+                showError(domainInput, 'Please enter a valid domain name');
+                return;
+            }
+            
+            // Show loading state
+            const originalContent = submitButton.innerHTML;
+            submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Creating Zone...';
+            submitButton.disabled = true;
+            
+            // Reset after a delay in case of validation errors
+            setTimeout(() => {
+                submitButton.innerHTML = originalContent;
+                submitButton.disabled = false;
+            }, 3000);
+        });
+        
+        function showError(field, message) {
+            const existingError = field.parentNode.querySelector('.custom-error');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            const errorDiv = document.createElement('p');
+            errorDiv.className = 'mt-1 text-sm text-red-600 flex items-center custom-error';
+            errorDiv.innerHTML = `
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                ${message}
+            `;
+            
+            field.parentNode.insertBefore(errorDiv, field.nextElementSibling);
+            field.classList.add('border-red-500', 'focus:ring-red-500');
+            field.focus();
+        }
+        
+        // Clear custom errors on input
+        const inputs = document.querySelectorAll('input');
+        inputs.forEach(input => {
+            input.addEventListener('input', function() {
+                const customError = this.parentNode.querySelector('.custom-error');
+                if (customError) {
+                    customError.remove();
+                    this.classList.remove('border-red-500', 'focus:ring-red-500');
+                }
+            });
+        });
+        
+        // Focus enhancement
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                if (!this.classList.contains('border-red-500')) {
+                    this.classList.add('ring-2', 'ring-primary-500');
+                }
+            });
+            
+            input.addEventListener('blur', function() {
+                this.classList.remove('ring-2', 'ring-primary-500');
+            });
+        });
+        
+        // Auto-focus domain field
+        if (domainInput) {
+            domainInput.focus();
+        }
+    });
+</script>
+{% endblock %}
+{% endblock %}

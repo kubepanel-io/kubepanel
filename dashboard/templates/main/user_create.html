@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Create User | KubePanel{% endblock %}
+
+{% block page_title %}Create User{% endblock %}
+{% block page_subtitle %}Add a new user account and assign package access{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'list_userprofiles' %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Users</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">New User & Package</h3>
+                    <p class="text-sm text-gray-600">Create a new user account and optionally assign a package</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="post" novalidate id="create-user-form">
+                {% csrf_token %}
+
+                <!-- User Information Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                        </svg>
+                        User Information
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Username -->
+                        <div>
+                            <label for="id_username" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                    Username <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <input type="text" 
+                                   name="{{ form.username.html_name }}" 
+                                   id="id_username"
+                                   value="{{ form.username.value|default_if_none:'' }}"
+                                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.username.errors %} border-red-500 focus:ring-red-500{% endif %}" 
+                                   placeholder="Enter username"
+                                   required>
+                            <p class="mt-1 text-xs text-gray-500">Unique identifier for the user account</p>
+                            {% for error in form.username.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Email -->
+                        <div>
+                            <label for="id_email" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
+                                    </svg>
+                                    Email Address
+                                </div>
+                            </label>
+                            <input type="email" 
+                                   name="{{ form.email.html_name }}" 
+                                   id="id_email"
+                                   value="{{ form.email.value|default_if_none:'' }}"
+                                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.email.errors %} border-red-500 focus:ring-red-500{% endif %}" 
+                                   placeholder="user@example.com">
+                            <p class="mt-1 text-xs text-gray-500">Optional email address for notifications</p>
+                            {% for error in form.email.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Password Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                        </svg>
+                        Password Setup
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Password -->
+                        <div>
+                            <label for="id_password1" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                    </svg>
+                                    Password <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <div class="relative">
+                                <input type="password" 
+                                       name="{{ form.password1.html_name }}" 
+                                       id="id_password1"
+                                       value="{{ form.password1.value|default_if_none:'' }}"
+                                       class="w-full px-3 py-2.5 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.password1.errors %} border-red-500 focus:ring-red-500{% endif %}" 
+                                       placeholder="Enter password"
+                                       required>
+                                <button type="button" 
+                                        class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                        onclick="togglePassword('id_password1', 'password1')">
+                                    <svg class="w-5 h-5 text-gray-400 hover:text-gray-600" id="password1-show-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                    </svg>
+                                    <svg class="w-5 h-5 text-gray-400 hover:text-gray-600 hidden" id="password1-hide-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            {% for error in form.password1.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Confirm Password -->
+                        <div>
+                            <label for="id_password2" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Confirm Password <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <div class="relative">
+                                <input type="password" 
+                                       name="{{ form.password2.html_name }}" 
+                                       id="id_password2"
+                                       value="{{ form.password2.value|default_if_none:'' }}"
+                                       class="w-full px-3 py-2.5 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.password2.errors %} border-red-500 focus:ring-red-500{% endif %}" 
+                                       placeholder="Confirm password"
+                                       required>
+                                <button type="button" 
+                                        class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                        onclick="togglePassword('id_password2', 'password2')">
+                                    <svg class="w-5 h-5 text-gray-400 hover:text-gray-600" id="password2-show-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                    </svg>
+                                    <svg class="w-5 h-5 text-gray-400 hover:text-gray-600 hidden" id="password2-hide-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="mt-2">
+                                <div class="flex items-center space-x-2 text-xs">
+                                    <div class="flex items-center space-x-1">
+                                        <div class="w-2 h-2 rounded-full bg-gray-300" id="match-indicator"></div>
+                                    </div>
+                                    <span class="text-gray-500" id="password-match-text">Passwords must match</span>
+                                </div>
+                            </div>
+                            {% for error in form.password2.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Package Assignment Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                        </svg>
+                        Package Assignment
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 gap-6">
+                        <div>
+                            <label for="id_package" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                                    </svg>
+                                    Assign Package (Optional)
+                                </div>
+                            </label>
+                            <select id="id_package" 
+                                    name="package" 
+                                    class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm">
+                                <option value="">Select a package...</option>
+                                {% for pkg in packages %}
+                                    <option value="{{ pkg.pk }}">{{ pkg.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Choose a package to assign resource limits and permissions</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Package Preview -->
+                <div id="package-preview" class="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg hidden">
+                    <div class="flex items-center mb-3">
+                        <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <h5 class="text-sm font-medium text-blue-900">Package Details</h5>
+                    </div>
+                    <div id="package-details" class="text-sm text-blue-800">
+                        <!-- Package details will be inserted here via JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'list_userprofiles' %}" 
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit" 
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>Create User</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Password matching validation
+        const password1 = document.getElementById('id_password1');
+        const password2 = document.getElementById('id_password2');
+        const matchIndicator = document.getElementById('match-indicator');
+        const matchText = document.getElementById('password-match-text');
+        
+        function checkPasswordMatch() {
+            const pass1 = password1.value;
+            const pass2 = password2.value;
+            
+            if (pass2.length === 0) {
+                matchIndicator.className = 'w-2 h-2 rounded-full bg-gray-300';
+                matchText.textContent = 'Passwords must match';
+                matchText.className = 'text-gray-500';
+            } else if (pass1 === pass2) {
+                matchIndicator.className = 'w-2 h-2 rounded-full bg-green-500';
+                matchText.textContent = 'Passwords match';
+                matchText.className = 'text-green-600';
+            } else {
+                matchIndicator.className = 'w-2 h-2 rounded-full bg-red-500';
+                matchText.textContent = 'Passwords do not match';
+                matchText.className = 'text-red-600';
+            }
+        }
+        
+        password1.addEventListener('input', checkPasswordMatch);
+        password2.addEventListener('input', checkPasswordMatch);
+        
+        // Package preview (placeholder - would need real package data)
+        const packageSelect = document.getElementById('id_package');
+        const packagePreview = document.getElementById('package-preview');
+        const packageDetails = document.getElementById('package-details');
+        
+        packageSelect.addEventListener('change', function() {
+            if (this.value) {
+                // In a real implementation, you'd fetch package details via AJAX
+                packageDetails.innerHTML = `
+                    <p><strong>Package:</strong> ${this.options[this.selectedIndex].text}</p>
+                    <p><strong>Description:</strong> Resource limits and permissions will be applied to this user.</p>
+                `;
+                packagePreview.classList.remove('hidden');
+            } else {
+                packagePreview.classList.add('hidden');
+            }
+        });
+        
+        // Form submission with loading state
+        const form = document.getElementById('create-user-form');
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        form.addEventListener('submit', function(e) {
+            // Basic client-side validation
+            const username = document.getElementById('id_username').value.trim();
+            const pass1 = password1.value;
+            const pass2 = password2.value;
+            
+            if (!username) {
+                e.preventDefault();
+                alert('Username is required');
+                return;
+            }
+            
+            if (!pass1) {
+                e.preventDefault();
+                alert('Password is required');
+                return;
+            }
+            
+            if (pass1 !== pass2) {
+                e.preventDefault();
+                alert('Passwords do not match');
+                return;
+            }
+            
+            // Show loading state
+            const originalContent = submitButton.innerHTML;
+            submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Creating...';
+            submitButton.disabled = true;
+            
+            // Reset after a delay in case of validation errors
+            setTimeout(() => {
+                submitButton.innerHTML = originalContent;
+                submitButton.disabled = false;
+            }, 3000);
+        });
+        
+        // Focus enhancement
+        const inputs = document.querySelectorAll('input, select');
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                if (!this.classList.contains('border-red-500')) {
+                    this.classList.add('ring-2', 'ring-primary-500');
+                }
+            });
+            
+            input.addEventListener('blur', function() {
+                this.classList.remove('ring-2', 'ring-primary-500');
+            });
+        });
+        
+        // Auto-focus username field
+        document.getElementById('id_username').focus();
+    });
+    
+    // Password visibility toggle
+    function togglePassword(fieldId, iconPrefix) {
+        const passwordInput = document.getElementById(fieldId);
+        const showIcon = document.getElementById(iconPrefix + '-show-icon');
+        const hideIcon = document.getElementById(iconPrefix + '-hide-icon');
+        
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            showIcon.classList.add('hidden');
+            hideIcon.classList.remove('hidden');
+        } else {
+            passwordInput.type = 'password';
+            showIcon.classList.remove('hidden');
+            hideIcon.classList.add('hidden');
+        }
+    }
+</script>
+{% endblock %}
+{% endblock %}

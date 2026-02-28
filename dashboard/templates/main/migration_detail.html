@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Migration #{{ batch.id }} | KubePanel{% endblock %}
+
+{% block page_title %}Migration Batch #{{ batch.id }}{% endblock %}
+{% block page_subtitle %}{{ batch.cpanel_hostname }} &bull; {{ batch.total_domains }} domain{{ batch.total_domains|pluralize }}{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    {% if batch.status == 'running' %}
+    <form action="{% url 'migration_cancel' batch.id %}" method="post" class="inline"
+          onsubmit="return confirm('Are you sure you want to cancel this migration?');">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-red-500/20 hover:bg-red-500/30 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            <span>Cancel</span>
+        </button>
+    </form>
+    {% endif %}
+    {% if batch.status in 'completed,failed' and batch.failed_domains > 0 %}
+    <form action="{% url 'migration_retry' batch.id %}" method="post" class="inline">
+        {% csrf_token %}
+        <button type="submit"
+                class="bg-yellow-500/20 hover:bg-yellow-500/30 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            <span>Retry Failed</span>
+        </button>
+    </form>
+    {% endif %}
+    <a href="{% url 'migration_list' %}"
+       class="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        <span>Back</span>
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Status Overview -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <!-- Status Badge -->
+                {% if batch.status == 'configuring' %}
+                <span class="px-3 py-1.5 text-sm font-medium bg-gray-100 text-gray-800 rounded-full">Configuring</span>
+                {% elif batch.status == 'pending' %}
+                <span class="px-3 py-1.5 text-sm font-medium bg-yellow-100 text-yellow-800 rounded-full">Pending</span>
+                {% elif batch.status == 'running' %}
+                <span class="px-3 py-1.5 text-sm font-medium bg-blue-100 text-blue-800 rounded-full animate-pulse">Running</span>
+                {% elif batch.status == 'completed' %}
+                <span class="px-3 py-1.5 text-sm font-medium bg-green-100 text-green-800 rounded-full">Completed</span>
+                {% elif batch.status == 'failed' %}
+                <span class="px-3 py-1.5 text-sm font-medium bg-red-100 text-red-800 rounded-full">Failed</span>
+                {% elif batch.status == 'cancelled' %}
+                <span class="px-3 py-1.5 text-sm font-medium bg-gray-100 text-gray-800 rounded-full">Cancelled</span>
+                {% endif %}
+
+                <div>
+                    <p class="text-sm text-gray-500">Source Server</p>
+                    <p class="font-medium text-gray-900">{{ batch.cpanel_hostname }}:{{ batch.cpanel_port }}</p>
+                </div>
+            </div>
+
+            <div class="text-right">
+                <p class="text-sm text-gray-500">Started</p>
+                <p class="font-medium text-gray-900">
+                    {% if batch.started_at %}
+                    {{ batch.started_at|date:"M d, Y H:i" }}
+                    {% else %}
+                    Not started
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <!-- Backup Progress (if downloading) -->
+        {% if batch.backup_status %}
+        <div class="mt-6 p-4 bg-blue-50 rounded-lg" id="backup-status-section">
+            <div class="flex items-center justify-between text-sm mb-2">
+                <span class="text-blue-700 font-medium">Backup Download</span>
+                <span class="text-blue-600" id="backup-status-text">{{ batch.backup_status }}</span>
+            </div>
+            <div class="w-full bg-blue-200 rounded-full h-2">
+                <div class="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                     style="width: {{ batch.backup_progress }}%"
+                     id="backup-progress"></div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Overall Progress Bar -->
+        {% if batch.total_domains > 0 %}
+        <div class="mt-6">
+            <div class="flex items-center justify-between text-sm mb-2">
+                <span class="text-gray-600">Overall Progress</span>
+                <span class="font-medium text-gray-900">{{ batch.completed_domains }} / {{ batch.total_domains }} domains</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-3">
+                <div class="bg-primary-600 h-3 rounded-full transition-all duration-500"
+                     style="width: {% widthratio batch.completed_domains batch.total_domains 100 %}%"
+                     id="overall-progress"></div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Domain Progress List -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Domain Progress</h3>
+        </div>
+
+        <div class="divide-y divide-gray-200" id="domain-list">
+            {% for domain in migration_domains %}
+            <div class="p-4 hover:bg-gray-50" data-domain-id="{{ domain.id }}">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <!-- Status Icon -->
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center
+                            {% if domain.status == 'completed' %}bg-green-100{% elif domain.status == 'failed' %}bg-red-100{% elif domain.status == 'queued' or domain.status == 'skipped' %}bg-gray-100{% else %}bg-blue-100{% endif %}">
+                            {% if domain.status == 'completed' %}
+                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            {% elif domain.status == 'failed' %}
+                            <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            {% elif domain.status == 'queued' or domain.status == 'skipped' %}
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {% else %}
+                            <svg class="w-5 h-5 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {% endif %}
+                        </div>
+
+                        <div>
+                            <p class="font-medium text-gray-900">{{ domain.source_domain }}</p>
+                            <p class="text-sm text-gray-500 domain-status">
+                                {{ domain.get_status_display }}
+                                {% if domain.progress_message %} - {{ domain.progress_message }}{% endif %}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                        <!-- Progress -->
+                        <div class="w-32">
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="h-2 rounded-full transition-all duration-300 domain-progress
+                                    {% if domain.status == 'completed' %}bg-green-500{% elif domain.status == 'failed' %}bg-red-500{% else %}bg-primary-600{% endif %}"
+                                     style="width: {{ domain.progress_percent }}%"></div>
+                            </div>
+                            <p class="text-xs text-gray-500 text-center mt-1 domain-progress-text">{{ domain.progress_percent }}%</p>
+                        </div>
+
+                        <!-- Details Toggle -->
+                        <button type="button"
+                                onclick="toggleDomainDetails({{ domain.id }})"
+                                class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Domain Details (Hidden by default) -->
+                <div id="domain-details-{{ domain.id }}" class="hidden mt-4 pl-14">
+                    <div class="bg-gray-50 rounded-lg p-4 text-sm">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-gray-500">Target Owner</p>
+                                <p class="font-medium text-gray-900">{{ domain.target_owner.username }}</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Package</p>
+                                <p class="font-medium text-gray-900">{{ domain.target_package.name|default:"Default" }}</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Database</p>
+                                <p class="font-medium text-gray-900">{{ domain.selected_database|default:"None" }}</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500">Email Method</p>
+                                <p class="font-medium text-gray-900">{{ domain.get_email_method_display }}</p>
+                            </div>
+                        </div>
+                        {% if domain.selected_mailboxes %}
+                        <div class="mt-4">
+                            <p class="text-gray-500 mb-2">Mailboxes ({{ domain.selected_mailboxes|length }})</p>
+                            <div class="flex flex-wrap gap-2">
+                                {% for email in domain.selected_mailboxes %}
+                                <span class="px-2 py-1 bg-white border border-gray-200 rounded text-xs">{{ email }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if domain.error_message %}
+                        <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <p class="text-red-800 text-sm">{{ domain.error_message }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="p-12 text-center">
+                <p class="text-gray-500">No domains in this migration batch.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleDomainDetails(domainId) {
+    const details = document.getElementById('domain-details-' + domainId);
+    details.classList.toggle('hidden');
+}
+
+{% if batch.status == 'running' or batch.status == 'pending' %}
+// Poll for status updates
+function updateStatus() {
+    fetch('{% url "migration_status_api" batch.id %}')
+        .then(response => response.json())
+        .then(data => {
+            // Update backup progress
+            const backupSection = document.getElementById('backup-status-section');
+            const backupProgress = document.getElementById('backup-progress');
+            const backupText = document.getElementById('backup-status-text');
+
+            if (data.backup_status) {
+                if (!backupSection) {
+                    // Create backup section if it doesn't exist
+                    const statusOverview = document.querySelector('.bg-white.rounded-xl.shadow-sm.border');
+                    const newSection = document.createElement('div');
+                    newSection.id = 'backup-status-section';
+                    newSection.className = 'mt-6 p-4 bg-blue-50 rounded-lg';
+                    newSection.innerHTML = `
+                        <div class="flex items-center justify-between text-sm mb-2">
+                            <span class="text-blue-700 font-medium">Backup Download</span>
+                            <span class="text-blue-600" id="backup-status-text">${data.backup_status}</span>
+                        </div>
+                        <div class="w-full bg-blue-200 rounded-full h-2">
+                            <div class="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                                 style="width: ${data.backup_progress}%"
+                                 id="backup-progress"></div>
+                        </div>
+                    `;
+                    statusOverview.querySelector('div:last-child').before(newSection);
+                } else {
+                    if (backupProgress) backupProgress.style.width = data.backup_progress + '%';
+                    if (backupText) backupText.textContent = data.backup_status;
+                }
+            }
+
+            // Update overall progress
+            const overallProgress = document.getElementById('overall-progress');
+            if (overallProgress && data.total_domains > 0) {
+                const percent = (data.completed_domains / data.total_domains) * 100;
+                overallProgress.style.width = percent + '%';
+            }
+
+            // Update each domain
+            data.domains.forEach(domain => {
+                const row = document.querySelector(`[data-domain-id="${domain.id}"]`);
+                if (row) {
+                    // Update status text
+                    const statusEl = row.querySelector('.domain-status');
+                    if (statusEl) {
+                        statusEl.textContent = domain.status_display;
+                        if (domain.message) {
+                            statusEl.textContent += ' - ' + domain.message;
+                        }
+                    }
+
+                    // Update progress bar
+                    const progressBar = row.querySelector('.domain-progress');
+                    if (progressBar) {
+                        progressBar.style.width = domain.progress + '%';
+                        if (domain.status === 'completed') {
+                            progressBar.classList.remove('bg-primary-600', 'bg-red-500');
+                            progressBar.classList.add('bg-green-500');
+                        } else if (domain.status === 'failed') {
+                            progressBar.classList.remove('bg-primary-600', 'bg-green-500');
+                            progressBar.classList.add('bg-red-500');
+                        }
+                    }
+
+                    // Update progress text
+                    const progressText = row.querySelector('.domain-progress-text');
+                    if (progressText) {
+                        progressText.textContent = domain.progress + '%';
+                    }
+                }
+            });
+
+            // Reload page if status changed to completed/failed/cancelled
+            if (data.status !== 'running' && data.status !== 'pending') {
+                location.reload();
+            }
+        })
+        .catch(error => console.error('Error fetching status:', error));
+}
+
+// Poll every 3 seconds
+setInterval(updateStatus, 3000);
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    p {
+      margin-bottom: 30px;
+    }
+    progress {
+      width: 100%;
+      height: 30px;
+      margin-bottom: 20px;
+    }
+    .info {
+      font-style: italic;
+      color: #666;
+    }
+  </style>
+                        <main class="content">
+                                <div class="container-fluid p-0">
+
+                                        <h1 class="h3 mb-3"><strong>Update Nginx Ingress WAF configuration</strong> list</h1>
+                                        <div class="row">
+                                                <div class="col-12 col-lg-12 col-xxl-12">
+                                                        <div class="card">
+                                                                <div class="card-body">
+  <div class="container">
+    <h1>Update in Progress</h1>
+    <p>Please be patient. The configuration update can take up to <strong>2 minutes</strong> to apply.</p>
+
+    <!-- The progress bar (0 to 120) -->
+    <progress id="progressBar" value="0" max="120"></progress>
+
+    <p class="info" id="infoText">Estimated time remaining: 120 seconds</p>
+  </div>
+
+  <script>
+    // We'll count down from 120 seconds
+    let timeLeft = 120;
+    const progressBar = document.getElementById('progressBar');
+    const infoText = document.getElementById('infoText');
+
+    // Update the progress bar every second
+    const timer = setInterval(() => {
+      timeLeft--;
+      // Advance the progress bar
+      progressBar.value = 120 - timeLeft; // goes from 0 to 120
+
+      // Update the info text
+      if (timeLeft > 0) {
+        infoText.textContent = `Estimated time remaining: ${timeLeft} seconds`;
+      } else {
+        infoText.textContent = "Reloading...";
+        clearInterval(timer);
+        // Optionally redirect or show some final message after 2 minutes
+        // window.location.href = "/some-other-page";
+      }
+    }, 1000);
+  </script>
+                                                                </div>
+                                                        </div>
+                                                </div>
+                                        </div>
+
+                                </div>
+                        </main>
+{% endblock %}
+

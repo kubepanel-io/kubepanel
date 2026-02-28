@@ -1,0 +1,706 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Domains | KubePanel{% endblock %}
+
+{% block page_title %}Domain Management{% endblock %}
+{% block page_subtitle %}Manage and monitor your hosted domains{% endblock %}
+
+{% block header_search %}
+<div class="relative">
+    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+    </div>
+    <input type="text" 
+           class="pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg w-80 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm" 
+           placeholder="Search domains, owners..."
+           id="domain-search">
+</div>
+{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-4">
+    {% if license.tier and license.tier != 'community' %}
+    <!-- Compact license badge for paid tiers -->
+    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">
+        <svg class="w-3.5 h-3.5 mr-1.5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        {{ license.tier|title }}{% if license.maxDomains != -1 %}: {{ license_usage.current }}/{{ license.maxDomains }}{% endif %}
+    </span>
+    {% endif %}
+
+    {% if license_usage.max != -1 and license_usage.current >= license_usage.max %}
+    <span class="relative group">
+        <span class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm opacity-50 cursor-not-allowed flex items-center space-x-2">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+            <span>Add Domain</span>
+        </span>
+        <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            Domain limit reached ({{ license_usage.current }}/{{ license_usage.max }}). <a href="https://kubepanel.io/pricing" class="underline">Upgrade</a>
+        </span>
+    </span>
+    {% else %}
+    <a href="{% url 'add_domain' %}"
+       class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        <span>Add Domain</span>
+    </a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- License Status Banners -->
+{% if license.gracePeriodEndsAt %}
+<div class="mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center justify-between">
+    <div class="flex items-center">
+        <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+        </div>
+        <div class="ml-3">
+            <p class="text-sm font-medium text-yellow-800">
+                License verification failed. Grace period ends {{ license.gracePeriodEndsAt|slice:":10" }}.
+            </p>
+            <p class="text-sm text-yellow-700">
+                Please check your network connectivity or renew your license.
+            </p>
+        </div>
+    </div>
+    <a href="https://kubepanel.io/pricing" target="_blank" class="text-sm font-medium text-yellow-800 hover:text-yellow-900 underline">
+        Renew License
+    </a>
+</div>
+{% endif %}
+
+{% if license.tier == 'community' %}
+<div class="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
+    <div class="flex items-center">
+        <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+            </svg>
+        </div>
+        <div class="ml-3">
+            <p class="text-sm font-medium text-blue-800">
+                Community Edition: {{ license_usage.current }}/{{ license_usage.max }} domains used
+            </p>
+            <p class="text-sm text-blue-700">
+                Upgrade to Pro for unlimited domains and priority support.
+            </p>
+        </div>
+    </div>
+    <a href="https://kubepanel.io/pricing" target="_blank" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+        Upgrade Now
+    </a>
+</div>
+{% endif %}
+
+<!-- Stats Overview -->
+{% if pkg %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Storage</p>
+                <div class="flex items-baseline">
+                    <p class="text-2xl font-semibold text-gray-900">{% if total_storage_used_gb %}{{ total_storage_used_gb }}{% else %}--{% endif %}</p>
+                    <p class="ml-2 text-sm text-gray-500">/ {{ total_storage }} GB allocated</p>
+                </div>
+                <p class="text-xs text-gray-400">Used / Allocated (max {{ pkg.max_storage_size }} GB)</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">CPU</p>
+                <div class="flex items-baseline">
+                    <p class="text-2xl font-semibold text-gray-900">{{ total_cpu }}</p>
+                    <p class="ml-2 text-sm text-gray-500">/ {{ pkg.max_cpu }} mCPU</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Memory</p>
+                <div class="flex items-baseline">
+                    <p class="text-2xl font-semibold text-gray-900">{{ total_mem }}</p>
+                    <p class="ml-2 text-sm text-gray-500">/ {{ pkg.max_memory }} MB</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Mail Users</p>
+                <div class="flex items-baseline">
+                    <p class="text-2xl font-semibold text-gray-900">{{ total_mail_users }}</p>
+                    {% if pkg.max_mail_users is not None %}
+                    <p class="ml-2 text-sm text-gray-500">/ {{ pkg.max_mail_users }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Domain Aliases</p>
+                <div class="flex items-baseline">
+                    <p class="text-2xl font-semibold text-gray-900">{{ total_domain_aliases }}</p>
+                    {% if pkg.max_domain_aliases is not None %}
+                    <p class="ml-2 text-sm text-gray-500">/ {{ pkg.max_domain_aliases }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Domains</p>
+                <div class="flex items-baseline">
+                    <p class="text-2xl font-semibold text-gray-900">{{ domain_count }}</p>
+                    {% if pkg.max_domains is not None %}
+                    <p class="ml-2 text-sm text-gray-500">/ {{ pkg.max_domains }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Domains Table -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900">Domain Overview</h3>
+            <div class="flex items-center space-x-3">
+                <select class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        id="status-filter">
+                    <option value="all">All Status</option>
+                    <option value="running">Running</option>
+                    <option value="not-running">Not Running</option>
+                    <option value="pending">Pending</option>
+                </select>
+                <button class="text-gray-500 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                    </svg>
+                </button>
+                <button class="text-gray-500 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button class="group flex items-center space-x-1 hover:text-gray-900">
+                        <span>Domain</span>
+                        <svg class="w-4 h-4 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
+                        </svg>
+                    </button>
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Storage</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Backups</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+            {% for domain in domains %}
+            <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 w-10 h-10">
+                            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="ml-4">
+                            <div class="text-sm font-medium text-gray-900"><a href="{% url 'view_domain' domain=domain.domain_name %}">{{ domain.domain_name }}</a></div>
+                            <div class="text-sm text-gray-500">Active domain</div>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-gray-900">{{ domain.owner.username }}</div>
+                    <div class="text-sm text-gray-500">Domain Owner</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    {% if domain.storage_used_gb is not None %}
+                    <div class="w-24">
+                        <div class="text-sm font-medium text-gray-900 mb-1">{{ domain.storage_used_gb }} / {{ domain.storage_size }} GB</div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="h-2 rounded-full {% if domain.storage_percent >= 90 %}bg-red-500{% elif domain.storage_percent >= 75 %}bg-amber-500{% else %}bg-green-500{% endif %}"
+                                 style="width: {{ domain.storage_percent|default:0 }}%"></div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-sm text-gray-400">-- / {{ domain.storage_size }} GB</div>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="relative dropdown">
+                        <button class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                            </svg>
+                            <span>Backup Options</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        <div class="dropdown-menu absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                            <a href="{% url 'volumesnapshots' domain=domain.domain_name %}" 
+                               class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                </svg>
+                                <span>Show Backups</span>
+                            </a>
+                            <a href="{% url 'start_backup' domain=domain.domain_name %}" 
+                               class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                </svg>
+                                <span>Create Backup</span>
+                            </a>
+                            <a href="{% url 'upload_restore' domain_name=domain.domain_name %}" 
+                               class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                                </svg>
+                                <span>Restore from File</span>
+                            </a>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    {% if domain.k8s_status == 'Ready' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                        Ready
+                    </span>
+                    {% elif domain.k8s_status == 'Suspended' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                        <span class="w-1.5 h-1.5 bg-orange-500 rounded-full mr-1.5"></span>
+                        Suspended
+                    </span>
+                    {% elif domain.k8s_status == 'Failed' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-1.5"></span>
+                        Failed
+                    </span>
+                    {% elif domain.k8s_status == 'Provisioning' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5 animate-pulse"></span>
+                        Provisioning
+                    </span>
+                    {% elif domain.k8s_status == 'NotFound' %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        <span class="w-1.5 h-1.5 bg-gray-500 rounded-full mr-1.5"></span>
+                        Not in K8s
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1.5"></span>
+                        {{ domain.k8s_status }}
+                    </span>
+                    {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="relative dropdown">
+                        <button class="text-sm bg-primary-50 hover:bg-primary-100 text-primary-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path>
+                            </svg>
+                            <span>Actions</span>
+                        </button>
+                        <div class="dropdown-menu absolute left-0 mt-2 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                            <a href="{% url 'view_domain' domain=domain.domain_name %}" 
+                               class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                </svg>
+                                <span>View Details</span>
+                            </a>
+                            {% if domain.status != 'Running' %}
+                            <a href="{% url 'startstop_domain' domain=domain.domain_name action='start' %}" 
+                               class="flex items-center space-x-2 px-4 py-2 text-sm text-green-600 hover:bg-green-50">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span>Start</span>
+                            </a>
+                            {% endif %}
+                            {% if domain.status != 'Not running' %}
+                            <a href="{% url 'startstop_domain' domain=domain.domain_name action='stop' %}" 
+                               class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
+                                </svg>
+                                <span>Stop</span>
+                            </a>
+                            {% endif %}
+                            <a href="{% url 'domain_logs' domain=domain.domain_name %}"
+                               class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                <span>View Logs</span>
+                            </a>
+                            <a href="{% url 'domain_dns_records' domain=domain.domain_name %}"
+                               class="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                </svg>
+                                <span>Manage DNS</span>
+                            </a>
+                            <hr class="my-1 border-gray-200">
+                            <a href="{% url 'delete_domain' domain=domain.domain_name %}" 
+                               class="flex items-center space-x-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                               >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                <span>Delete</span>
+                            </a>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="px-6 py-12 text-center">
+                    <div class="flex flex-col items-center">
+                        <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                        </svg>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">No domains yet</h3>
+                        <p class="text-gray-500 mb-4">Get started by adding your first domain</p>
+                        {% if license_usage.max != -1 and license_usage.current >= license_usage.max %}
+                        <span class="btn-primary text-white px-4 py-2 rounded-lg font-medium shadow-sm opacity-50 cursor-not-allowed flex items-center space-x-2">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            <span>Limit Reached</span>
+                        </span>
+                        {% else %}
+                        <a href="{% url 'add_domain' %}"
+                           class="btn-primary text-white px-4 py-2 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                            <span>Add Domain</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Search and filter functionality
+        const searchInput = document.getElementById('domain-search');
+        const statusFilter = document.getElementById('status-filter');
+        const tableRows = document.querySelectorAll('tbody tr');
+
+        // Get status from a row
+        function getRowStatus(row) {
+            const statusBadge = row.querySelector('td:nth-child(5) span');
+            if (!statusBadge) return '';
+            const text = statusBadge.textContent.trim().toLowerCase();
+            return text;
+        }
+
+        // Filter function that handles both search and status filter
+        function filterRows() {
+            const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const selectedStatus = statusFilter ? statusFilter.value : 'all';
+
+            let visibleCount = 0;
+
+            tableRows.forEach(row => {
+                // Skip the "no domains" row
+                if (row.querySelector('td[colspan]')) {
+                    return;
+                }
+
+                const domainName = row.querySelector('td:first-child .font-medium')?.textContent?.toLowerCase() || '';
+                const ownerName = row.querySelector('td:nth-child(2) .text-gray-900')?.textContent?.toLowerCase() || '';
+                const rowStatus = getRowStatus(row);
+
+                // Check search match
+                const matchesSearch = searchTerm === '' ||
+                    domainName.includes(searchTerm) ||
+                    ownerName.includes(searchTerm);
+
+                // Check status filter match
+                let matchesStatus = false;
+                if (selectedStatus === 'all') {
+                    matchesStatus = true;
+                } else if (selectedStatus === 'running') {
+                    matchesStatus = rowStatus === 'ready';
+                } else if (selectedStatus === 'not-running') {
+                    matchesStatus = rowStatus === 'suspended' || rowStatus === 'not in k8s';
+                } else if (selectedStatus === 'pending') {
+                    matchesStatus = rowStatus === 'provisioning' || rowStatus === 'failed' ||
+                                   (rowStatus !== 'ready' && rowStatus !== 'suspended' && rowStatus !== 'not in k8s');
+                }
+
+                // Show/hide row
+                if (matchesSearch && matchesStatus) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            return visibleCount;
+        }
+
+        // Attach event listeners
+        if (searchInput) {
+            searchInput.addEventListener('input', filterRows);
+        }
+
+        if (statusFilter) {
+            statusFilter.addEventListener('change', filterRows);
+        }
+        
+        // Fixed dropdown functionality with both hover and click
+        const dropdowns = document.querySelectorAll('.dropdown');
+        
+        dropdowns.forEach(dropdown => {
+            const button = dropdown.querySelector('button');
+            const menu = dropdown.querySelector('.dropdown-menu');
+            
+            if (button && menu) {
+                // Set initial state
+                menu.style.transform = 'translateY(-5px)';
+                menu.style.opacity = '0';
+                menu.style.visibility = 'hidden';
+                menu.style.transition = 'all 0.2s ease-in-out';
+                
+                let isClickOpen = false;
+                let hoverTimeout;
+                
+                // Show dropdown function
+                function showDropdown() {
+                    // Close all other dropdowns first
+                    dropdowns.forEach(otherDropdown => {
+                        if (otherDropdown !== dropdown) {
+                            const otherMenu = otherDropdown.querySelector('.dropdown-menu');
+                            if (otherMenu) {
+                                otherMenu.style.transform = 'translateY(-5px)';
+                                otherMenu.style.opacity = '0';
+                                otherMenu.style.visibility = 'hidden';
+                                otherDropdown.isClickOpen = false;
+                            }
+                        }
+                    });
+                    
+                    menu.style.transform = 'translateY(0)';
+                    menu.style.opacity = '1';
+                    menu.style.visibility = 'visible';
+                }
+                
+                // Hide dropdown function
+                function hideDropdown() {
+                    if (!isClickOpen) {
+                        menu.style.transform = 'translateY(-5px)';
+                        menu.style.opacity = '0';
+                        menu.style.visibility = 'hidden';
+                    }
+                }
+                
+                // Click handler
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    
+                    if (isClickOpen) {
+                        // Close if already open
+                        menu.style.transform = 'translateY(-5px)';
+                        menu.style.opacity = '0';
+                        menu.style.visibility = 'hidden';
+                        isClickOpen = false;
+                    } else {
+                        // Open and set click state
+                        showDropdown();
+                        isClickOpen = true;
+                    }
+                    
+                    dropdown.isClickOpen = isClickOpen;
+                });
+                
+                // Hover handlers
+                dropdown.addEventListener('mouseenter', function() {
+                    clearTimeout(hoverTimeout);
+                    showDropdown();
+                });
+                
+                dropdown.addEventListener('mouseleave', function() {
+                    hoverTimeout = setTimeout(() => {
+                        hideDropdown();
+                    }, 100);
+                });
+                
+                // Store state on dropdown element
+                dropdown.isClickOpen = isClickOpen;
+            }
+        });
+        
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function() {
+            dropdowns.forEach(dropdown => {
+                const menu = dropdown.querySelector('.dropdown-menu');
+                if (menu) {
+                    menu.style.transform = 'translateY(-5px)';
+                    menu.style.opacity = '0';
+                    menu.style.visibility = 'hidden';
+                    dropdown.isClickOpen = false;
+                }
+            });
+        });
+        
+        // Sorting functionality
+        const sortButtons = document.querySelectorAll('th button');
+        sortButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                console.log(`Sorting by ${this.textContent.trim()}`);
+                // Add visual feedback for sorting
+                sortButtons.forEach(btn => btn.classList.remove('text-primary-600'));
+                this.classList.add('text-primary-600');
+                
+                // Here you could add actual sorting logic
+                // For now, just visual feedback
+            });
+        });
+        
+        // Add confirmation for delete actions
+//        const deleteLinks = document.querySelectorAll('a[href*="delete_domain"]');
+//        deleteLinks.forEach(link => {
+//            link.addEventListener('click', function(e) {
+//                const domainName = this.closest('tr').querySelector('td:first-child .font-medium').textContent;
+//                if (!confirm(`Are you sure you want to delete "${domainName}"? This action cannot be undone.`)) {
+//                    e.preventDefault();
+//                }
+//            });
+//        });
+        
+        // Add loading states for action buttons
+        const actionLinks = document.querySelectorAll('a[href*="startstop_domain"], a[href*="start_backup"]');
+        actionLinks.forEach(link => {
+            link.addEventListener('click', function() {
+                const originalText = this.innerHTML;
+                this.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Processing...';
+                this.style.pointerEvents = 'none';
+                
+                // Reset after a delay (in case the page doesn't redirect)
+                setTimeout(() => {
+                    this.innerHTML = originalText;
+                    this.style.pointerEvents = '';
+                }, 3000);
+            });
+        });
+        
+        // Add hover effects for cards (with margin compensation)
+//        const statCards = document.querySelectorAll('.bg-white.rounded-xl');
+//        statCards.forEach(card => {
+//            // Only apply hover effect to stat cards, not the table card
+//            if (!card.querySelector('table')) {
+//                card.addEventListener('mouseenter', function() {
+//                    this.style.transform = 'translateY(-2px)';
+//                    this.style.marginBottom = '2px'; // Compensate for the upward movement
+//                });
+//                
+//                card.addEventListener('mouseleave', function() {
+//                    this.style.transform = 'translateY(0)';
+//                    this.style.marginBottom = '0px';
+//                });
+//            }
+//        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

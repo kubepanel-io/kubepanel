@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if form.instance.pk %}Edit{% else %}Assign{% endif %} User Profile | KubePanel{% endblock %}
+
+{% block page_title %}{% if form.instance.pk %}Edit User Profile{% else %}Assign User Profile{% endif %}{% endblock %}
+{% block page_subtitle %}{% if form.instance.pk %}Update user package assignment and profile settings{% else %}Assign a package to a user account{% endif %}{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'list_userprofiles' %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Users</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <!-- Current User Info Card (if editing) -->
+    {% if form.instance.pk %}
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div class="flex items-center">
+            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+            </div>
+            <div class="ml-4">
+                <h3 class="text-sm font-medium text-blue-900">Editing User</h3>
+                <p class="text-lg font-semibold text-blue-800">{{ form.instance.user.username }}</p>
+                {% if form.instance.user.email %}
+                <p class="text-sm text-blue-700">{{ form.instance.user.email }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Main Form Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">User Profile Configuration</h3>
+                    <p class="text-sm text-gray-600">{% if form.instance.pk %}Update package assignment{% else %}Assign user to package{% endif %}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="post" novalidate id="profile-form">
+                {% csrf_token %}
+
+                <!-- User Selection -->
+                <div class="mb-6">
+                    <label for="{{ form.user.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                            User Account {% if not form.instance.pk %}<span class="text-red-500">*</span>{% endif %}
+                        </div>
+                    </label>
+                    {% if form.instance.pk %}
+                    <!-- Readonly display for editing -->
+                    <div class="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-600 flex items-center">
+                        <svg class="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                        </svg>
+                        {{ form.instance.user.username }} (locked during edit)
+                    </div>
+                    <input type="hidden" name="{{ form.user.html_name }}" value="{{ form.instance.user.pk }}">
+                    {% else %}
+                    <!-- Dropdown for new assignment -->
+                    <select name="{{ form.user.html_name }}" 
+                            id="{{ form.user.id_for_label }}"
+                            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.user.errors %} border-red-500 focus:ring-red-500{% endif %}">
+                        <option value="">Select a user...</option>
+                        {% for value, label in form.user.field.choices %}
+                            {% if value %}
+                            <option value="{{ value }}"{% if form.user.value|stringformat:"s" == value|stringformat:"s" %} selected{% endif %}>{{ label }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    {% endif %}
+                    <p class="mt-1 text-xs text-gray-500">{% if form.instance.pk %}User account cannot be changed when editing{% else %}Choose the user account to configure{% endif %}</p>
+                    {% if form.user.errors %}
+                        {% for error in form.user.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+
+                <!-- Package Selection -->
+                <div class="mb-6">
+                    <label for="{{ form.package.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                        <div class="flex items-center">
+                            <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                            </svg>
+                            Package Assignment
+                        </div>
+                    </label>
+                    <select name="{{ form.package.html_name }}" 
+                            id="{{ form.package.id_for_label }}"
+                            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm{% if form.package.errors %} border-red-500 focus:ring-red-500{% endif %}">
+                        <option value="">No package assigned</option>
+                        {% for value, label in form.package.field.choices %}
+                            {% if value %}
+                            <option value="{{ value }}"{% if form.package.value|stringformat:"s" == value|stringformat:"s" %} selected{% endif %}>{{ label }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">Optional: Assign a package to apply resource limits and permissions</p>
+                    {% if form.package.errors %}
+                        {% for error in form.package.errors %}
+                            <p class="mt-1 text-sm text-red-600 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+
+                <!-- Package Preview -->
+                <div id="package-preview" class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg hidden">
+                    <div class="flex items-center mb-3">
+                        <svg class="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <h5 class="text-sm font-medium text-green-900">Package Assignment Preview</h5>
+                    </div>
+                    <div id="package-details" class="text-sm text-green-800">
+                        <!-- Package details will be inserted here via JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Current Assignment Info (if editing with package) -->
+                {% if form.instance.pk and form.instance.package %}
+                <div class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div class="flex items-center mb-3">
+                        <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <h5 class="text-sm font-medium text-yellow-900">Current Assignment</h5>
+                    </div>
+                    <div class="text-sm text-yellow-800">
+                        <p><strong>Current Package:</strong> {{ form.instance.package.name }}</p>
+                        <p>The user is currently assigned to this package. Select a different package to change the assignment, or select "No package assigned" to remove the assignment.</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Configuration Summary -->
+                <div class="mb-8 p-4 bg-gray-50 rounded-lg border">
+                    <h4 class="text-sm font-medium text-gray-900 mb-3 flex items-center">
+                        <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                        </svg>
+                        Configuration Summary
+                    </h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <p class="text-gray-600 mb-1">User Account</p>
+                            <p class="font-medium text-gray-900" id="summary-user">
+                                {% if form.instance.pk %}{{ form.instance.user.username }}{% else %}Not selected{% endif %}
+                            </p>
+                        </div>
+                        <div>
+                            <p class="text-gray-600 mb-1">Package Assignment</p>
+                            <p class="font-medium text-gray-900" id="summary-package">
+                                {% if form.instance.pk and form.instance.package %}{{ form.instance.package.name }}{% else %}No package assigned{% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'list_userprofiles' %}" 
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit" 
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <span>{% if form.instance.pk %}Update Profile{% else %}Assign Package{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get form elements
+        const userSelect = document.getElementById('{{ form.user.id_for_label }}');
+        const packageSelect = document.getElementById('{{ form.package.id_for_label }}');
+        const packagePreview = document.getElementById('package-preview');
+        const packageDetails = document.getElementById('package-details');
+        const summaryUser = document.getElementById('summary-user');
+        const summaryPackage = document.getElementById('summary-package');
+        
+        // Update configuration summary
+        function updateSummary() {
+            // Update user summary
+            if (userSelect && userSelect.selectedIndex > 0) {
+                summaryUser.textContent = userSelect.options[userSelect.selectedIndex].text;
+            } else if (!userSelect) {
+                // Keep existing value for edit mode
+                summaryUser.textContent = summaryUser.textContent;
+            } else {
+                summaryUser.textContent = 'Not selected';
+            }
+            
+            // Update package summary
+            if (packageSelect.selectedIndex > 0) {
+                summaryPackage.textContent = packageSelect.options[packageSelect.selectedIndex].text;
+            } else {
+                summaryPackage.textContent = 'No package assigned';
+            }
+        }
+        
+        // Package preview functionality
+        function updatePackagePreview() {
+            if (packageSelect.value) {
+                // In a real implementation, you'd fetch package details via AJAX
+                const packageName = packageSelect.options[packageSelect.selectedIndex].text;
+                packageDetails.innerHTML = `
+                    <p><strong>Package:</strong> ${packageName}</p>
+                    <p><strong>Effect:</strong> Resource limits and permissions will be applied to the user account.</p>
+                    <p><strong>Status:</strong> Package assignment will be active immediately after saving.</p>
+                `;
+                packagePreview.classList.remove('hidden');
+            } else {
+                packagePreview.classList.add('hidden');
+            }
+            updateSummary();
+        }
+        
+        // Event listeners
+        if (userSelect) {
+            userSelect.addEventListener('change', updateSummary);
+        }
+        
+        packageSelect.addEventListener('change', updatePackagePreview);
+        
+        // Initial updates
+        updatePackagePreview();
+        updateSummary();
+        
+        // Form submission with loading state
+        const form = document.getElementById('profile-form');
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        form.addEventListener('submit', function(e) {
+            // Basic validation for new assignments
+            {% if not form.instance.pk %}
+            if (userSelect && !userSelect.value) {
+                e.preventDefault();
+                alert('Please select a user account');
+                userSelect.focus();
+                return;
+            }
+            {% endif %}
+            
+            // Show loading state
+            const originalContent = submitButton.innerHTML;
+            submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Saving...';
+            submitButton.disabled = true;
+            
+            // Reset after a delay in case of validation errors
+            setTimeout(() => {
+                submitButton.innerHTML = originalContent;
+                submitButton.disabled = false;
+            }, 3000);
+        });
+        
+        // Focus enhancement
+        const inputs = document.querySelectorAll('select');
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                if (!this.classList.contains('border-red-500')) {
+                    this.classList.add('ring-2', 'ring-primary-500');
+                }
+            });
+            
+            input.addEventListener('blur', function() {
+                this.classList.remove('ring-2', 'ring-primary-500');
+            });
+        });
+        
+        // Auto-focus first available field
+        {% if not form.instance.pk %}
+        if (userSelect) {
+            userSelect.focus();
+        }
+        {% else %}
+        packageSelect.focus();
+        {% endif %}
+    });
+</script>
+{% endblock %}
+{% endblock %}

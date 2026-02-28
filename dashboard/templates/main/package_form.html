@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if form.instance.pk %}Edit Package{% else %}Create Package{% endif %} | KubePanel{% endblock %}
+
+{% block page_title %}{% if form.instance.pk %}Edit Package{% else %}Create Package{% endif %}{% endblock %}
+{% block page_subtitle %}{% if form.instance.pk %}Modify package settings and resource limits{% else %}Define resource limits and package configuration{% endif %}{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'list_packages' %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Packages</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Package Configuration</h3>
+                    <p class="text-sm text-gray-600">{% if form.instance.pk %}Update package settings and resource allocations{% else %}Set up resource limits and hosting parameters{% endif %}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form method="POST" novalidate id="package-form">
+                {% csrf_token %}
+
+                <!-- Package Information Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                        </svg>
+                        Package Information
+                    </h4>
+
+                    <div class="grid grid-cols-1 gap-6">
+                        <!-- Package Name -->
+                        <div>
+                            <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                                    </svg>
+                                    Package Name <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.name }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Unique name for this hosting package</p>
+                            {% if form.name.errors %}
+                                {% for error in form.name.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resource Limits Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                        </svg>
+                        Resource Limits
+                    </h4>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Storage -->
+                        <div>
+                            <label for="{{ form.max_storage_size.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                    </svg>
+                                    Max Storage (GB) <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.max_storage_size }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Disk space allocation in gigabytes</p>
+                            {% if form.max_storage_size.errors %}
+                                {% for error in form.max_storage_size.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+
+                        <!-- CPU -->
+                        <div>
+                            <label for="{{ form.max_cpu.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                                    </svg>
+                                    Max CPU (mCPU) <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.max_cpu }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Processing power in milliCPU units</p>
+                            {% if form.max_cpu.errors %}
+                                {% for error in form.max_cpu.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+
+                        <!-- Memory -->
+                        <div>
+                            <label for="{{ form.max_memory.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                    </svg>
+                                    Max Memory (MB) <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.max_memory }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">RAM allocation in megabytes</p>
+                            {% if form.max_memory.errors %}
+                                {% for error in form.max_memory.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mail Configuration Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
+                        </svg>
+                        Mail Configuration
+                    </h4>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Mail Users -->
+                        <div>
+                            <label for="{{ form.max_mail_users.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+                                    </svg>
+                                    Max Mail Users
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.max_mail_users }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Number of email accounts (leave blank for unlimited)</p>
+                            {% if form.max_mail_users.errors %}
+                                {% for error in form.max_mail_users.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+
+                        <!-- Mail Aliases -->
+                        <div>
+                            <label for="{{ form.max_mail_aliases.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Max Mail Aliases
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.max_mail_aliases }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Number of email aliases (leave blank for unlimited)</p>
+                            {% if form.max_mail_aliases.errors %}
+                                {% for error in form.max_mail_aliases.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+
+                        <!-- Domain Aliases -->
+                        <div>
+                            <label for="{{ form.max_domain_aliases.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                    </svg>
+                                    Max Domain Aliases
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.max_domain_aliases }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Number of domain aliases (leave blank for unlimited)</p>
+                            {% if form.max_domain_aliases.errors %}
+                                {% for error in form.max_domain_aliases.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+
+                        <!-- Max Domains -->
+                        <div>
+                            <label for="{{ form.max_domains.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                    </svg>
+                                    Max Domains
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.max_domains }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Maximum domains per user (leave blank for unlimited)</p>
+                            {% if form.max_domains.errors %}
+                                {% for error in form.max_domains.errors %}
+                                <p class="mt-1 text-sm text-red-600 flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    {{ error }}
+                                </p>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Package Preview -->
+                <div id="package-preview" class="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div class="flex items-center mb-3">
+                        <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <h5 class="text-sm font-medium text-blue-900">Package Summary</h5>
+                    </div>
+                    <div id="package-details" class="text-sm text-blue-800 grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <!-- Package summary will be inserted here via JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'list_packages' %}"
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>{% if form.instance.pk %}Update Package{% else %}Create Package{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Style Django form fields
+    const formFields = document.querySelectorAll('.form-field-wrapper input, .form-field-wrapper select');
+    formFields.forEach(field => {
+        field.className = 'w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm';
+    });
+
+    // Package preview functionality
+    const form = document.getElementById('package-form');
+    const previewContainer = document.getElementById('package-details');
+    
+    function updatePackagePreview() {
+        const name = document.getElementById('{{ form.name.id_for_label }}').value || 'New Package';
+        const storage = document.getElementById('{{ form.max_storage_size.id_for_label }}').value || '—';
+        const cpu = document.getElementById('{{ form.max_cpu.id_for_label }}').value || '—';
+        const memory = document.getElementById('{{ form.max_memory.id_for_label }}').value || '—';
+        const mailUsers = document.getElementById('{{ form.max_mail_users.id_for_label }}').value || 'Unlimited';
+        const mailAliases = document.getElementById('{{ form.max_mail_aliases.id_for_label }}').value || 'Unlimited';
+        const domainAliases = document.getElementById('{{ form.max_domain_aliases.id_for_label }}').value || 'Unlimited';
+        const maxDomains = document.getElementById('{{ form.max_domains.id_for_label }}').value || 'Unlimited';
+
+        previewContainer.innerHTML = `
+            <div><strong>Name:</strong> ${name}</div>
+            <div><strong>Storage:</strong> ${storage} GB</div>
+            <div><strong>CPU:</strong> ${cpu} mCPU</div>
+            <div><strong>Memory:</strong> ${memory} MB</div>
+            <div><strong>Mail Users:</strong> ${mailUsers}</div>
+            <div><strong>Mail Aliases:</strong> ${mailAliases}</div>
+            <div><strong>Domain Aliases:</strong> ${domainAliases}</div>
+            <div><strong>Max Domains:</strong> ${maxDomains}</div>
+        `;
+    }
+
+    // Update preview on input changes
+    const inputFields = form.querySelectorAll('input, select');
+    inputFields.forEach(field => {
+        field.addEventListener('input', updatePackagePreview);
+        field.addEventListener('change', updatePackagePreview);
+    });
+
+    // Initial preview update
+    updatePackagePreview();
+
+    // Form submission with loading state
+    const submitButton = form.querySelector('button[type="submit"]');
+    form.addEventListener('submit', function(e) {
+        // Basic client-side validation
+        const name = document.getElementById('{{ form.name.id_for_label }}').value.trim();
+        const storage = document.getElementById('{{ form.max_storage_size.id_for_label }}').value;
+        const cpu = document.getElementById('{{ form.max_cpu.id_for_label }}').value;
+        const memory = document.getElementById('{{ form.max_memory.id_for_label }}').value;
+
+        if (!name || !storage || !cpu || !memory) {
+            e.preventDefault();
+            alert('Please fill in all required fields (Name, Storage, CPU, Memory).');
+            return;
+        }
+
+        // Show loading state
+        const originalContent = submitButton.innerHTML;
+        submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Saving...';
+        submitButton.disabled = true;
+
+        // Reset after delay in case of validation errors
+        setTimeout(() => {
+            submitButton.innerHTML = originalContent;
+            submitButton.disabled = false;
+        }, 3000);
+    });
+
+    // Focus enhancement
+    inputFields.forEach(input => {
+        input.addEventListener('focus', function() {
+            if (!this.classList.contains('border-red-500')) {
+                this.classList.add('ring-2', 'ring-primary-500');
+            }
+        });
+
+        input.addEventListener('blur', function() {
+            this.classList.remove('ring-2', 'ring-primary-500');
+        });
+    });
+
+    // Auto-focus name field for new packages
+    {% if not form.instance.pk %}
+    document.getElementById('{{ form.name.id_for_label }}').focus();
+    {% endif %}
+});
+</script>
+{% endblock %}
+{% endblock %}

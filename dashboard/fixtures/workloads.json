@@ -1,0 +1,46 @@
+[
+  {
+    "model": "dashboard.workloadtype",
+    "pk": 1,
+    "fields": {
+      "name": "PHP",
+      "slug": "php",
+      "description": "PHP with PHP-FPM for web applications",
+      "icon": "",
+      "app_port": 9001,
+      "proxy_mode": "fastcgi",
+      "default_cpu_limit": 500,
+      "default_memory_limit": 256,
+      "display_order": 0,
+      "is_active": true
+    }
+  },
+  {
+    "model": "dashboard.workloadversion",
+    "pk": 1,
+    "fields": {
+      "workload_type": 1,
+      "version": "8.1",
+      "image_url": "kubepanel/php81:v1.0",
+      "default_cpu_limit": null,
+      "default_memory_limit": null,
+      "display_order": 2,
+      "is_active": true,
+      "is_default": false
+    }
+  },
+  {
+    "model": "dashboard.workloadversion",
+    "pk": 2,
+    "fields": {
+      "workload_type": 1,
+      "version": "8.3",
+      "image_url": "kubepanel/php83:v1.0",
+      "default_cpu_limit": null,
+      "default_memory_limit": null,
+      "display_order": 1,
+      "is_active": true,
+      "is_default": true
+    }
+  }
+]

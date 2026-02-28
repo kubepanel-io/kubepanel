@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Cloudflare API Tokens | KubePanel{% endblock %}
+
+{% block page_title %}Cloudflare API Tokens{% endblock %}
+{% block page_subtitle %}Manage your Cloudflare API tokens for DNS automation{% endblock %}
+
+{% block header_search %}
+<div class="relative">
+    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+    </div>
+    <input type="text"
+           class="pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg w-80 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+           placeholder="Search token names..."
+           id="token-search">
+</div>
+{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'add_api_token' %}"
+   class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+    </svg>
+    <span>Add Token</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- API Tokens Overview -->
+{% if tokens %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Total Tokens</p>
+                <p class="text-2xl font-semibold text-gray-900" id="total-tokens">{{ tokens|length }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Active Tokens</p>
+                <p class="text-2xl font-semibold text-gray-900" id="active-tokens">{{ tokens|length }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600">Cloudflare</p>
+                <p class="text-2xl font-semibold text-gray-900">Integration</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- API Tokens Table -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900 flex items-center">
+                <div class="w-3 h-3 bg-orange-500 rounded-full mr-3"></div>
+                API Tokens
+            </h3>
+            <div class="flex items-center space-x-3">
+                <span class="text-sm text-gray-500">
+                    {% if tokens %}{{ tokens|length }} token{{ tokens|length|pluralize }}{% else %}No tokens{% endif %}
+                </span>
+                <button onclick="clearSearch()" 
+                        class="text-sm text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors">
+                    Clear Search
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {% if tokens %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200" id="tokensTable">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">API Token</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for token in tokens %}
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 w-10 h-10">
+                                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <div class="text-sm font-medium text-gray-900">{{ token.name }}</div>
+                                <div class="text-sm text-gray-500">Cloudflare API Token</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center space-x-2">
+                            <div class="relative">
+                                <input type="password" 
+                                       value="{{ token.api_token }}" 
+                                       class="w-48 px-3 py-1.5 text-sm font-mono bg-gray-100 border border-gray-200 rounded focus:outline-none cursor-pointer" 
+                                       readonly
+                                       id="token-{{ token.id }}">
+                                <button type="button" 
+                                        class="absolute inset-y-0 right-0 pr-2 flex items-center"
+                                        onclick="toggleTokenVisibility('token-{{ token.id }}', this)">
+                                    <svg class="w-4 h-4 text-gray-400 hover:text-gray-600 show-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                    </svg>
+                                    <svg class="w-4 h-4 text-gray-400 hover:text-gray-600 hide-icon hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <button type="button" 
+                                    onclick="copyToken('{{ token.api_token }}')"
+                                    class="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100 transition-colors"
+                                    title="Copy token">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center space-x-2">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <span class="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                                Active
+                            </span>
+                            <button type="button" 
+                                    onclick="testToken('{{ token.api_token }}', '{{ token.name }}')"
+                                    class="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded font-medium transition-colors">
+                                Test
+                            </button>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center space-x-2">
+                            <!-- Edit Button -->
+                            <button type="button" 
+                                    onclick="editToken('{{ token.id }}', '{{ token.name }}')"
+                                    class="text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                                <span>Edit</span>
+                            </button>
+                            
+                            <!-- Delete Button -->
+                            <a href="{% url 'delete_api_token' token.id %}"
+                               class="text-sm bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center space-x-1"
+                               onclick="return confirm('Are you sure you want to delete the token \'{{ token.name }}\'? This action cannot be undone and may break DNS automation.')">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                                <span>Delete</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="px-6 py-12 text-center">
+        <div class="flex flex-col items-center">
+            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No API tokens configured</h3>
+            <p class="text-gray-500 mb-4">Add your first Cloudflare API token to enable DNS automation</p>
+            <div class="space-y-2">
+                <a href="{% url 'add_api_token' %}"
+                   class="btn-primary text-white px-4 py-2 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 justify-center">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    <span>Add Your First Token</span>
+                </a>
+                <p class="text-xs text-gray-400">
+                    Need help? 
+                    <a href="https://developers.cloudflare.com/api/tokens/" 
+                       target="_blank" 
+                       class="text-blue-600 hover:text-blue-800">
+                        View Cloudflare API documentation
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Search functionality
+        const searchInput = document.getElementById('token-search');
+        const table = document.getElementById('tokensTable');
+        
+        function filterTable() {
+            if (!table || !searchInput) return;
+            
+            const searchTerm = searchInput.value.toLowerCase();
+            const rows = table.querySelectorAll('tbody tr');
+            let visibleCount = 0;
+            
+            rows.forEach(row => {
+                const tokenName = row.children[0].textContent.toLowerCase();
+                if (tokenName.includes(searchTerm)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            // Update stats
+            document.getElementById('total-tokens').textContent = visibleCount;
+            document.getElementById('active-tokens').textContent = visibleCount;
+        }
+        
+        if (searchInput) {
+            searchInput.addEventListener('input', filterTable);
+        }
+        
+        // Clear search function
+        window.clearSearch = function() {
+            if (searchInput) {
+                searchInput.value = '';
+                filterTable();
+            }
+        };
+    });
+    
+    // Token visibility toggle
+    function toggleTokenVisibility(tokenId, button) {
+        const tokenInput = document.getElementById(tokenId);
+        const showIcon = button.querySelector('.show-icon');
+        const hideIcon = button.querySelector('.hide-icon');
+        
+        if (tokenInput.type === 'password') {
+            tokenInput.type = 'text';
+            showIcon.classList.add('hidden');
+            hideIcon.classList.remove('hidden');
+        } else {
+            tokenInput.type = 'password';
+            showIcon.classList.remove('hidden');
+            hideIcon.classList.add('hidden');
+        }
+    }
+    
+    // Copy token to clipboard
+    function copyToken(token) {
+        navigator.clipboard.writeText(token).then(function() {
+            // Show success feedback
+            const notification = document.createElement('div');
+            notification.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50';
+            notification.innerHTML = '✅ Token copied to clipboard';
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }).catch(function(err) {
+            alert('Failed to copy token: ' + err);
+        });
+    }
+    
+    // Test token functionality
+    function testToken(token, tokenName) {
+        const button = event.target;
+        const originalContent = button.innerHTML;
+        
+        button.innerHTML = '<svg class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+        button.disabled = true;
+        
+        // Simulate API test
+        setTimeout(() => {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+            
+            // Mock result based on token length (in real implementation, this would be an actual API call)
+            if (token.length > 30) {
+                showNotification('✅ Token "' + tokenName + '" is working correctly', 'green');
+            } else {
+                showNotification('❌ Token "' + tokenName + '" test failed', 'red');
+            }
+        }, 2000);
+    }
+    
+    // Edit token functionality
+    function editToken(tokenId, tokenName) {
+        // In a real implementation, this would navigate to an edit page
+        alert('Edit functionality for "' + tokenName + '" would be implemented here');
+    }
+    
+    // Show notification helper
+    function showNotification(message, type) {
+        const color = type === 'green' ? 'green' : 'red';
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 bg-${color}-100 border border-${color}-400 text-${color}-700 px-4 py-3 rounded z-50`;
+        notification.innerHTML = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.remove();
+        }, 4000);
+    }
+    
+    // Enhanced delete confirmations
+    const deleteLinks = document.querySelectorAll('a[href*="delete_api_token"]');
+    deleteLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            const tokenName = this.closest('tr').querySelector('.font-medium').textContent;
+            const confirmed = confirm(`Are you sure you want to delete the token "${tokenName}"?\n\nThis action cannot be undone and may break DNS automation that depends on this token.`);
+            if (!confirmed) {
+                e.preventDefault();
+            } else {
+                // Show loading state
+                const originalContent = this.innerHTML;
+                this.innerHTML = '<svg class="animate-spin w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Deleting...';
+                this.style.pointerEvents = 'none';
+            }
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

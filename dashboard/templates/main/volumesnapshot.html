@@ -1,0 +1,576 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Backups | KubePanel{% endblock %}
+
+{% block page_title %}Backups{% endblock %}
+{% block page_subtitle %}{{ domain }} - Manage and restore your domain backups{% endblock %}
+
+{% block header_search %}
+<div class="relative">
+    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
+    </div>
+    <input type="text"
+           class="pl-12 pr-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl w-96 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 text-white placeholder-white/60 text-sm"
+           placeholder="Search backups..."
+           id="backup-search">
+</div>
+{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <a href="{% url 'upload_restore' domain %}"
+       class="bg-white/20 hover:bg-white/30 text-white px-4 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 border border-white/30">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+        </svg>
+        <span>Upload Restore</span>
+    </a>
+    <a href="{% url 'start_backup' domain %}"
+       class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        <span>Create Backup</span>
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <!-- Total Backups -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Total Backups</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ backups|length }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Latest Backup -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Latest Backup</p>
+                    <p class="text-lg font-semibold text-gray-900">{% if backups %}{{ backups.0.created_at|slice:":10" }}{% else %}None{% endif %}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Domain Info -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Domain</p>
+                    <p class="text-2xl font-semibold text-gray-900">{{ domain }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Retention -->
+        <div class="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Retention</p>
+                    <p class="text-2xl font-semibold text-gray-900">7 Days</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backups Table -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900">Backup History</h3>
+                <div class="flex items-center space-x-3">
+                    <select class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            id="status-filter">
+                        <option value="all">All Status</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Running">Running</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Failed">Failed</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Backup Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Compressed database dump size">DB Size</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for backup in backups %}
+                <tr class="hover:bg-gray-50 transition-colors" data-backup-id="{{ forloop.counter }}" data-status="{{ backup.status.phase }}">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 w-10 h-10">
+                                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <div class="text-sm font-medium text-gray-900 font-mono">{{ backup.name }}</div>
+                                <div class="text-sm text-gray-500">{% if backup.status.volume_snapshot_name %}Snapshot: {{ backup.status.volume_snapshot_name }}{% else %}Filesystem + Database{% endif %}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if backup.backup_type == 'scheduled' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Scheduled
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            Manual
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if backup.status.phase == 'Completed' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Completed
+                        </span>
+                        {% elif backup.status.phase == 'Running' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <svg class="animate-spin w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            Running
+                        </span>
+                        {% elif backup.status.phase == 'Pending' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path>
+                            </svg>
+                            Pending
+                        </span>
+                        {% elif backup.status.phase == 'Failed' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title="{{ backup.status.message }}">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            </svg>
+                            Failed
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            {{ backup.status.phase }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {{ backup.size_display }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-900">{{ backup.created_at|slice:":10" }}</div>
+                        <div class="text-sm text-gray-500">{{ backup.created_at|slice:"11:19" }}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div class="flex items-center space-x-2">
+                            {% if backup.status.phase == 'Completed' %}
+                            <a href="{% url 'restore_backup' domain backup.name %}"
+                               class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+                                Restore
+                            </a>
+                            <!-- Download Dropdown -->
+                            <div class="relative inline-block download-dropdown">
+                                <button onclick="toggleDownloadMenu(this)"
+                                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors inline-flex items-center">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                    </svg>
+                                    Download
+                                    <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </button>
+                                <div class="download-menu hidden absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                                    <a href="{% url 'download_backup_archive' backup.name %}"
+                                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                                        </svg>
+                                        Full Archive (.tar.gz)
+                                    </a>
+                                    {% if backup.status.database_backup_path %}
+                                    <a href="{% url 'download_backup_sql' backup.name %}"
+                                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                        </svg>
+                                        SQL Only (.sql.gz)
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            <button class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                    onclick="toggleDetails({{ forloop.counter }})">
+                                Details
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                <!-- Details Row -->
+                <tr id="details-{{ forloop.counter }}" style="display:none;">
+                    <td colspan="6" class="px-6 py-4 bg-gray-50">
+                        <div class="bg-white rounded-lg p-4 border border-gray-200">
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Backup Details</h4>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <span class="text-gray-500">Volume Snapshot:</span>
+                                    <span class="ml-2 font-mono">{{ backup.status.volume_snapshot_name|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Database Backup:</span>
+                                    <span class="ml-2 font-mono">{{ backup.status.database_backup_path|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Started:</span>
+                                    <span class="ml-2">{{ backup.status.started_at|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Completed:</span>
+                                    <span class="ml-2">{{ backup.status.completed_at|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Expires:</span>
+                                    <span class="ml-2">{{ backup.status.retention_expires_at|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Message:</span>
+                                    <span class="ml-2">{{ backup.status.message|default:"-" }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="px-6 py-12 text-center">
+                        <div class="flex flex-col items-center">
+                            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                            </svg>
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">No backups yet</h3>
+                            <p class="text-gray-500 mb-4">Get started by creating your first backup</p>
+                            <a href="{% url 'start_backup' domain %}"
+                               class="btn-primary text-white px-4 py-2 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                </svg>
+                                <span>Create Backup</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Restores Table -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900">Restore History</h3>
+                <div class="flex items-center space-x-3">
+                    <select class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            id="restore-status-filter">
+                        <option value="all">All Status</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Running">Running</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Failed">Failed</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Restore Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">From Backup</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Started</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completed</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for restore in restores %}
+                <tr class="hover:bg-gray-50 transition-colors" data-restore-id="{{ forloop.counter }}" data-restore-status="{{ restore.status.phase }}">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 w-10 h-10">
+                                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <div class="text-sm font-medium text-gray-900 font-mono">{{ restore.name }}</div>
+                                <div class="text-sm text-gray-500">{{ restore.domain_name }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-mono text-gray-900">{{ restore.backup_name }}</div>
+                        <div class="text-sm text-gray-500">{{ restore.volume_snapshot_name }}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if restore.status.phase == 'Completed' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Completed
+                        </span>
+                        {% elif restore.status.phase == 'Running' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <svg class="animate-spin w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            Running
+                        </span>
+                        {% elif restore.status.phase == 'Pending' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path>
+                            </svg>
+                            Pending
+                        </span>
+                        {% elif restore.status.phase == 'Failed' %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title="{{ restore.status.message }}">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            </svg>
+                            Failed
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            {{ restore.status.phase }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if restore.status.started_at %}
+                        <div class="text-sm text-gray-900">{{ restore.status.started_at|slice:":10" }}</div>
+                        <div class="text-sm text-gray-500">{{ restore.status.started_at|slice:"11:19" }}</div>
+                        {% else %}
+                        <span class="text-sm text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if restore.status.completed_at %}
+                        <div class="text-sm text-gray-900">{{ restore.status.completed_at|slice:":10" }}</div>
+                        <div class="text-sm text-gray-500">{{ restore.status.completed_at|slice:"11:19" }}</div>
+                        {% else %}
+                        <span class="text-sm text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                onclick="toggleRestoreDetails({{ forloop.counter }})">
+                            Details
+                        </button>
+                    </td>
+                </tr>
+                <!-- Details Row -->
+                <tr id="restore-details-{{ forloop.counter }}" style="display:none;">
+                    <td colspan="6" class="px-6 py-4 bg-gray-50">
+                        <div class="bg-white rounded-lg p-4 border border-gray-200">
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Restore Details</h4>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <span class="text-gray-500">Volume Snapshot:</span>
+                                    <span class="ml-2 font-mono">{{ restore.volume_snapshot_name|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Database Backup:</span>
+                                    <span class="ml-2 font-mono">{{ restore.database_backup_path|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Message:</span>
+                                    <span class="ml-2">{{ restore.status.message|default:"-" }}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500">Created:</span>
+                                    <span class="ml-2">{{ restore.created_at|default:"-" }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="px-6 py-12 text-center">
+                        <div class="flex flex-col items-center">
+                            <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">No restores yet</h3>
+                            <p class="text-gray-500">Restore history will appear here when you restore from a backup</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Backup search functionality
+    const searchInput = document.getElementById('backup-search');
+    const statusFilter = document.getElementById('status-filter');
+    const backupRows = document.querySelectorAll('tbody tr[data-backup-id]');
+
+    function filterBackups() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const selectedStatus = statusFilter.value;
+
+        backupRows.forEach(row => {
+            const backupName = row.querySelector('.font-mono')?.textContent?.toLowerCase() || '';
+            const rowStatus = row.dataset.status;
+
+            const matchesSearch = backupName.includes(searchTerm);
+            const matchesStatus = selectedStatus === 'all' || rowStatus === selectedStatus;
+
+            if (matchesSearch && matchesStatus) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+                // Hide corresponding details row
+                const detailsRow = document.getElementById(`details-${row.dataset.backupId}`);
+                if (detailsRow) {
+                    detailsRow.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', filterBackups);
+    }
+
+    if (statusFilter) {
+        statusFilter.addEventListener('change', filterBackups);
+    }
+
+    // Restore filter functionality
+    const restoreStatusFilter = document.getElementById('restore-status-filter');
+    const restoreRows = document.querySelectorAll('tbody tr[data-restore-id]');
+
+    function filterRestores() {
+        const selectedStatus = restoreStatusFilter.value;
+
+        restoreRows.forEach(row => {
+            const rowStatus = row.dataset.restoreStatus;
+            const matchesStatus = selectedStatus === 'all' || rowStatus === selectedStatus;
+
+            if (matchesStatus) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+                // Hide corresponding details row
+                const detailsRow = document.getElementById(`restore-details-${row.dataset.restoreId}`);
+                if (detailsRow) {
+                    detailsRow.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    if (restoreStatusFilter) {
+        restoreStatusFilter.addEventListener('change', filterRestores);
+    }
+});
+
+// Details toggle function for backups
+function toggleDetails(id) {
+    var row = document.getElementById('details-' + id);
+    row.style.display = (row.style.display === 'none') ? 'table-row' : 'none';
+}
+
+// Download menu toggle function
+function toggleDownloadMenu(button) {
+    // Close all other open menus first
+    document.querySelectorAll('.download-menu').forEach(menu => {
+        if (menu !== button.nextElementSibling) {
+            menu.classList.add('hidden');
+        }
+    });
+    // Toggle this menu
+    const menu = button.nextElementSibling;
+    menu.classList.toggle('hidden');
+}
+
+// Close download menus when clicking outside
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('.download-dropdown')) {
+        document.querySelectorAll('.download-menu').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    }
+});
+
+// Details toggle function for restores
+function toggleRestoreDetails(id) {
+    var row = document.getElementById('restore-details-' + id);
+    row.style.display = (row.style.display === 'none') ? 'table-row' : 'none';
+}
+</script>
+{% endblock %}

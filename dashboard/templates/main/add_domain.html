@@ -1,0 +1,464 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Add Domain | KubePanel{% endblock %}
+
+{% block page_title %}Add Domain{% endblock %}
+{% block page_subtitle %}Create a new domain with hosting configuration{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'kpmain' %}"
+   class="text-gray-600 hover:text-gray-800 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center space-x-2 border border-gray-300 hover:border-gray-400">
+    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Dashboard</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+            <div class="flex items-center">
+                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                    </svg>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">New Domain Setup</h3>
+                    <p class="text-sm text-gray-600">Configure your new domain with hosting resources and options</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-6">
+            <form action="{% url 'add_domain' %}" method="POST" novalidate id="add-domain-form">
+                {% csrf_token %}
+
+                <!-- Domain Information Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                        </svg>
+                        Domain Information
+                    </h4>
+
+                    <div class="grid grid-cols-1 gap-6">
+                        <!-- Domain Name -->
+                        <div>
+                            <label for="domain_name" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                    </svg>
+                                    Domain Name <span class="text-red-500">*</span>
+                                </div>
+                            </label>
+                            <input type="text"
+                                   id="domain_name"
+                                   name="domain_name"
+                                   class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm font-mono"
+                                   placeholder="e.g. mysite.com"
+                                   required>
+                            <p class="mt-1 text-xs text-gray-500">Enter your domain name without www (e.g., example.com)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resource Configuration Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                        </svg>
+                        Resource Configuration
+                    </h4>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Storage Size -->
+                        <div>
+                            <label for="storage_size" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                    </svg>
+                                    Storage Size (GB)
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.storage_size }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Disk space allocation for your domain</p>
+                        </div>
+
+                        <!-- CPU Limit -->
+                        <div>
+                            <label for="cpu_limit" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                                    </svg>
+                                    CPU Limit (mCPU)
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.cpu_limit }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Processing power allocation</p>
+                        </div>
+
+                        <!-- Memory Limit -->
+                        <div>
+                            <label for="mem_limit" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                    </svg>
+                                    Memory Limit (MB)
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.mem_limit }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">RAM allocation for your domain</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Workload Configuration Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                        </svg>
+                        Workload Configuration
+                    </h4>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Workload Version -->
+                        <div>
+                            <label for="id_workload_version" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                                    </svg>
+                                    Workload Version
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.workload_version }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Select the runtime environment and version for your application</p>
+                        </div>
+
+                        <!-- Timezone -->
+                        <div>
+                            <label for="id_timezone" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Timezone
+                                </div>
+                            </label>
+                            <div class="form-field-wrapper">
+                                {{ form.timezone }}
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Timezone for all containers (app, nginx, sftp)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Options Section -->
+                <div class="mb-8">
+                    <h4 class="text-md font-medium text-gray-900 mb-4 flex items-center">
+                        <svg class="w-5 h-5 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"></path>
+                        </svg>
+                        Advanced Options
+                    </h4>
+
+                    <div class="space-y-6">
+                        <!-- WordPress Preinstall -->
+                        <div class="flex items-start">
+                            <div class="flex items-center h-5">
+                                <input type="checkbox"
+                                       id="wp_check"
+                                       name="wordpress_preinstall"
+                                       value="1"
+                                       class="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 focus:ring-2">
+                            </div>
+                            <div class="ml-3 text-sm">
+                                <label for="wp_check" class="font-medium text-gray-700 flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                    </svg>
+                                    Preinstall WordPress
+                                </label>
+                                <p class="text-gray-500">Automatically install WordPress with the domain setup</p>
+                            </div>
+                        </div>
+
+                        <!-- Auto DNS -->
+                        <div class="flex items-start">
+                            <div class="flex items-center h-5">
+                                <input type="checkbox"
+                                       id="auto_dns"
+                                       name="auto_dns"
+                                       value="1"
+                                       class="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 focus:ring-2">
+                            </div>
+                            <div class="ml-3 text-sm">
+                                <label for="auto_dns" class="font-medium text-gray-700 flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Add DNS records automatically to CloudFlare
+                                </label>
+                                <p class="text-gray-500">Automatically configure DNS records for this domain</p>
+                            </div>
+                        </div>
+
+                        <!-- API Token Selection (hidden by default) -->
+                        <div id="api_token_select" class="ml-7 hidden">
+                            <label for="api_token" class="block text-sm font-medium text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                                    </svg>
+                                    CloudFlare API Token
+                                </div>
+                            </label>
+                            <select id="api_token"
+                                    name="api_token"
+                                    class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm">
+                                <option value="">Select an API token...</option>
+                                {% for token in api_tokens %}
+                                <option value="{{ token.pk }}">{{ token.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Choose the CloudFlare API token to use for DNS management</p>
+                        </div>
+
+                        <!-- Enable SSH Access -->
+                        <div class="flex items-start">
+                            <div class="flex items-center h-5">
+                                <input type="checkbox"
+                                       id="ssh_access"
+                                       name="ssh_access"
+                                       value="1"
+                                       class="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 focus:ring-2">
+                            </div>
+                            <div class="ml-3 text-sm">
+                                <label for="ssh_access" class="font-medium text-gray-700 flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    Enable SSH Access
+                                </label>
+                                <p class="text-gray-500">Allow SSH terminal access and Git operations (instead of SFTP-only)</p>
+                            </div>
+                        </div>
+
+                        <!-- Enable Redis -->
+                        <div class="flex items-start">
+                            <div class="flex items-center h-5">
+                                <input type="checkbox"
+                                       id="redis_enabled"
+                                       name="redis_enabled"
+                                       value="1"
+                                       class="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 focus:ring-2">
+                            </div>
+                            <div class="ml-3 text-sm">
+                                <label for="redis_enabled" class="font-medium text-gray-700 flex items-center">
+                                    <svg class="w-4 h-4 text-gray-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                                    </svg>
+                                    Enable Redis
+                                </label>
+                                <p class="text-gray-500">Add Redis cache container for improved application performance</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuration Preview -->
+                <div id="config-preview" class="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg hidden">
+                    <div class="flex items-center mb-3">
+                        <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <h5 class="text-sm font-medium text-blue-900">Domain Configuration Summary</h5>
+                    </div>
+                    <div id="config-details" class="text-sm text-blue-800 space-y-1">
+                        <!-- Configuration details will be inserted here via JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <a href="{% url 'kpmain' %}"
+                       class="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 font-medium transition-colors flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        <span>Cancel</span>
+                    </a>
+                    <button type="submit"
+                            class="btn-primary text-white px-6 py-2.5 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                        </svg>
+                        <span>Add Domain</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto DNS checkbox handling
+        const autoDnsCheckbox = document.getElementById('auto_dns');
+        const apiTokenSelect = document.getElementById('api_token_select');
+        const configPreview = document.getElementById('config-preview');
+        const configDetails = document.getElementById('config-details');
+
+        function toggleApiTokenSelect() {
+            if (autoDnsCheckbox.checked) {
+                apiTokenSelect.classList.remove('hidden');
+            } else {
+                apiTokenSelect.classList.add('hidden');
+            }
+            updateConfigPreview();
+        }
+
+        // Initialize on page load
+        toggleApiTokenSelect();
+
+        // Toggle whenever the checkbox changes
+        autoDnsCheckbox.addEventListener('change', toggleApiTokenSelect);
+
+        // Configuration preview
+        function updateConfigPreview() {
+            const domainName = document.getElementById('domain_name').value;
+            const wpPreinstall = document.getElementById('wp_check').checked;
+            const autoDns = autoDnsCheckbox.checked;
+            const sshAccess = document.getElementById('ssh_access').checked;
+            const redisEnabled = document.getElementById('redis_enabled').checked;
+
+            if (domainName.trim()) {
+                let configHtml = `<p><strong>Domain:</strong> ${domainName}</p>`;
+
+                if (wpPreinstall) {
+                    configHtml += `<p><strong>WordPress:</strong> Will be preinstalled</p>`;
+                }
+
+                if (autoDns) {
+                    configHtml += `<p><strong>DNS:</strong> CloudFlare records will be created automatically</p>`;
+                    configHtml += `<p><strong>Records:</strong> A, MX, SPF, DKIM, and DMARC records</p>`;
+                }
+
+                if (sshAccess) {
+                    configHtml += `<p><strong>SSH Access:</strong> SSH terminal and Git enabled</p>`;
+                }
+
+                if (redisEnabled) {
+                    configHtml += `<p><strong>Redis:</strong> Cache container enabled</p>`;
+                }
+
+                configDetails.innerHTML = configHtml;
+                configPreview.classList.remove('hidden');
+            } else {
+                configPreview.classList.add('hidden');
+            }
+        }
+
+        // Update preview on input changes
+        document.getElementById('domain_name').addEventListener('input', updateConfigPreview);
+        document.getElementById('wp_check').addEventListener('change', updateConfigPreview);
+        document.getElementById('ssh_access').addEventListener('change', updateConfigPreview);
+        document.getElementById('redis_enabled').addEventListener('change', updateConfigPreview);
+
+        // Form submission with loading state
+        const form = document.getElementById('add-domain-form');
+        const submitButton = form.querySelector('button[type="submit"]');
+
+        form.addEventListener('submit', function(e) {
+            // Basic client-side validation
+            const domainName = document.getElementById('domain_name').value.trim();
+
+            if (!domainName) {
+                e.preventDefault();
+                alert('Domain name is required');
+                return;
+            }
+
+            // Validate domain name format
+            const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])*$/;
+            if (!domainRegex.test(domainName)) {
+                e.preventDefault();
+                alert('Please enter a valid domain name (e.g., example.com)');
+                return;
+            }
+
+            // Check if auto DNS is enabled but no API token selected
+            if (autoDnsCheckbox.checked) {
+                const apiToken = document.getElementById('api_token').value;
+                if (!apiToken) {
+                    e.preventDefault();
+                    alert('Please select a CloudFlare API token for automatic DNS setup');
+                    return;
+                }
+            }
+
+            // Show loading state
+            const originalContent = submitButton.innerHTML;
+            submitButton.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Creating Domain...';
+            submitButton.disabled = true;
+
+            // Reset after a delay in case of validation errors
+            setTimeout(() => {
+                submitButton.innerHTML = originalContent;
+                submitButton.disabled = false;
+            }, 5000);
+        });
+
+        // Focus enhancement
+        const inputs = document.querySelectorAll('input, select');
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                if (!this.classList.contains('border-red-500')) {
+                    this.classList.add('ring-2', 'ring-primary-500');
+                }
+            });
+
+            input.addEventListener('blur', function() {
+                this.classList.remove('ring-2', 'ring-primary-500');
+            });
+        });
+
+        // Auto-focus domain name field
+        document.getElementById('domain_name').focus();
+
+        // Add proper styling to Django form fields
+        const djangoFormFields = document.querySelectorAll('.form-field-wrapper select, .form-field-wrapper input');
+        djangoFormFields.forEach(field => {
+            // Apply consistent styling to match the domain name field
+            field.className = 'w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm';
+        });
+
+        // Also style any other form fields that might not be wrapped
+        const allOtherFields = document.querySelectorAll('select:not(.styled), input[type="number"]:not(.styled)');
+        allOtherFields.forEach(field => {
+            field.className = 'w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm styled';
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

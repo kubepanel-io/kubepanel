@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recovery Code - KubePanel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #dbeafe 100%);
+        }
+        .input-focus:focus {
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            border-color: #3b82f6;
+        }
+        .login-animation {
+            animation: slideUp 0.6s ease-out;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .card-shadow {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen flex items-center justify-center p-4 relative">
+    <div class="w-full max-w-md relative z-10">
+        <!-- Header -->
+        <div class="text-center mb-8 login-animation">
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl shadow-lg mb-6 border border-amber-200">
+                <i class="fas fa-key text-3xl text-amber-600"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-slate-700 mb-2">Recovery Code</h1>
+            <p class="text-slate-500 font-medium">Hi {{ username }}, use a backup code to sign in</p>
+        </div>
+
+        <!-- Recovery Card -->
+        <div class="bg-white rounded-2xl card-shadow overflow-hidden border border-gray-200 login-animation">
+            <!-- Card Header -->
+            <div class="bg-amber-50 px-8 py-6 border-b border-amber-200">
+                <div class="flex items-center justify-center">
+                    <i class="fas fa-exclamation-triangle text-amber-600 text-lg mr-3"></i>
+                    <h2 class="text-lg font-semibold text-slate-700">Use Recovery Code</h2>
+                </div>
+            </div>
+
+            <!-- Form -->
+            <div class="px-8 py-8">
+                {% if messages %}
+                <div class="mb-6">
+                    {% for message in messages %}
+                    <div class="{% if message.tags == 'error' %}bg-red-50 border-red-200 text-red-700{% elif message.tags == 'warning' %}bg-amber-50 border-amber-200 text-amber-700{% else %}bg-blue-50 border-blue-200 text-blue-700{% endif %} px-4 py-3 rounded-lg border mb-2">
+                        <i class="fas {% if message.tags == 'error' %}fa-exclamation-circle{% elif message.tags == 'warning' %}fa-exclamation-triangle{% else %}fa-info-circle{% endif %} mr-2"></i>
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                    <p class="text-sm text-amber-800">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        Recovery codes are single-use. After using this code, it will be permanently invalidated.
+                    </p>
+                </div>
+
+                <form method="post" id="recoveryForm">
+                    {% csrf_token %}
+
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-slate-700 mb-2 text-center">
+                            Enter one of your recovery codes
+                        </label>
+                        <div class="relative">
+                            {{ form.code }}
+                        </div>
+                        {% if form.code.errors %}
+                        <div class="text-red-500 text-sm mt-2 text-center">
+                            {% for error in form.code.errors %}{{ error }}{% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="w-full bg-amber-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition-all duration-200 shadow-md hover:shadow-lg"
+                        id="submitBtn"
+                    >
+                        <span id="submitText">
+                            <i class="fas fa-unlock mr-2"></i>Use Recovery Code
+                        </span>
+                        <span id="loadingText" class="hidden">
+                            <i class="fas fa-spinner fa-spin mr-2"></i>Verifying...
+                        </span>
+                    </button>
+                </form>
+
+                <div class="mt-6 text-center">
+                    <a href="{% url 'verify_2fa' %}" class="text-sm text-blue-600 hover:text-blue-500 transition-colors">
+                        <i class="fas fa-mobile-alt mr-1"></i>Use authenticator app instead
+                    </a>
+                </div>
+            </div>
+
+            <!-- Footer Info -->
+            <div class="bg-gray-50 px-8 py-4 border-t border-gray-200">
+                <div class="flex items-center text-sm text-slate-600">
+                    <i class="fas fa-clock text-slate-400 mr-2"></i>
+                    <span>Session timeout: 5 minutes</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Back to Login -->
+        <div class="text-center mt-6 login-animation">
+            <a href="{% url 'kplogin' %}" class="text-slate-500 hover:text-slate-700 transition-colors">
+                <i class="fas fa-arrow-left mr-2"></i>Back to login
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Auto-focus on code input
+        document.addEventListener('DOMContentLoaded', function() {
+            const codeInput = document.querySelector('input[name="code"]');
+            if (codeInput) {
+                codeInput.focus();
+            }
+        });
+
+        // Form submission loading state
+        document.getElementById('recoveryForm').addEventListener('submit', function() {
+            const submitBtn = document.getElementById('submitBtn');
+            const submitText = document.getElementById('submitText');
+            const loadingText = document.getElementById('loadingText');
+            submitBtn.disabled = true;
+            submitText.classList.add('hidden');
+            loadingText.classList.remove('hidden');
+            submitBtn.classList.add('opacity-75');
+        });
+    </script>
+</body>
+</html>

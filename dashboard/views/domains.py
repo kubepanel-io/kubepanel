@@ -1,0 +1,2409 @@
+"""
+Domain management views (CRUD, backup, credentials, etc.)
+"""
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import HttpResponse
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import PasswordChangeForm
+from django.contrib.auth import update_session_auth_hash
+from django.contrib import messages
+from django.db.models import Sum
+from django.db import transaction
+from django.core.exceptions import ValidationError
+from django.contrib.contenttypes.models import ContentType
+from kubernetes import client, config
+
+import os
+import logging
+import base64
+import re
+import pymysql
+
+from dashboard.models import Domain, DomainAlias, DomainStorageUsage, MailUser, CloudflareAPIToken, ClusterIP, LogEntry, WorkloadVersion, SystemSettings
+from dashboard.forms import DomainForm, DomainConfigForm, DomainAddForm, DomainAliasForm
+from dashboard.services.dkim import generate_dkim_keypair
+from dashboard.k8s import (
+    DomainSpec,
+    create_domain as k8s_create_domain,
+    delete_domain as k8s_delete_domain,
+    get_domain as k8s_get_domain,
+    get_domain_config as k8s_get_domain_config,
+    patch_domain as k8s_patch_domain,
+    suspend_domain as k8s_suspend_domain,
+    unsuspend_domain as k8s_unsuspend_domain,
+    get_sftp_password,
+    get_database_password,
+    get_secret_value,
+    get_tls_certificate_info,
+    update_sftp_password as k8s_update_sftp_password,
+    update_database_password as k8s_update_database_password,
+    create_dkim_secret,
+    K8sClientError,
+    K8sConflictError,
+    K8sNotFoundError,
+    list_backups,
+    create_backup as k8s_create_backup,
+    get_backup,
+    create_restore,
+    list_restores,
+    # DNSZone operations
+    create_dnszone,
+    delete_dnszone,
+    dnszone_exists,
+    get_dnszone,
+)
+
+logger = logging.getLogger("django")
+
+
+def _sanitize_k8s_name(name: str) -> str:
+    """Convert a domain name to a valid Kubernetes resource name."""
+    sanitized = re.sub(r'[^a-z0-9-]', '-', name.lower())
+    sanitized = re.sub(r'-+', '-', sanitized)
+    return sanitized.strip('-')
+
+
+def _build_dns_records(domain_name: str, cluster_ips: list, dkim_selector: str = None, dkim_dns_record: str = None) -> list:
+    """
+    Build standard DNS records for a domain.
+
+    Creates A, MX, SPF, DMARC, and optionally DKIM records.
+
+    Args:
+        domain_name: The domain name (e.g., 'example.com')
+        cluster_ips: List of cluster IP addresses
+        dkim_selector: DKIM selector (e.g., 'default')
+        dkim_dns_record: DKIM public key DNS record value
+
+    Returns:
+        List of DNS record dicts
+    """
+    dns_records = []
+
+    # A records for root and www
+    for ip in cluster_ips:
+        dns_records.append({
+            'type': 'A',
+            'name': '@',
+            'content': ip,
+            'ttl': 1,
+            'proxied': False,
+        })
+        dns_records.append({
+            'type': 'A',
+            'name': 'www',
+            'content': ip,
+            'ttl': 1,
+            'proxied': False,
+        })
+
+    # MX records
+    for i, ip in enumerate(cluster_ips):
+        mx_hostname = f'mx{i}'
+        # A record for mail server
+        dns_records.append({
+            'type': 'A',
+            'name': mx_hostname,
+            'content': ip,
+            'ttl': 1,
+            'proxied': False,
+        })
+        # MX record pointing to mx hostname
+        dns_records.append({
+            'type': 'MX',
+            'name': '@',
+            'content': f'{mx_hostname}.{domain_name}',
+            'ttl': 1,
+            'priority': i * 10,
+        })
+
+    # SPF record
+    spf_ips = ' '.join(f'ip4:{ip}' for ip in cluster_ips)
+    dns_records.append({
+        'type': 'TXT',
+        'name': '@',
+        'content': f'v=spf1 {spf_ips} -all',
+        'ttl': 1,
+    })
+
+    # DMARC record
+    dns_records.append({
+        'type': 'TXT',
+        'name': '_dmarc',
+        'content': 'v=DMARC1; p=none;',
+        'ttl': 1,
+    })
+
+    # DKIM record
+    if dkim_selector and dkim_dns_record:
+        dns_records.append({
+            'type': 'TXT',
+            'name': f'{dkim_selector}._domainkey',
+            'content': dkim_dns_record,
+            'ttl': 1,
+        })
+
+    return dns_records
+
+
+@login_required(login_url="/dashboard/")
+def kpmain(request):
+    """Main dashboard view"""
+    if request.user.is_superuser:
+        domains = list(Domain.objects.all())
+    else:
+        domains = list(Domain.objects.filter(owner=request.user))
+
+    # Fetch all K8s Domain CRs in one API call and build lookup by domain name
+    try:
+        from dashboard.k8s import list_domains as k8s_list_domains
+        k8s_domains = {d.domain_name: d for d in k8s_list_domains()}
+    except Exception as e:
+        logger.warning(f"Failed to fetch K8s domains: {e}")
+        k8s_domains = {}
+
+    # Fetch latest storage metrics for all domains
+    from dashboard.models import DomainMetric
+    storage_metrics = {}
+    try:
+        # Get the latest 5min metric for each domain
+        from django.db.models import Max
+        latest_timestamps = DomainMetric.objects.filter(
+            domain__in=domains,
+            period='5min'
+        ).values('domain').annotate(latest=Max('timestamp'))
+
+        for item in latest_timestamps:
+            metric = DomainMetric.objects.filter(
+                domain_id=item['domain'],
+                period='5min',
+                timestamp=item['latest']
+            ).first()
+            if metric:
+                storage_metrics[item['domain']] = {
+                    'storage_bytes': metric.storage_bytes or 0,
+                    'storage_gb': metric.storage_gb,
+                    'storage_limit_gb': metric.storage_limit_gb,
+                    'storage_percent': metric.storage_percent,
+                }
+    except Exception as e:
+        logger.warning(f"Failed to fetch storage metrics: {e}")
+
+    # Annotate each Django domain with K8s status and storage
+    for domain in domains:
+        k8s_domain = k8s_domains.get(domain.domain_name)
+        if k8s_domain and k8s_domain.status:
+            domain.k8s_status = k8s_domain.status.phase or 'Unknown'
+        else:
+            domain.k8s_status = 'NotFound'
+
+        # Add storage info
+        storage = storage_metrics.get(domain.pk)
+        if storage:
+            domain.storage_used_gb = storage['storage_gb']
+            domain.storage_percent = storage['storage_percent']
+        else:
+            domain.storage_used_gb = None
+            domain.storage_percent = None
+
+    pkg = getattr(request.user.profile, 'package', None)
+    totals = Domain.objects.filter(
+        pk__in=[d.pk for d in domains]
+    ).aggregate(
+        total_storage=Sum('storage_size'),
+        total_cpu=Sum('cpu_limit'),
+        total_mem=Sum('mem_limit'),
+    )
+    total_storage = totals['total_storage'] or 0
+    total_cpu = totals['total_cpu'] or 0
+    total_mem = totals['total_mem'] or 0
+    total_mail_users = MailUser.objects.filter(domain__owner=request.user).count()
+    total_domain_aliases = sum(d.aliases.count() for d in domains)
+
+    # Calculate total actual storage used
+    total_storage_used_gb = sum(
+        d.storage_used_gb for d in domains if d.storage_used_gb is not None
+    )
+
+    # Get license status for display
+    license_status = {}
+    license_usage = {}
+    try:
+        from dashboard.licensing.service import LicenseService
+        license_status = LicenseService.get_license_status()
+        license_usage = LicenseService.get_domain_usage()
+    except ImportError:
+        # Licensing module not available
+        license_status = {'tier': 'community', 'valid': True}
+        license_usage = {'current': len(domains), 'max': 5, 'percentage': 0}
+    except Exception as e:
+        logger.warning(f"Failed to get license status: {e}")
+        license_status = {'tier': 'unknown', 'valid': True, 'message': 'License check unavailable'}
+        license_usage = {'current': len(domains), 'max': -1, 'percentage': 0}
+
+    return render(request, 'main/domain.html', {
+        'domains': domains,
+        'pkg': pkg,
+        'total_storage': total_storage,
+        'total_storage_used_gb': round(total_storage_used_gb, 2),
+        'total_cpu': total_cpu,
+        'total_mem': total_mem,
+        'total_mail_users': total_mail_users,
+        'total_domain_aliases': total_domain_aliases,
+        'domain_count': len(domains),
+        'license': license_status,
+        'license_usage': license_usage,
+    })
+
+
+@login_required(login_url="/dashboard/")
+def add_domain(request):
+    """
+    Add a new domain.
+    Uses atomic transaction to ensure consistency.
+    """
+    # Early license check before processing
+    try:
+        from dashboard.licensing.service import LicenseService
+        can_create, license_message = LicenseService.can_create_domain()
+        if not can_create:
+            messages.error(request, license_message)
+            return redirect('kpmain')
+    except ImportError:
+        pass  # Licensing module not available
+    except Exception as e:
+        logger.error(f"License check failed in add_domain view: {e}")
+        messages.error(request, f"Unable to verify license: {e}")
+        return redirect('kpmain')
+
+    if request.method == 'POST':
+        try:
+            # Extract form data
+            domain_name = request.POST.get("domain_name", "").strip()[:253]
+            mem_limit = int(request.POST.get("mem_limit", 256))
+            cpu_limit = int(request.POST.get("cpu_limit", 500))
+            storage_size = int(request.POST.get("storage_size", 5))
+            workload_version_id = request.POST.get("workload_version", "")
+
+            if not domain_name:
+                messages.error(request, "Domain name is required.")
+                return redirect('add_domain')
+
+            try:
+                workload_version = WorkloadVersion.objects.select_related('workload_type').get(pk=int(workload_version_id))
+            except (WorkloadVersion.DoesNotExist, ValueError):
+                messages.error(request, "Invalid workload version selected.")
+                return redirect('add_domain')
+
+            if Domain.objects.filter(domain_name=domain_name).exists():
+                messages.error(request, f"Domain '{domain_name}' already exists.")
+                return redirect('add_domain')
+
+            wp_preinstall = request.POST.get("wordpress_preinstall") == "1"
+            auto_dns = request.POST.get("auto_dns") == "1"
+            api_token_id = request.POST.get("api_token", "") if auto_dns else None
+            timezone = request.POST.get("timezone", "UTC")
+            ssh_access = request.POST.get("ssh_access") == "1"
+            redis_enabled = request.POST.get("redis_enabled") == "1"
+
+            # Generate DKIM keypair
+            dkim_private_key, dkim_public_key, dkim_dns_record = generate_dkim_keypair()
+            dkim_secret_name = f"dkim-{_sanitize_k8s_name(domain_name)}"
+            dkim_selector = "default"
+
+            # Build Domain CR spec
+            workload_type = workload_version.workload_type
+            domain_spec = DomainSpec(
+                domain_name=domain_name,
+                workload_type=workload_type.slug,
+                workload_version=workload_version.version,
+                workload_image=workload_version.image_url,
+                workload_port=workload_type.app_port,
+                proxy_mode=workload_type.proxy_mode,
+                storage=f"{storage_size}Gi",
+                cpu_limit=f"{cpu_limit}m",
+                memory_limit=f"{mem_limit}Mi",
+            )
+            domain_spec.title = domain_name
+            domain_spec.wordpress_preinstall = wp_preinstall
+            domain_spec.email_enabled = True
+            domain_spec.timezone = timezone
+            domain_spec.sftp_type = "sshgit" if ssh_access else "standard"
+            domain_spec.redis_enabled = redis_enabled
+            domain_spec.dkim_selector = dkim_selector
+            domain_spec.dkim_secret_ref = {
+                "name": dkim_secret_name,
+                "namespace": "kubepanel"
+            }
+
+            # Set up DNS config if auto_dns is enabled
+            # DNS is now managed via separate DNSZone CR, not via Domain CR
+            cf_token = None
+            cf_credential_secret_name = None
+            if auto_dns and api_token_id:
+                try:
+                    cf_token = CloudflareAPIToken.objects.get(
+                        pk=int(api_token_id),
+                        user=request.user
+                    )
+                    # Create credential secret name based on token
+                    cf_credential_secret_name = f"cf-token-{cf_token.pk}"
+                except (CloudflareAPIToken.DoesNotExist, ValueError):
+                    logger.warning(f"API token {api_token_id} not found for DNS setup")
+                    cf_token = None
+
+            # Build Django model (don't save yet)
+            domain_model = Domain(
+                owner=request.user,
+                domain_name=domain_name,
+                title=domain_name,
+                workload_version=workload_version,
+                storage_size=storage_size,
+                cpu_limit=cpu_limit,
+                mem_limit=mem_limit,
+            )
+
+            try:
+                domain_model.full_clean()
+            except ValidationError as e:
+                for field, errors in e.message_dict.items():
+                    for error in errors:
+                        messages.error(request, f"{field}: {error}")
+                return redirect('add_domain')
+
+            # Atomic operation: Create DKIM secret, Domain CR, Django model, and DNSZone CR
+            k8s_domain = None
+            dkim_secret_created = False
+            cf_secret_created = False
+            dns_enabled = False
+            try:
+                with transaction.atomic():
+                    # 1. Create DKIM secret in kubepanel namespace
+                    try:
+                        create_dkim_secret(
+                            name=dkim_secret_name,
+                            namespace="kubepanel",
+                            private_key=dkim_private_key,
+                            public_key=dkim_public_key,
+                            dns_record=dkim_dns_record,
+                            selector=dkim_selector
+                        )
+                        dkim_secret_created = True
+                        logger.info(f"Created DKIM secret '{dkim_secret_name}' for '{domain_name}'")
+                    except K8sClientError as e:
+                        logger.error(f"Failed to create DKIM secret: {e}")
+                        raise ValueError(f"Failed to create DKIM secret: {str(e)}")
+
+                    # 2. Create Cloudflare credential secret if DNS is enabled
+                    if cf_token and cf_credential_secret_name:
+                        try:
+                            from kubernetes.client import V1Secret, V1ObjectMeta
+                            from kubernetes.client.rest import ApiException as K8sApiException
+                            from dashboard.k8s.client import get_core_api
+
+                            core_api = get_core_api()
+                            cf_secret = V1Secret(
+                                api_version="v1",
+                                kind="Secret",
+                                metadata=V1ObjectMeta(
+                                    name=cf_credential_secret_name,
+                                    namespace="kubepanel",
+                                    labels={
+                                        "app.kubernetes.io/managed-by": "kubepanel",
+                                        "kubepanel.io/type": "cloudflare-credential",
+                                    }
+                                ),
+                                type="Opaque",
+                                string_data={
+                                    "api_token": cf_token.api_token,
+                                }
+                            )
+                            try:
+                                core_api.create_namespaced_secret(namespace="kubepanel", body=cf_secret)
+                                cf_secret_created = True
+                                logger.info(f"Created Cloudflare credential secret '{cf_credential_secret_name}'")
+                            except K8sApiException as e:
+                                if e.status == 409:
+                                    # Secret already exists, update it
+                                    core_api.replace_namespaced_secret(
+                                        name=cf_credential_secret_name,
+                                        namespace="kubepanel",
+                                        body=cf_secret
+                                    )
+                                    cf_secret_created = True
+                                    logger.info(f"Updated Cloudflare credential secret '{cf_credential_secret_name}'")
+                                else:
+                                    logger.error(f"K8s API error creating CF credential secret: {e}")
+                                    raise
+                        except Exception as e:
+                            logger.error(f"Failed to create CF credential secret: {e}")
+                            # Don't fail the domain creation, just disable DNS entirely
+                            cf_token = None
+                            cf_credential_secret_name = None
+
+                    # 3. Save Django model
+                    domain_model.save()
+
+                    # Log the spec being created for debugging
+                    spec_dict = domain_spec.to_dict()
+                    logger.info(f"Creating Domain CR for '{domain_name}' with spec: dns={spec_dict.get('dns')}, email={spec_dict.get('email')}")
+
+                    # 4. Create Domain CR
+                    try:
+                        k8s_domain = k8s_create_domain(
+                            spec=domain_spec,
+                            owner=request.user.username,
+                        )
+                        logger.info(f"Created Domain CR '{k8s_domain.name}' for '{domain_name}'")
+                    except K8sConflictError:
+                        raise ValueError(f"Domain '{domain_name}' already exists in cluster.")
+                    except K8sClientError as e:
+                        logger.error(f"Failed to create Domain CR: {e}")
+                        raise ValueError(f"Failed to create domain in cluster: {str(e)}")
+
+                    # 5. Create DNSZone CR if DNS is enabled
+                    if cf_token and cf_credential_secret_name:
+                        try:
+                            # Get cluster IPs for A records
+                            cluster_ips = list(ClusterIP.objects.values_list('ip_address', flat=True))
+
+                            # Build DNS records using helper function
+                            dns_records = _build_dns_records(
+                                domain_name=domain_name,
+                                cluster_ips=cluster_ips,
+                                dkim_selector=dkim_selector,
+                                dkim_dns_record=dkim_dns_record,
+                            )
+
+                            # Create DNSZone CR
+                            create_dnszone(
+                                zone_name=domain_name,
+                                credential_secret_ref={
+                                    'name': cf_credential_secret_name,
+                                    'namespace': 'kubepanel',
+                                },
+                                records=dns_records,
+                            )
+                            dns_enabled = True
+                            logger.info(f"Created DNSZone CR for '{domain_name}' with {len(dns_records)} records")
+                        except K8sClientError as e:
+                            logger.error(f"Failed to create DNSZone CR: {e}")
+                            # Don't fail domain creation, just log the error
+                            messages.warning(request, f"Domain created but DNS setup failed: {e}")
+
+                    LogEntry.objects.create(
+                        content_object=domain_model,
+                        actor=f"user:{request.user.username}",
+                        user=request.user,
+                        level="INFO",
+                        message=f"Created domain {domain_name}",
+                        data={
+                            "domain_id": domain_model.pk,
+                            "dns_enabled": dns_enabled,
+                        }
+                    )
+
+            except ValueError as e:
+                messages.error(request, str(e))
+                return redirect('add_domain')
+            except Exception as e:
+                # Cleanup on failure
+                if k8s_domain:
+                    try:
+                        k8s_delete_domain(domain_name)
+                        logger.info(f"Rolled back Domain CR '{domain_name}'")
+                    except K8sClientError:
+                        logger.error(f"Failed to rollback Domain CR '{domain_name}'")
+
+                logger.exception(f"Error creating domain: {e}")
+                messages.error(request, f"Failed to create domain: {str(e)}")
+                return redirect('add_domain')
+
+            # Success message
+            if dns_enabled:
+                messages.success(
+                    request,
+                    f"Domain '{domain_name}' created. DNS records will be configured automatically."
+                )
+            else:
+                messages.success(request, f"Domain '{domain_name}' created successfully.")
+
+            return redirect('domain_logs', domain=domain_name)
+
+        except Exception as e:
+            logger.exception(f"Unexpected error in add_domain: {e}")
+            messages.error(request, f"An unexpected error occurred: {str(e)}")
+            return redirect('add_domain')
+
+    else:
+        tokens = CloudflareAPIToken.objects.filter(user=request.user)
+        form = DomainAddForm()
+        return render(request, "main/add_domain.html", {
+            "form": form,
+            "api_tokens": tokens,
+        })
+
+
+@login_required(login_url="/dashboard/")
+def view_domain(request, domain):
+    """
+    View domain details with credentials fetched from Kubernetes.
+
+    Uses two forms:
+    - DomainForm: Django-backed fields (cpu_limit, mem_limit, workload_version)
+    - DomainConfigForm: CR-backed config (app/nginx settings from K8s)
+    """
+    try:
+        if request.user.is_superuser:
+            domain_model = Domain.objects.get(domain_name=domain)
+        else:
+            domain_model = Domain.objects.get(owner=request.user, domain_name=domain)
+        form = DomainForm(instance=domain_model)
+    except Domain.DoesNotExist:
+        return HttpResponse("Permission denied.")
+
+    k8s_credentials = {
+        'sftp_port': None,
+        'sftp_username': 'webuser',
+        'sftp_password': None,
+        'sftp_privkey': None,
+        'database_name': None,
+        'database_username': None,
+        'database_password': None,
+        'dkim_pubkey': None,
+        'dkim_dns_record': None,
+        'phase': 'Unknown',
+        'error': None,
+        # DNS status
+        'dns_enabled': False,
+        'dns_phase': None,
+        'dns_zone': {},
+        'dns_records': [],
+        'dns_record_count': 0,
+        'dns_message': '',
+    }
+
+    # Get config from CR (single source of truth for infrastructure config)
+    config_initial = {}
+    try:
+        config_initial = k8s_get_domain_config(domain)
+    except K8sNotFoundError:
+        logger.warning(f"Domain CR not found for {domain}, using defaults")
+    except K8sClientError as e:
+        logger.warning(f"Failed to get domain config for {domain}: {e}")
+
+    config_form = DomainConfigForm(initial=config_initial)
+
+    try:
+        k8s_domain = k8s_get_domain(domain)
+        if k8s_domain:
+            status = k8s_domain.status
+            k8s_credentials['phase'] = status.phase or 'Unknown'
+            k8s_credentials['sftp_port'] = status.sftp_port
+            k8s_credentials['sftp_username'] = status.sftp_username or 'webuser'
+
+            try:
+                k8s_credentials['sftp_password'] = get_sftp_password(status)
+            except Exception as e:
+                logger.warning(f"Failed to get SFTP password for {domain}: {e}")
+
+            try:
+                k8s_credentials['sftp_privkey'] = get_secret_value(
+                    name='sftp-credentials',
+                    namespace=domain_model.namespace,
+                    key='ssh-privatekey'
+                )
+            except Exception as e:
+                logger.warning(f"Failed to get SFTP private key for {domain}: {e}")
+
+            k8s_credentials['database_name'] = status.database_name
+            k8s_credentials['database_username'] = status.database_username
+
+            try:
+                k8s_credentials['database_password'] = get_database_password(status)
+            except Exception as e:
+                logger.warning(f"Failed to get database password for {domain}: {e}")
+
+            k8s_credentials['dkim_pubkey'] = status.dkim_public_key
+            k8s_credentials['dkim_dns_record'] = status.dkim_dns_record
+
+            # Get DNS status from DNSZone CR (separate from Domain CR)
+            try:
+                dnszone = get_dnszone(domain)
+                k8s_credentials['dns_enabled'] = True
+                k8s_credentials['dns_phase'] = dnszone.status.phase
+                k8s_credentials['dns_zone'] = {'id': dnszone.status.zone_id, 'name': dnszone.zone_name}
+                k8s_credentials['dns_records'] = dnszone.records  # From spec (source of truth)
+                k8s_credentials['dns_record_count'] = len(dnszone.records)
+                k8s_credentials['dns_message'] = dnszone.status.message
+            except K8sNotFoundError:
+                # No DNSZone CR means DNS is not enabled for this domain
+                k8s_credentials['dns_enabled'] = False
+            except K8sClientError as e:
+                logger.warning(f"Failed to get DNSZone for {domain}: {e}")
+                k8s_credentials['dns_enabled'] = False
+
+    except K8sNotFoundError:
+        k8s_credentials['error'] = 'Domain not found in Kubernetes cluster'
+        k8s_credentials['phase'] = 'NotFound'
+    except K8sClientError as e:
+        k8s_credentials['error'] = f'Failed to fetch domain from Kubernetes: {e}'
+        k8s_credentials['phase'] = 'Error'
+    except Exception as e:
+        logger.exception(f"Unexpected error fetching K8s domain {domain}: {e}")
+        k8s_credentials['error'] = 'Unexpected error fetching domain status'
+        k8s_credentials['phase'] = 'Error'
+
+    # Get latest storage metrics from DomainMetric
+    storage_info = {
+        'storage_bytes': 0,
+        'storage_gb': 0,
+        'storage_limit_gb': domain_model.storage_size,
+        'storage_percent': 0,
+        'storage_available_gb': domain_model.storage_size,
+        'has_data': False,
+        'last_updated': None,
+    }
+
+    try:
+        from dashboard.models import DomainMetric
+        latest_metric = DomainMetric.objects.filter(
+            domain=domain_model,
+            period='5min'
+        ).order_by('-timestamp').first()
+
+        if latest_metric and latest_metric.storage_bytes > 0:
+            storage_info['storage_bytes'] = latest_metric.storage_bytes
+            storage_info['storage_gb'] = latest_metric.storage_gb
+            storage_info['storage_limit_bytes'] = latest_metric.storage_limit_bytes
+            storage_info['storage_limit_gb'] = latest_metric.storage_limit_gb
+            storage_info['storage_percent'] = latest_metric.storage_percent
+            storage_info['storage_available_gb'] = round(
+                storage_info['storage_limit_gb'] - latest_metric.storage_gb, 2
+            )
+            storage_info['has_data'] = True
+            storage_info['last_updated'] = latest_metric.timestamp
+    except Exception as e:
+        logger.warning(f"Failed to get storage metrics for {domain}: {e}")
+
+    # Get email and database storage usage
+    external_storage = {
+        'email_bytes': 0,
+        'email_display': '0 B',
+        'database_bytes': 0,
+        'database_display': '0 B',
+        'total_bytes': 0,
+        'total_display': '0 B',
+        'email_checked_at': None,
+        'database_checked_at': None,
+        'has_data': False,
+    }
+
+    try:
+        storage_usage = DomainStorageUsage.objects.filter(domain=domain_model).first()
+        if storage_usage:
+            external_storage['email_bytes'] = storage_usage.email_bytes
+            external_storage['email_display'] = storage_usage.email_display
+            external_storage['database_bytes'] = storage_usage.database_bytes
+            external_storage['database_display'] = storage_usage.database_display
+            external_storage['total_bytes'] = storage_usage.total_bytes
+            external_storage['total_display'] = storage_usage.total_display
+            external_storage['email_checked_at'] = storage_usage.email_checked_at
+            external_storage['database_checked_at'] = storage_usage.database_checked_at
+            external_storage['has_data'] = storage_usage.email_bytes > 0 or storage_usage.database_bytes > 0
+    except Exception as e:
+        logger.warning(f"Failed to get external storage for {domain}: {e}")
+
+    # Get TLS certificate info
+    certificate_info = get_tls_certificate_info(domain, domain_model.namespace)
+
+    # Get user's CloudFlare API tokens for DNS enable form
+    api_tokens = CloudflareAPIToken.objects.filter(user=request.user)
+
+    # Get cluster nodes for Preferred Servers section
+    nodes = []
+    preferred_nodes = []
+    try:
+        # Get preferred nodes from Domain CR spec
+        k8s_domain_cr = k8s_get_domain(domain)
+        if k8s_domain_cr and hasattr(k8s_domain_cr, 'raw') and k8s_domain_cr.raw:
+            preferred_nodes = k8s_domain_cr.raw.get('spec', {}).get('preferredNodes', [])
+
+        # Fetch cluster nodes
+        try:
+            config.load_incluster_config()
+        except:
+            config.load_kube_config()
+
+        v1 = client.CoreV1Api()
+        node_list = v1.list_node()
+        for n in node_list.items:
+            # Determine node status
+            node_status = 'NotReady'
+            if n.status and n.status.conditions:
+                for condition in n.status.conditions:
+                    if condition.type == 'Ready' and condition.status == 'True':
+                        node_status = 'Ready'
+                        break
+
+            nodes.append({
+                'name': n.metadata.name,
+                'status': node_status,
+                'selected': n.metadata.name in preferred_nodes,
+            })
+    except Exception as e:
+        logger.warning(f"Failed to fetch cluster nodes: {e}")
+
+    return render(request, "main/view_domain.html", {
+        "domain": domain_model,
+        "form": form,
+        "config_form": config_form,
+        "config": config_initial,  # Raw config dict for template conditionals
+        "k8s": k8s_credentials,
+        "storage": storage_info,
+        "external_storage": external_storage,
+        "certificate": certificate_info,
+        "api_tokens": api_tokens,
+        "nodes": nodes,
+    })
+
+
+@login_required(login_url="/dashboard/")
+def save_domain(request, domain):
+    """
+    Save domain settings.
+
+    - Django model fields (cpu_limit, mem_limit, workload_version): saved to Django DB
+    - Config fields (app/nginx settings): saved directly to K8s Domain CR
+
+    The CR is the single source of truth for infrastructure configuration.
+    """
+    try:
+        domain_instance = Domain.objects.get(domain_name=domain)
+    except Domain.DoesNotExist:
+        return HttpResponse("Domain not found", status=404)
+
+    if domain_instance.owner != request.user and not request.user.is_superuser:
+        return HttpResponse("Permission denied.")
+
+    if request.method != 'POST':
+        return redirect('view_domain', domain=domain_instance.domain_name)
+
+    # Validate both forms
+    form = DomainForm(request.POST, instance=domain_instance)
+    config_form = DomainConfigForm(request.POST)
+
+    if not form.is_valid() or not config_form.is_valid():
+        k8s_credentials = {'phase': 'Unknown', 'error': None}
+        try:
+            k8s_domain = k8s_get_domain(domain)
+            if k8s_domain:
+                status = k8s_domain.status
+                k8s_credentials['phase'] = status.phase or 'Unknown'
+                k8s_credentials['sftp_port'] = status.sftp_port
+                k8s_credentials['sftp_username'] = status.sftp_username or 'webuser'
+                k8s_credentials['sftp_password'] = get_sftp_password(status)
+                k8s_credentials['database_name'] = status.database_name
+                k8s_credentials['database_username'] = status.database_username
+                k8s_credentials['database_password'] = get_database_password(status)
+                k8s_credentials['dkim_pubkey'] = status.dkim_public_key
+        except Exception:
+            pass
+        return render(request, "main/view_domain.html", {
+            "domain": domain_instance,
+            "form": form,
+            "config_form": config_form,
+            "k8s": k8s_credentials,
+        })
+
+    # Save Django fields (resource limits for quota enforcement)
+    form.save()
+
+    # Get workload info for logging and patching
+    workload_version = domain_instance.workload_version
+    workload_type = workload_version.workload_type if workload_version else None
+
+    # Build CR patch from both Django fields and config form
+    try:
+        patch = {
+            "resources": {
+                "storage": f"{domain_instance.storage_size}Gi",
+                "limits": {
+                    "cpu": f"{domain_instance.cpu_limit}m",
+                    "memory": f"{domain_instance.mem_limit}Mi",
+                }
+            },
+        }
+
+        # Add workload spec if workload_version is set
+        if workload_version and workload_type:
+            patch["workload"] = {
+                "type": workload_type.slug,
+                "version": workload_version.version,
+                "image": workload_version.image_url,
+                "port": workload_type.app_port,
+                "proxyMode": workload_type.proxy_mode,
+            }
+
+        # Merge config from config_form (CR-only fields)
+        config_patch = config_form.to_cr_patch(workload_type=workload_type.slug if workload_type else 'php')
+        if "workload" in config_patch:
+            if "workload" in patch:
+                patch["workload"].update(config_patch["workload"])
+            else:
+                patch["workload"] = config_patch["workload"]
+        if "webserver" in config_patch:
+            patch["webserver"] = config_patch["webserver"]
+        if "timezone" in config_patch:
+            patch["timezone"] = config_patch["timezone"]
+
+        # Add preferred nodes (from checkboxes in the form)
+        preferred_nodes = request.POST.getlist('preferred_nodes')
+        patch["preferredNodes"] = preferred_nodes
+
+        # Container options (from toggle switches)
+        ssh_access = request.POST.get("ssh_access") == "1"
+        redis_enabled = request.POST.get("redis_enabled") == "1"
+        patch["sftp"] = {"type": "sshgit" if ssh_access else "standard"}
+        patch["redis"] = {"enabled": redis_enabled}
+
+        k8s_patch_domain(domain_instance.domain_name, patch)
+        logger.info(f"Patched Domain CR for {domain_instance.domain_name}")
+    except K8sNotFoundError:
+        messages.warning(request, "Domain not found in Kubernetes. Settings saved locally only.")
+    except K8sClientError as e:
+        logger.error(f"Failed to patch Domain CR for {domain}: {e}")
+        messages.warning(request, f"Settings saved locally, but failed to update Kubernetes: {e}")
+
+    LogEntry.objects.create(
+        content_object=domain_instance,
+        actor=f"user:{request.user.username}",
+        user=request.user,
+        level="INFO",
+        message=f"Settings saved for {domain_instance.domain_name}",
+        data={
+            "domain_id": domain_instance.pk,
+            "cpu_limit": domain_instance.cpu_limit,
+            "mem_limit": domain_instance.mem_limit,
+            "workload_type": workload_type.slug if workload_type else None,
+            "workload_version": workload_version.version if workload_version else None,
+            "php_memory_limit": config_form.cleaned_data.get("php_memory_limit"),
+            "document_root": config_form.cleaned_data.get("document_root"),
+            "preferred_nodes": request.POST.getlist('preferred_nodes'),
+        }
+    )
+
+    messages.success(request, "Domain settings saved successfully.")
+    return redirect('view_domain', domain=domain_instance.domain_name)
+
+
+@login_required(login_url="/dashboard/")
+def save_preferred_nodes(request, domain):
+    """
+    Save preferred server nodes for a domain.
+
+    Updates the Domain CR's preferredNodes spec field.
+    """
+    if request.method != 'POST':
+        return redirect('view_domain', domain=domain)
+
+    try:
+        if request.user.is_superuser:
+            domain_instance = Domain.objects.get(domain_name=domain)
+        else:
+            domain_instance = Domain.objects.get(domain_name=domain, owner=request.user)
+    except Domain.DoesNotExist:
+        messages.error(request, f"Domain '{domain}' not found.")
+        return redirect('kpmain')
+
+    # Get selected nodes from form
+    selected_nodes = request.POST.getlist('preferred_nodes')
+
+    # Patch the Domain CR
+    try:
+        k8s_patch_domain(domain, {"preferredNodes": selected_nodes})
+        logger.info(f"Updated preferredNodes for {domain}: {selected_nodes}")
+
+        if selected_nodes:
+            messages.success(request, f"Preferred servers updated: {', '.join(selected_nodes)}")
+        else:
+            messages.success(request, "Preferred servers cleared. Domain will run on any available server.")
+
+        LogEntry.objects.create(
+            content_object=domain_instance,
+            actor=f"user:{request.user.username}",
+            user=request.user,
+            level="INFO",
+            message=f"Updated preferred servers for {domain}",
+            data={
+                "domain_id": domain_instance.pk,
+                "preferred_nodes": selected_nodes,
+            }
+        )
+
+    except K8sNotFoundError:
+        messages.error(request, "Domain not found in Kubernetes cluster.")
+    except K8sClientError as e:
+        logger.error(f"Failed to update preferredNodes for {domain}: {e}")
+        messages.error(request, f"Failed to update preferred servers: {e}")
+
+    return redirect('view_domain', domain=domain)
+
+
+@login_required(login_url="/dashboard/")
+def delete_domain(request, domain):
+    """Delete a domain."""
+    try:
+        domain_model = Domain.objects.get(domain_name=domain)
+    except Domain.DoesNotExist:
+        messages.error(request, f"Domain '{domain}' not found.")
+        return redirect('kpmain')
+
+    if domain_model.owner != request.user and not request.user.is_superuser:
+        messages.error(request, "You don't have permission to delete this domain.")
+        return redirect('kpmain')
+
+    if request.method == 'POST':
+        # Verify domain name confirmation
+        imsure = request.POST.get('imsure', '')
+        if imsure != domain:
+            return render(request, 'main/delete_domain.html', {
+                'domain': domain,
+                'error': 'Domain name does not match. Please type the exact domain name to confirm.'
+            })
+
+        try:
+            # Delete DNSZone CR first (if it exists)
+            try:
+                delete_dnszone(domain)
+                logger.info(f"Deleted DNSZone CR for '{domain}'")
+            except K8sNotFoundError:
+                logger.info(f"DNSZone CR for '{domain}' not found (may not have DNS enabled)")
+            except K8sClientError as e:
+                logger.warning(f"Failed to delete DNSZone CR: {e}")
+                # Continue with domain deletion even if DNSZone deletion fails
+
+            # Delete Domain CR
+            try:
+                k8s_delete_domain(domain)
+                logger.info(f"Deleted Domain CR for '{domain}'")
+            except K8sNotFoundError:
+                logger.warning(f"Domain CR for '{domain}' not found in cluster (may be already deleted)")
+            except K8sClientError as e:
+                logger.error(f"Failed to delete Domain CR: {e}")
+                messages.error(request, f"Failed to delete domain from cluster: {str(e)}")
+                return redirect('view_domain', domain=domain)
+
+            LogEntry.objects.create(
+                content_object=domain_model,
+                actor=f"user:{request.user.username}",
+                user=request.user,
+                level="INFO",
+                message=f"Deleted domain {domain}",
+                data={"domain_name": domain}
+            )
+
+            domain_model.delete()
+            messages.success(request, f"Domain '{domain}' deleted successfully.")
+            return redirect('kpmain')
+
+        except Exception as e:
+            logger.exception(f"Error deleting domain: {e}")
+            messages.error(request, f"Failed to delete domain: {str(e)}")
+            return redirect('view_domain', domain=domain)
+
+    return render(request, "main/delete_domain.html", {
+        "domain": domain,
+    })
+
+
+@login_required(login_url="/dashboard/")
+def enable_dns(request, domain):
+    """Enable DNS management for an existing domain."""
+    from kubernetes.client import V1Secret, V1ObjectMeta
+    from kubernetes.client.rest import ApiException as K8sApiException
+    from dashboard.k8s.client import get_core_api
+
+    if request.method != 'POST':
+        return redirect('view_domain', domain=domain)
+
+    # Get domain model (check ownership or superuser)
+    try:
+        if request.user.is_superuser:
+            domain_model = Domain.objects.get(domain_name=domain)
+        else:
+            domain_model = Domain.objects.get(domain_name=domain, owner=request.user)
+    except Domain.DoesNotExist:
+        messages.error(request, f"Domain '{domain}' not found.")
+        return redirect('kpmain')
+
+    # Check if DNS is already enabled
+    if dnszone_exists(domain):
+        messages.warning(request, "DNS management is already enabled for this domain.")
+        return redirect('view_domain', domain=domain)
+
+    # Get selected CloudFlare token
+    api_token_id = request.POST.get('api_token')
+    if not api_token_id:
+        messages.error(request, "Please select a CloudFlare API token.")
+        return redirect('view_domain', domain=domain)
+
+    try:
+        cf_token = CloudflareAPIToken.objects.get(pk=int(api_token_id), user=request.user)
+    except (CloudflareAPIToken.DoesNotExist, ValueError):
+        messages.error(request, "Invalid CloudFlare API token selected.")
+        return redirect('view_domain', domain=domain)
+
+    # Check if auto_records checkbox is checked
+    auto_records = request.POST.get('auto_records') == '1'
+
+    # Create/update K8s secret for CF token
+    cf_credential_secret_name = f"cf-token-{cf_token.pk}"
+    try:
+        core_api = get_core_api()
+        cf_secret = V1Secret(
+            api_version="v1",
+            kind="Secret",
+            metadata=V1ObjectMeta(
+                name=cf_credential_secret_name,
+                namespace="kubepanel",
+                labels={
+                    "app.kubernetes.io/managed-by": "kubepanel",
+                    "kubepanel.io/type": "cloudflare-credential",
+                }
+            ),
+            type="Opaque",
+            string_data={
+                "api_token": cf_token.api_token,
+            }
+        )
+        try:
+            core_api.create_namespaced_secret(namespace="kubepanel", body=cf_secret)
+            logger.info(f"Created CloudFlare credential secret '{cf_credential_secret_name}'")
+        except K8sApiException as e:
+            if e.status == 409:
+                # Secret already exists, update it
+                core_api.replace_namespaced_secret(
+                    name=cf_credential_secret_name,
+                    namespace="kubepanel",
+                    body=cf_secret
+                )
+                logger.info(f"Updated CloudFlare credential secret '{cf_credential_secret_name}'")
+            else:
+                raise
+    except Exception as e:
+        logger.error(f"Failed to create CF credential secret: {e}")
+        messages.error(request, f"Failed to create CloudFlare credential: {str(e)}")
+        return redirect('view_domain', domain=domain)
+
+    # Build DNS records if auto_records is checked
+    dns_records = []
+    if auto_records:
+        cluster_ips = list(ClusterIP.objects.values_list('ip_address', flat=True))
+
+        # Try to get DKIM record from existing secret
+        dkim_selector = "default"
+        dkim_dns_record = None
+        dkim_secret_name = f"dkim-{_sanitize_k8s_name(domain)}"
+        try:
+            dkim_dns_record = get_secret_value(
+                name=dkim_secret_name,
+                namespace="kubepanel",
+                key="dns-txt-record"
+            )
+            logger.info(f"Found existing DKIM record for '{domain}'")
+        except Exception as e:
+            logger.warning(f"Could not get DKIM record for '{domain}': {e}")
+            dkim_selector = None
+
+        dns_records = _build_dns_records(
+            domain_name=domain,
+            cluster_ips=cluster_ips,
+            dkim_selector=dkim_selector,
+            dkim_dns_record=dkim_dns_record,
+        )
+
+    # Create DNSZone CR
+    try:
+        create_dnszone(
+            zone_name=domain,
+            credential_secret_ref={
+                'name': cf_credential_secret_name,
+                'namespace': 'kubepanel',
+            },
+            records=dns_records,
+        )
+        logger.info(f"Created DNSZone CR for '{domain}' with {len(dns_records)} records")
+
+        LogEntry.objects.create(
+            content_object=domain_model,
+            actor=f"user:{request.user.username}",
+            user=request.user,
+            level="INFO",
+            message=f"Enabled DNS management for {domain}",
+            data={
+                "auto_records": auto_records,
+                "record_count": len(dns_records),
+            }
+        )
+
+        if auto_records:
+            messages.success(request, f"DNS management enabled with {len(dns_records)} default records.")
+        else:
+            messages.success(request, "DNS management enabled. Add records manually via Manage Records.")
+    except K8sClientError as e:
+        logger.error(f"Failed to create DNSZone CR: {e}")
+        messages.error(request, f"Failed to enable DNS management: {str(e)}")
+
+    return redirect('view_domain', domain=domain)
+
+
+@login_required(login_url="/dashboard/")
+def startstop_domain(request, domain, action):
+    """Start or stop (suspend/unsuspend) a domain."""
+    try:
+        domain_model = Domain.objects.get(domain_name=domain)
+    except Domain.DoesNotExist:
+        messages.error(request, f"Domain '{domain}' not found.")
+        return redirect('kpmain')
+
+    if domain_model.owner != request.user and not request.user.is_superuser:
+        messages.error(request, "You don't have permission to modify this domain.")
+        return redirect('kpmain')
+
+    try:
+        if action == 'stop':
+            k8s_suspend_domain(domain)
+            messages.success(request, f"Domain '{domain}' suspended.")
+
+            LogEntry.objects.create(
+                content_object=domain_model,
+                actor=f"user:{request.user.username}",
+                user=request.user,
+                level="INFO",
+                message=f"Suspended domain {domain}",
+            )
+
+        elif action == 'start':
+            k8s_unsuspend_domain(domain)
+            messages.success(request, f"Domain '{domain}' started.")
+
+            LogEntry.objects.create(
+                content_object=domain_model,
+                actor=f"user:{request.user.username}",
+                user=request.user,
+                level="INFO",
+                message=f"Started domain {domain}",
+            )
+
+        else:
+            messages.error(request, f"Invalid action: {action}")
+
+    except K8sNotFoundError:
+        messages.error(request, f"Domain '{domain}' not found in cluster.")
+    except K8sClientError as e:
+        logger.error(f"Failed to {action} domain: {e}")
+        messages.error(request, f"Failed to {action} domain: {str(e)}")
+
+    return redirect('kpmain')
+
+
+@login_required(login_url="/dashboard/")
+def volumesnapshots(request, domain):
+    """List backups and restores for a domain from Kubernetes CRs."""
+    try:
+        if request.user.is_superuser:
+            domain_obj = Domain.objects.get(domain_name=domain)
+        else:
+            domain_obj = Domain.objects.get(owner=request.user, domain_name=domain)
+    except Domain.DoesNotExist:
+        return HttpResponse("Permission denied")
+
+    # Get namespace from domain name
+    namespace = f"dom-{domain.replace('.', '-')}"
+
+    # Fetch backups from Kubernetes
+    try:
+        backups = list_backups(namespace)
+    except K8sClientError as e:
+        logger.error(f"Failed to list backups for {domain}: {e}")
+        backups = []
+        messages.error(request, f"Failed to fetch backups: {e}")
+
+    # Fetch restores from Kubernetes
+    try:
+        restores = list_restores(namespace)
+    except K8sClientError as e:
+        logger.error(f"Failed to list restores for {domain}: {e}")
+        restores = []
+        messages.error(request, f"Failed to fetch restores: {e}")
+
+    context = {
+        "backups": backups,
+        "restores": restores,
+        "domain": domain,
+    }
+    return render(request, "main/volumesnapshot.html", context)
+
+
+@login_required(login_url="/dashboard/")
+def restore_backup(request, domain, backup_name):
+    """
+    Restore from a backup.
+
+    Creates a Restore CR that triggers the operator to:
+    1. Scale down the domain deployment
+    2. Restore the VolumeSnapshot to the domain's PVC
+    3. Restore the database from the dump file
+    4. Scale up the domain deployment
+    """
+    # Check permissions
+    try:
+        if request.user.is_superuser:
+            domain_obj = Domain.objects.get(domain_name=domain)
+        else:
+            domain_obj = Domain.objects.get(owner=request.user, domain_name=domain)
+    except Domain.DoesNotExist:
+        return HttpResponse("Permission denied")
+
+    namespace = f"dom-{domain.replace('.', '-')}"
+
+    # Find the backup that has this volumesnapshot
+    try:
+        backups = list_backups(namespace)
+    except K8sClientError as e:
+        logger.error(f"Failed to list backups for {domain}: {e}")
+        messages.error(request, f"Failed to fetch backups: {e}")
+        return redirect('volumesnapshots', domain=domain)
+
+    # Find the backup by name
+    backup = None
+    for b in backups:
+        if b.name == backup_name:
+            backup = b
+            break
+
+    if not backup:
+        messages.error(request, f"Backup '{backup_name}' not found.")
+        return redirect('volumesnapshots', domain=domain)
+
+    # Check that backup is complete
+    if backup.status.phase != 'Completed':
+        messages.error(request, f"Cannot restore from backup in '{backup.status.phase}' state. Only completed backups can be restored.")
+        return redirect('volumesnapshots', domain=domain)
+
+    # Check that we have the required data
+    if not backup.status.volume_snapshot_name or not backup.status.database_backup_path:
+        messages.error(request, "Backup is missing required data (VolumeSnapshot or database path).")
+        return redirect('volumesnapshots', domain=domain)
+
+    if request.method == 'POST':
+        # Validate confirmation
+        if request.POST.get("imsure") != domain:
+            error = "Domain name didn't match"
+            return render(request, "main/restore_snapshot.html", {
+                "domain": domain,
+                "backup_name": backup_name,
+                "error": error,
+            })
+
+        # Create Restore CR
+        try:
+            restore = create_restore(
+                namespace=namespace,
+                domain_name=domain,
+                backup_name=backup.name,
+                volume_snapshot_name=backup.status.volume_snapshot_name,
+                database_backup_path=backup.status.database_backup_path,
+            )
+            messages.success(request, f"Restore started. The domain will be temporarily unavailable while restoring from backup '{backup.name}'.")
+            logger.info(f"Created Restore CR {restore.name} for {domain} from backup {backup.name}")
+        except K8sClientError as e:
+            logger.error(f"Failed to create restore for {domain}: {e}")
+            messages.error(request, f"Failed to start restore: {e}")
+
+        return redirect('volumesnapshots', domain=domain)
+
+    # GET request - show confirmation form
+    return render(request, "main/restore_snapshot.html", {
+        "domain": domain,
+        "backup_name": backup_name,
+        "backup": backup,
+    })
+
+
+@login_required(login_url="/dashboard/")
+def start_backup(request, domain):
+    """Start a manual backup by creating a Backup CR."""
+    if request.method == 'POST':
+        if request.POST.get("imsure") != domain:
+            error = "Domain name didn't match"
+            return render(request, "main/start_backup.html", {"domain": domain, "error": error})
+
+        # Check permissions
+        if not request.user.is_superuser:
+            try:
+                domain_obj = Domain.objects.get(owner=request.user, domain_name=domain)
+            except Domain.DoesNotExist:
+                return HttpResponse("Permission denied.")
+        else:
+            try:
+                domain_obj = Domain.objects.get(domain_name=domain)
+            except Domain.DoesNotExist:
+                return HttpResponse("Domain not found.")
+
+        # Get namespace from domain name
+        namespace = f"dom-{domain.replace('.', '-')}"
+
+        # Create Backup CR
+        try:
+            backup = k8s_create_backup(
+                namespace=namespace,
+                domain_name=domain,
+                backup_type='manual',
+            )
+            messages.success(request, f"Backup started: {backup.name}")
+
+            # Log the backup
+            LogEntry.objects.create(
+                content_object=domain_obj,
+                actor=f"user:{request.user.username}",
+                user=request.user,
+                level="INFO",
+                message=f"Manual backup started for {domain}",
+                data={"backup_name": backup.name}
+            )
+
+            return redirect('volumesnapshots', domain=domain)
+
+        except K8sClientError as e:
+            logger.error(f"Failed to create backup for {domain}: {e}")
+            messages.error(request, f"Failed to start backup: {e}")
+            return render(request, "main/start_backup.html", {"domain": domain, "error": str(e)})
+
+    return render(request, "main/start_backup.html", {"domain": domain})
+
+
+@login_required(login_url="/dashboard/")
+def domain_logs(request, domain):
+    domain_obj = get_object_or_404(Domain, domain_name=domain)
+    ct = ContentType.objects.get_for_model(Domain)
+    logs = (
+        LogEntry.objects
+        .filter(content_type=ct, object_id=domain_obj.pk)
+        .order_by('-timestamp')
+    )
+    return render(request, 'main/domain_logs.html', {
+        'domain': domain_obj.domain_name,
+        'logs': logs,
+    })
+
+
+@login_required
+def settings(request):
+    """
+    User settings page with:
+    - Password change (all users)
+    - Storage notification settings (superusers only)
+    - License management (superusers only)
+    """
+    password_form = PasswordChangeForm(request.user)
+    password_changed = False
+
+    # Get system settings for superusers
+    system_settings = None
+    license_status = None
+    license_usage = None
+
+    if request.user.is_superuser:
+        system_settings = SystemSettings.get_settings()
+
+        # Get license status
+        try:
+            from dashboard.licensing.service import LicenseService
+            license_status = LicenseService.get_license_status(use_cache=False)
+            license_usage = LicenseService.get_domain_usage()
+        except Exception as e:
+            logger.warning(f"Failed to get license status: {e}")
+            license_status = {'tier': 'unknown', 'message': f'Error: {e}'}
+            license_usage = {'current': 0, 'max': 5, 'percentage': 0}
+
+    if request.method == 'POST':
+        # Handle password change
+        if 'change_password' in request.POST:
+            password_form = PasswordChangeForm(request.user, request.POST)
+            if password_form.is_valid():
+                user = password_form.save()
+                update_session_auth_hash(request, user)
+                messages.success(request, 'Your password has been changed successfully.')
+                password_changed = True
+                password_form = PasswordChangeForm(request.user)  # Reset form
+            else:
+                messages.error(request, 'Please correct the errors below.')
+
+        # Handle site branding settings (superuser only)
+        elif 'save_branding' in request.POST and request.user.is_superuser:
+            try:
+                system_settings.site_name = request.POST.get('site_name', 'Business Suite').strip()[:100]
+                system_settings.site_footer = request.POST.get('site_footer', '').strip()[:200]
+                system_settings.save()
+                messages.success(request, 'Site branding updated successfully.')
+            except Exception as e:
+                messages.error(request, f'Error saving branding: {e}')
+
+        # Handle storage notification settings (superuser only)
+        elif 'save_notifications' in request.POST and request.user.is_superuser:
+            try:
+                # Update storage notification settings
+                system_settings.storage_notifications_enabled = 'storage_notifications_enabled' in request.POST
+
+                # Thresholds
+                system_settings.storage_info_threshold = int(request.POST.get('storage_info_threshold', 85))
+                system_settings.storage_warning_threshold = int(request.POST.get('storage_warning_threshold', 90))
+                system_settings.storage_alert_threshold = int(request.POST.get('storage_alert_threshold', 95))
+
+                # Frequencies
+                system_settings.storage_info_frequency_days = int(request.POST.get('storage_info_frequency_days', 30))
+                system_settings.storage_warning_frequency_days = int(request.POST.get('storage_warning_frequency_days', 7))
+                system_settings.storage_alert_frequency_days = int(request.POST.get('storage_alert_frequency_days', 1))
+
+                # Email templates
+                system_settings.storage_info_subject = request.POST.get('storage_info_subject', system_settings.storage_info_subject)
+                system_settings.storage_info_template = request.POST.get('storage_info_template', system_settings.storage_info_template)
+                system_settings.storage_warning_subject = request.POST.get('storage_warning_subject', system_settings.storage_warning_subject)
+                system_settings.storage_warning_template = request.POST.get('storage_warning_template', system_settings.storage_warning_template)
+                system_settings.storage_alert_subject = request.POST.get('storage_alert_subject', system_settings.storage_alert_subject)
+                system_settings.storage_alert_template = request.POST.get('storage_alert_template', system_settings.storage_alert_template)
+
+                system_settings.save()
+                messages.success(request, 'Storage notification settings saved successfully.')
+            except (ValueError, TypeError) as e:
+                messages.error(request, f'Invalid value: {e}')
+            except Exception as e:
+                messages.error(request, f'Error saving settings: {e}')
+
+        # Handle health monitoring settings (superuser only)
+        elif 'save_health_monitoring' in request.POST and request.user.is_superuser:
+            try:
+                system_settings.mail_queue_warning_threshold = int(
+                    request.POST.get('mail_queue_warning', 50)
+                )
+                system_settings.mail_queue_error_threshold = int(
+                    request.POST.get('mail_queue_error', 100)
+                )
+                system_settings.health_check_email_enabled = 'health_email_enabled' in request.POST
+                system_settings.save()
+                messages.success(request, 'Health monitoring settings saved successfully.')
+            except (ValueError, TypeError) as e:
+                messages.error(request, f'Invalid value: {e}')
+            except Exception as e:
+                messages.error(request, f'Error saving health settings: {e}')
+
+        # Handle license key update (superuser only)
+        elif 'save_license' in request.POST and request.user.is_superuser:
+            license_key = request.POST.get('license_key', '').strip()
+            try:
+                _update_license_cr(license_key)
+                messages.success(request, 'License key updated successfully.')
+
+                # Refresh license status
+                from dashboard.licensing.service import LicenseService
+                LicenseService.invalidate_cache()
+                license_status = LicenseService.get_license_status(use_cache=False)
+                license_usage = LicenseService.get_domain_usage()
+            except Exception as e:
+                logger.error(f"Failed to update license: {e}")
+                messages.error(request, f'Failed to update license: {e}')
+
+        # Handle license removal (superuser only)
+        elif 'remove_license' in request.POST and request.user.is_superuser:
+            try:
+                _delete_license_cr()
+                messages.success(request, 'License removed. Reverted to Community tier.')
+
+                # Refresh license status
+                from dashboard.licensing.service import LicenseService
+                LicenseService.invalidate_cache()
+                license_status = LicenseService.get_license_status(use_cache=False)
+                license_usage = LicenseService.get_domain_usage()
+            except Exception as e:
+                logger.error(f"Failed to remove license: {e}")
+                messages.error(request, f'Failed to remove license: {e}')
+
+        # Handle feature flags (superuser only)
+        elif 'save_feature_flags' in request.POST and request.user.is_superuser:
+            try:
+                system_settings.cpanel_migration_enabled = 'cpanel_migration_enabled' in request.POST
+                system_settings.save()
+                messages.success(request, 'Feature flags saved successfully.')
+            except Exception as e:
+                logger.error(f"Failed to save feature flags: {e}")
+                messages.error(request, f'Error saving feature flags: {e}')
+
+    return render(request, "main/settings.html", {
+        'password_form': password_form,
+        'password_changed': password_changed,
+        'system_settings': system_settings,
+        'license': license_status,
+        'license_usage': license_usage,
+    })
+
+
+def _update_license_cr(license_key: str):
+    """Create or update the License CR in Kubernetes."""
+    from kubernetes import client, config
+    from kubernetes.client.rest import ApiException
+
+    try:
+        config.load_incluster_config()
+    except config.ConfigException:
+        config.load_kube_config()
+
+    api = client.CustomObjectsApi()
+
+    license_cr = {
+        'apiVersion': 'kubepanel.io/v1alpha1',
+        'kind': 'License',
+        'metadata': {
+            'name': 'kubepanel-license',
+        },
+        'spec': {
+            'licenseKey': license_key,
+        }
+    }
+
+    try:
+        # Try to get existing CR
+        api.get_cluster_custom_object(
+            group='kubepanel.io',
+            version='v1alpha1',
+            plural='licenses',
+            name='kubepanel-license'
+        )
+        # CR exists, patch it
+        api.patch_cluster_custom_object(
+            group='kubepanel.io',
+            version='v1alpha1',
+            plural='licenses',
+            name='kubepanel-license',
+            body={'spec': {'licenseKey': license_key}}
+        )
+        logger.info("License CR updated")
+    except ApiException as e:
+        if e.status == 404:
+            # CR doesn't exist, create it
+            api.create_cluster_custom_object(
+                group='kubepanel.io',
+                version='v1alpha1',
+                plural='licenses',
+                body=license_cr
+            )
+            logger.info("License CR created")
+        else:
+            raise
+
+
+def _delete_license_cr():
+    """Delete the License CR from Kubernetes (reverts to community tier)."""
+    from kubernetes import client, config
+    from kubernetes.client.rest import ApiException
+
+    try:
+        config.load_incluster_config()
+    except config.ConfigException:
+        config.load_kube_config()
+
+    api = client.CustomObjectsApi()
+
+    try:
+        api.delete_cluster_custom_object(
+            group='kubepanel.io',
+            version='v1alpha1',
+            plural='licenses',
+            name='kubepanel-license'
+        )
+        logger.info("License CR deleted")
+    except ApiException as e:
+        if e.status == 404:
+            # Already deleted, that's fine
+            pass
+        else:
+            raise
+
+
+# Password management functions
+def get_mariadb_root_password():
+    """Retrieve MariaDB root password from Kubernetes secret"""
+    try:
+        try:
+            config.load_incluster_config()
+        except:
+            config.load_kube_config()
+
+        v1 = client.CoreV1Api()
+        secret = v1.read_namespaced_secret(
+            name="mariadb-auth",
+            namespace="kubepanel"
+        )
+
+        encoded_password = secret.data.get("password")
+        if encoded_password:
+            return base64.b64decode(encoded_password).decode('utf-8')
+        else:
+            raise Exception("Password key not found in secret")
+
+    except Exception as e:
+        print(f"Error retrieving MariaDB root password: {e}")
+        raise
+
+
+def update_mariadb_user_password(username, new_password):
+    """Connect to MariaDB and update user password"""
+    try:
+        root_password = get_mariadb_root_password()
+
+        connection = pymysql.connect(
+            host='mariadb.kubepanel.svc.cluster.local',
+            port=3306,
+            user='root',
+            password=root_password,
+            charset='utf8mb4',
+            autocommit=True
+        )
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT User, Host FROM mysql.user WHERE User = %s", (username,))
+                existing_users = cursor.fetchall()
+                logger.info(f"Found existing users for '{username}': {existing_users}")
+
+                if not existing_users:
+                    logger.warning(f"No users found with username '{username}'. Cannot update password.")
+                    raise Exception(f"Database user '{username}' does not exist")
+
+                success_count = 0
+                for user_row in existing_users:
+                    user, host = user_row
+                    try:
+                        cursor.execute("SET PASSWORD FOR %s@%s = PASSWORD(%s)", (user, host, new_password))
+                        logger.info(f"Successfully updated password for {user}@{host}")
+                        success_count += 1
+                    except pymysql.Error as e:
+                        logger.error(f"Could not update password for {user}@{host}: {e}")
+                        continue
+
+                if success_count == 0:
+                    raise Exception(f"Failed to update password for any instances of user '{username}'")
+
+                cursor.execute("FLUSH PRIVILEGES")
+                logger.info(f"Successfully updated password for {success_count} instance(s) of database user: {username}")
+
+        finally:
+            connection.close()
+
+    except Exception as e:
+        logger.error(f"Error updating MariaDB user password: {e}")
+        raise
+
+
+def user_can_change_password(user, domain_obj, password_type):
+    """Check if user has permission to change the specified password type for the domain"""
+    if user.is_superuser:
+        return True, None
+
+    if domain_obj.owner != user:
+        return False, "You don't have permission to change passwords for this domain."
+
+    return True, None
+
+
+def change_password(request, domain, password_type):
+    """Handle password changes for database or SFTP passwords."""
+    try:
+        domain_obj = Domain.objects.get(domain_name=domain)
+    except Domain.DoesNotExist:
+        return HttpResponse("Domain not found", status=404)
+
+    can_change, error_message = user_can_change_password(request.user, domain_obj, password_type)
+    if not can_change:
+        return HttpResponse(f"Permission denied: {error_message}", status=403)
+
+    if password_type not in ['mariadb', 'sftp']:
+        return HttpResponse("Invalid password type")
+
+    k8s_domain = None
+    try:
+        k8s_domain = k8s_get_domain(domain)
+    except K8sNotFoundError:
+        messages.error(request, "Domain not found in Kubernetes cluster. Cannot change password.")
+        return redirect('view_domain', domain=domain_obj.domain_name)
+    except K8sClientError as e:
+        messages.error(request, f"Failed to fetch domain from Kubernetes: {e}")
+        return redirect('view_domain', domain=domain_obj.domain_name)
+
+    if request.method == 'POST':
+        new_password = request.POST.get('new_password')
+        confirm_password = request.POST.get('confirm_password')
+
+        if not new_password or not confirm_password:
+            messages.error(request, "Both password fields are required.")
+            return render(request, "main/change_password.html", {
+                "domain": domain_obj,
+                "password_type": password_type
+            })
+
+        if new_password != confirm_password:
+            messages.error(request, "Passwords do not match.")
+            return render(request, "main/change_password.html", {
+                "domain": domain_obj,
+                "password_type": password_type
+            })
+
+        if len(new_password) < 8:
+            messages.error(request, "Password must be at least 8 characters long.")
+            return render(request, "main/change_password.html", {
+                "domain": domain_obj,
+                "password_type": password_type
+            })
+
+        namespace = domain_obj.namespace
+        db_username = None
+
+        if password_type == 'mariadb':
+            password_label = "Database"
+
+            if k8s_domain and k8s_domain.status:
+                db_username = k8s_domain.status.database_username
+
+            if not db_username:
+                messages.error(request, "No database username found for this domain. Is the domain fully provisioned?")
+                return render(request, "main/change_password.html", {
+                    "domain": domain_obj,
+                    "password_type": password_type
+                })
+
+            try:
+                update_mariadb_user_password(db_username, new_password)
+                k8s_update_database_password(namespace, new_password)
+                messages.success(request, f"{password_label} password updated successfully.")
+
+            except K8sClientError as e:
+                logger.error(f"Failed to update database password K8s secret for {domain}: {e}")
+                messages.error(request, f"Failed to update password in Kubernetes: {e}")
+                return render(request, "main/change_password.html", {
+                    "domain": domain_obj,
+                    "password_type": password_type
+                })
+            except Exception as e:
+                logger.error(f"Error updating MariaDB password for user {db_username}: {e}")
+                messages.error(request, f"Failed to update MariaDB password: {e}")
+                return render(request, "main/change_password.html", {
+                    "domain": domain_obj,
+                    "password_type": password_type
+                })
+
+        else:  # sftp
+            password_label = "SFTP"
+
+            try:
+                k8s_update_sftp_password(namespace, new_password)
+                messages.success(request, f"{password_label} password updated successfully.")
+
+            except K8sClientError as e:
+                logger.error(f"Failed to update SFTP password K8s secret for {domain}: {e}")
+                messages.error(request, f"Failed to update password in Kubernetes: {e}")
+                return render(request, "main/change_password.html", {
+                    "domain": domain_obj,
+                    "password_type": password_type
+                })
+
+        LogEntry.objects.create(
+            content_object=domain_obj,
+            actor=f"user:{request.user.username}",
+            user=request.user,
+            level="INFO",
+            message=f"{password_label} password changed for {domain_obj.domain_name}",
+            data={
+                "domain_id": domain_obj.pk,
+                "password_type": password_type,
+                "user_id": request.user.id,
+                "domain_owner_id": domain_obj.owner.id,
+                "is_superuser": request.user.is_superuser,
+                "db_username": db_username if password_type == 'mariadb' else None
+            }
+        )
+
+        return redirect('view_domain', domain=domain_obj.domain_name)
+
+    return render(request, "main/change_password.html", {
+        "domain": domain_obj,
+        "password_type": password_type
+    })
+
+
+def validate_package_limits(user, storage_size: int, cpu_limit: int, mem_limit: int):
+    """Validate that user's package allows the requested resources."""
+    pkg = user.profile.package
+    if pkg is None:
+        return
+
+    existing_domains = Domain.objects.filter(owner=user)
+
+    total_storage = sum(d.storage_size for d in existing_domains) + storage_size
+    total_cpu = sum(d.cpu_limit for d in existing_domains) + cpu_limit
+    total_mem = sum(d.mem_limit for d in existing_domains) + mem_limit
+
+    errors = {}
+
+    if total_storage > pkg.max_storage_size:
+        errors['storage_size'] = (
+            f"Total storage ({total_storage} GB) exceeds "
+            f"package limit ({pkg.max_storage_size} GB)."
+        )
+
+    if total_cpu > pkg.max_cpu:
+        errors['cpu_limit'] = (
+            f"Total CPU ({total_cpu}m) exceeds "
+            f"package limit ({pkg.max_cpu}m)."
+        )
+
+    if total_mem > pkg.max_memory:
+        errors['mem_limit'] = (
+            f"Total memory ({total_mem} MB) exceeds "
+            f"package limit ({pkg.max_memory} MB)."
+        )
+
+    if errors:
+        raise ValidationError(errors)
+
+
+def _sync_domain_aliases(domain: Domain) -> None:
+    """
+    Sync domain aliases to K8s Domain CR.
+
+    Reads all DomainAlias records for the domain and patches the CR
+    so the operator updates nginx config, Ingress, and per-alias DKIM.
+    Aliases are sent as objects with optional email configuration.
+    """
+    alias_objects = []
+    for alias in domain.aliases.all():
+        obj = {"name": alias.alias_name}
+        if alias.email_enabled:
+            obj["email"] = {
+                "enabled": True,
+                "dkimSelector": alias.dkim_selector or "default",
+            }
+            if alias.dkim_secret_name:
+                obj["email"]["dkimSecretRef"] = {
+                    "name": alias.dkim_secret_name,
+                    "namespace": "kubepanel",
+                }
+        alias_objects.append(obj)
+    try:
+        k8s_patch_domain(domain.domain_name, {"aliases": alias_objects})
+        logger.info(f"Synced {len(alias_objects)} aliases to Domain CR for {domain.domain_name}")
+    except K8sNotFoundError:
+        logger.warning(f"Domain CR not found for {domain.domain_name}, skipping alias sync")
+    except K8sClientError as e:
+        logger.error(f"Failed to sync aliases to Domain CR for {domain.domain_name}: {e}")
+        raise
+
+
+@login_required
+def alias_list(request, pk):
+    """List all aliases for a domain."""
+    domain = get_object_or_404(Domain, pk=pk)
+    if domain.owner != request.user and not request.user.is_superuser:
+        return render(request, "main/error.html", {"error": "Permission denied."})
+
+    aliases = domain.aliases.order_by('created_at')
+    return render(request, 'main/list_aliases.html', {'domain': domain, 'aliases': aliases})
+
+
+@login_required
+def alias_add(request, pk):
+    """Add a domain alias with optional email and DNS support, then sync to K8s."""
+    domain = get_object_or_404(Domain, pk=pk)
+    if domain.owner != request.user and not request.user.is_superuser:
+        return render(request, "main/error.html", {"error": "Permission denied."})
+
+    if request.method == 'POST':
+        form = DomainAliasForm(request.POST)
+        if form.is_valid():
+            alias = form.save(commit=False)
+            alias.domain = domain
+
+            # Email configuration
+            email_enabled = request.POST.get("email_enabled") == "1"
+            alias.email_enabled = email_enabled
+
+            dkim_selector = None
+            dkim_dns_record = None
+
+            if email_enabled:
+                # Generate DKIM keypair
+                dkim_private_key, dkim_public_key, dkim_dns_record = generate_dkim_keypair()
+                dkim_secret_name = f"dkim-{_sanitize_k8s_name(alias.alias_name)}"
+                dkim_selector = "default"
+
+                alias.dkim_selector = dkim_selector
+                alias.dkim_secret_name = dkim_secret_name
+
+                # Create DKIM K8s secret in kubepanel namespace
+                try:
+                    create_dkim_secret(
+                        name=dkim_secret_name,
+                        namespace="kubepanel",
+                        private_key=dkim_private_key,
+                        public_key=dkim_public_key,
+                        dns_record=dkim_dns_record,
+                        selector=dkim_selector,
+                    )
+                    logger.info(f"Created DKIM secret '{dkim_secret_name}' for alias '{alias.alias_name}'")
+                except K8sClientError as e:
+                    logger.error(f"Failed to create DKIM secret for alias '{alias.alias_name}': {e}")
+                    messages.error(request, f"Failed to create DKIM secret: {e}")
+                    return render(request, 'main/add_alias.html', {
+                        'domain': domain,
+                        'form': form,
+                        'api_tokens': CloudflareAPIToken.objects.filter(user=request.user),
+                    })
+
+            alias.save()
+
+            # Optional DNS zone creation for the alias
+            auto_dns = request.POST.get("auto_dns") == "1"
+            api_token_id = request.POST.get("api_token", "") if auto_dns else ""
+            if email_enabled and auto_dns and api_token_id:
+                _create_alias_dns_zone(request, alias, api_token_id, dkim_selector, dkim_dns_record)
+
+            # Sync aliases to K8s Domain CR
+            try:
+                _sync_domain_aliases(domain)
+                messages.success(request, f"Alias '{alias.alias_name}' added successfully.")
+            except K8sClientError as e:
+                messages.warning(request, f"Alias saved but failed to sync to Kubernetes: {e}")
+
+            return redirect('view_domain', domain=domain.domain_name)
+    else:
+        form = DomainAliasForm()
+
+    api_tokens = CloudflareAPIToken.objects.filter(user=request.user)
+    return render(request, 'main/add_alias.html', {
+        'domain': domain,
+        'form': form,
+        'api_tokens': api_tokens,
+    })
+
+
+def _create_alias_dns_zone(request, alias, api_token_id, dkim_selector, dkim_dns_record):
+    """Create a CloudFlare DNS zone for an alias domain with email records."""
+    from kubernetes.client import V1Secret, V1ObjectMeta
+    from kubernetes.client.rest import ApiException as K8sApiException
+    from dashboard.k8s.client import get_core_api
+
+    try:
+        cf_token = CloudflareAPIToken.objects.get(pk=int(api_token_id), user=request.user)
+    except (CloudflareAPIToken.DoesNotExist, ValueError):
+        messages.warning(request, "Invalid CloudFlare API token; DNS zone was not created.")
+        return
+
+    # Create/update CF credential secret
+    cf_credential_secret_name = f"cf-token-{cf_token.pk}"
+    try:
+        core_api = get_core_api()
+        cf_secret = V1Secret(
+            api_version="v1",
+            kind="Secret",
+            metadata=V1ObjectMeta(
+                name=cf_credential_secret_name,
+                namespace="kubepanel",
+                labels={
+                    "app.kubernetes.io/managed-by": "kubepanel",
+                    "kubepanel.io/type": "cloudflare-credential",
+                }
+            ),
+            type="Opaque",
+            string_data={"api_token": cf_token.api_token},
+        )
+        try:
+            core_api.create_namespaced_secret(namespace="kubepanel", body=cf_secret)
+        except K8sApiException as e:
+            if e.status == 409:
+                core_api.replace_namespaced_secret(
+                    name=cf_credential_secret_name, namespace="kubepanel", body=cf_secret
+                )
+            else:
+                raise
+    except Exception as e:
+        logger.error(f"Failed to create CF credential secret for alias '{alias.alias_name}': {e}")
+        messages.warning(request, f"Alias created but DNS setup failed: {e}")
+        return
+
+    # Build DNS records (email-focused: A for MX hosts, MX, SPF, DMARC, DKIM)
+    cluster_ips = list(ClusterIP.objects.values_list('ip_address', flat=True))
+    dns_records = _build_dns_records(
+        domain_name=alias.alias_name,
+        cluster_ips=cluster_ips,
+        dkim_selector=dkim_selector,
+        dkim_dns_record=dkim_dns_record,
+    )
+
+    # Create DNSZone CR
+    try:
+        create_dnszone(
+            zone_name=alias.alias_name,
+            credential_secret_ref={
+                'name': cf_credential_secret_name,
+                'namespace': 'kubepanel',
+            },
+            records=dns_records,
+        )
+        logger.info(f"Created DNSZone CR for alias '{alias.alias_name}' with {len(dns_records)} records")
+        messages.info(request, f"DNS zone created for '{alias.alias_name}' with {len(dns_records)} records.")
+    except K8sClientError as e:
+        logger.error(f"Failed to create DNSZone CR for alias '{alias.alias_name}': {e}")
+        messages.warning(request, f"Alias created but DNS zone creation failed: {e}")
+
+
+@login_required
+def alias_delete(request, pk):
+    """Delete a domain alias, clean up DKIM/DNS resources, and sync to K8s."""
+    from dashboard.k8s.client import get_core_api
+
+    alias = get_object_or_404(DomainAlias, pk=pk)
+    domain = alias.domain
+
+    if domain.owner != request.user and not request.user.is_superuser:
+        return render(request, "main/error.html", {"error": "Permission denied."})
+
+    if request.method == 'POST':
+        alias_name = alias.alias_name
+
+        # Clean up DKIM secret if email was enabled
+        if alias.dkim_secret_name:
+            try:
+                core_api = get_core_api()
+                core_api.delete_namespaced_secret(
+                    name=alias.dkim_secret_name,
+                    namespace="kubepanel",
+                )
+                logger.info(f"Deleted DKIM secret '{alias.dkim_secret_name}' for alias '{alias_name}'")
+            except Exception as e:
+                logger.warning(f"Failed to delete DKIM secret for alias '{alias_name}': {e}")
+
+        # Delete DNSZone CR for alias (if exists)
+        try:
+            delete_dnszone(alias_name)
+            logger.info(f"Deleted DNSZone CR for alias '{alias_name}'")
+        except K8sNotFoundError:
+            pass
+        except K8sClientError as e:
+            logger.warning(f"Failed to delete DNSZone for alias '{alias_name}': {e}")
+
+        # Delete alias (cascades MailUser records via domain_alias FK)
+        alias.delete()
+
+        try:
+            _sync_domain_aliases(domain)
+            messages.success(request, f"Alias '{alias_name}' deleted successfully.")
+        except K8sClientError as e:
+            messages.warning(request, f"Alias deleted but failed to sync to Kubernetes: {e}")
+
+        return redirect('alias_list', pk=domain.pk)
+    return render(request, 'main/delete_alias.html', {'alias': alias})
+
+
+@login_required
+def view_alias(request, pk):
+    """Standalone alias detail page with certificate, DNS, and DKIM info."""
+    alias = get_object_or_404(DomainAlias, pk=pk)
+    domain = alias.domain
+    if domain.owner != request.user and not request.user.is_superuser:
+        return render(request, "main/error.html", {"error": "Permission denied."})
+
+    # Certificate info (cert lives in parent domain's namespace)
+    certificate_info = get_tls_certificate_info(alias.alias_name, domain.namespace)
+
+    # DNS info
+    dns_info = {'enabled': False}
+    try:
+        dnszone = get_dnszone(alias.alias_name)
+
+        spec_records = dnszone.records
+        status_records = dnszone.status.records
+        status_by_id = {r.get('recordId'): r for r in status_records if r.get('recordId')}
+
+        records = []
+        for i, spec_rec in enumerate(spec_records):
+            record_id = spec_rec.get('recordId')
+            status_rec = status_by_id.get(record_id, {}) if record_id else {}
+            records.append({
+                'index': i,
+                'type': spec_rec.get('type', ''),
+                'name': spec_rec.get('name', ''),
+                'content': spec_rec.get('content', ''),
+                'ttl': spec_rec.get('ttl', 1),
+                'proxied': spec_rec.get('proxied', False),
+                'priority': spec_rec.get('priority'),
+                'cf_record_id': record_id,
+                'synced': record_id is not None and status_rec.get('synced', False),
+                'pending_sync': record_id is None,
+                'error': status_rec.get('error'),
+            })
+
+        dns_info = {
+            'enabled': True,
+            'phase': dnszone.status.phase,
+            'zone': {
+                'id': dnszone.status.zone_id,
+                'name': dnszone.zone_name,
+                'nameservers': dnszone.status.nameservers,
+            },
+            'records': records,
+            'record_count': len(records),
+        }
+    except K8sNotFoundError:
+        pass
+    except K8sClientError as e:
+        logger.warning(f"Failed to get DNSZone for alias {alias.alias_name}: {e}")
+
+    # DKIM info
+    dkim_info = {}
+    if alias.email_enabled and alias.dkim_secret_name:
+        try:
+            dkim_info['dns_record'] = get_secret_value(
+                name=alias.dkim_secret_name,
+                namespace="kubepanel",
+                key="dns-txt-record",
+            )
+            dkim_info['public_key'] = get_secret_value(
+                name=alias.dkim_secret_name,
+                namespace="kubepanel",
+                key="public-key",
+            )
+            dkim_info['selector'] = alias.dkim_selector or 'default'
+        except Exception as e:
+            logger.warning(f"Failed to get DKIM info for alias {alias.alias_name}: {e}")
+
+    api_tokens = CloudflareAPIToken.objects.filter(user=request.user)
+
+    return render(request, 'main/view_alias.html', {
+        'alias': alias,
+        'domain': domain,
+        'certificate': certificate_info,
+        'dns': dns_info,
+        'dkim': dkim_info,
+        'api_tokens': api_tokens,
+    })
+
+
+@login_required
+def enable_alias_dns(request, pk):
+    """Enable DNS management for a domain alias."""
+    from kubernetes.client import V1Secret, V1ObjectMeta
+    from kubernetes.client.rest import ApiException as K8sApiException
+    from dashboard.k8s.client import get_core_api
+
+    alias = get_object_or_404(DomainAlias, pk=pk)
+    domain = alias.domain
+
+    if domain.owner != request.user and not request.user.is_superuser:
+        return render(request, "main/error.html", {"error": "Permission denied."})
+
+    if request.method != 'POST':
+        return redirect('view_alias', pk=pk)
+
+    if dnszone_exists(alias.alias_name):
+        messages.warning(request, "DNS management is already enabled for this alias.")
+        return redirect('view_alias', pk=pk)
+
+    api_token_id = request.POST.get('api_token')
+    if not api_token_id:
+        messages.error(request, "Please select a CloudFlare API token.")
+        return redirect('view_alias', pk=pk)
+
+    try:
+        cf_token = CloudflareAPIToken.objects.get(pk=int(api_token_id), user=request.user)
+    except (CloudflareAPIToken.DoesNotExist, ValueError):
+        messages.error(request, "Invalid CloudFlare API token selected.")
+        return redirect('view_alias', pk=pk)
+
+    auto_records = request.POST.get('auto_records') == '1'
+
+    # Create/update CF credential secret
+    cf_credential_secret_name = f"cf-token-{cf_token.pk}"
+    try:
+        core_api = get_core_api()
+        cf_secret = V1Secret(
+            api_version="v1",
+            kind="Secret",
+            metadata=V1ObjectMeta(
+                name=cf_credential_secret_name,
+                namespace="kubepanel",
+                labels={
+                    "app.kubernetes.io/managed-by": "kubepanel",
+                    "kubepanel.io/type": "cloudflare-credential",
+                }
+            ),
+            type="Opaque",
+            string_data={"api_token": cf_token.api_token},
+        )
+        try:
+            core_api.create_namespaced_secret(namespace="kubepanel", body=cf_secret)
+        except K8sApiException as e:
+            if e.status == 409:
+                core_api.replace_namespaced_secret(
+                    name=cf_credential_secret_name, namespace="kubepanel", body=cf_secret
+                )
+            else:
+                raise
+    except Exception as e:
+        logger.error(f"Failed to create CF credential secret for alias '{alias.alias_name}': {e}")
+        messages.error(request, f"Failed to create CloudFlare credential: {e}")
+        return redirect('view_alias', pk=pk)
+
+    # Build DNS records if auto_records is checked
+    dns_records = []
+    if auto_records:
+        cluster_ips = list(ClusterIP.objects.values_list('ip_address', flat=True))
+
+        dkim_selector = alias.dkim_selector if alias.email_enabled else None
+        dkim_dns_record = None
+        if alias.email_enabled and alias.dkim_secret_name:
+            try:
+                dkim_dns_record = get_secret_value(
+                    name=alias.dkim_secret_name,
+                    namespace="kubepanel",
+                    key="dns-txt-record",
+                )
+            except Exception as e:
+                logger.warning(f"Could not get DKIM record for alias '{alias.alias_name}': {e}")
+                dkim_selector = None
+
+        dns_records = _build_dns_records(
+            domain_name=alias.alias_name,
+            cluster_ips=cluster_ips,
+            dkim_selector=dkim_selector,
+            dkim_dns_record=dkim_dns_record,
+        )
+
+    # Create DNSZone CR
+    try:
+        create_dnszone(
+            zone_name=alias.alias_name,
+            credential_secret_ref={
+                'name': cf_credential_secret_name,
+                'namespace': 'kubepanel',
+            },
+            records=dns_records,
+        )
+        logger.info(f"Created DNSZone CR for alias '{alias.alias_name}' with {len(dns_records)} records")
+        messages.success(request, f"DNS management enabled for '{alias.alias_name}'.")
+    except K8sClientError as e:
+        logger.error(f"Failed to create DNSZone CR for alias '{alias.alias_name}': {e}")
+        messages.error(request, f"Failed to create DNS zone: {e}")
+
+    return redirect('view_alias', pk=pk)
+
+
+@login_required(login_url="/dashboard/")
+def purge_cache(request, domain):
+    """
+    Purge the FastCGI cache for a domain.
+
+    Executes a command on the nginx container to remove all cached files.
+    """
+    from django.http import JsonResponse
+    from kubernetes.stream import stream
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+
+    # Check permissions
+    try:
+        if request.user.is_superuser:
+            domain_obj = Domain.objects.get(domain_name=domain)
+        else:
+            domain_obj = Domain.objects.get(owner=request.user, domain_name=domain)
+    except Domain.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+
+    namespace = domain_obj.namespace
+
+    try:
+        # Load K8s config
+        try:
+            config.load_incluster_config()
+        except:
+            config.load_kube_config()
+
+        core_api = client.CoreV1Api()
+
+        # Find the nginx container in the domain's deployment
+        pod_list = core_api.list_namespaced_pod(
+            namespace=namespace,
+            label_selector='app=domain-workload'
+        )
+
+        if not pod_list.items:
+            return JsonResponse({
+                'success': False,
+                'error': 'No running pods found for this domain'
+            }, status=404)
+
+        # Use the first running pod
+        target_pod = None
+        for pod in pod_list.items:
+            if pod.status.phase == 'Running':
+                target_pod = pod
+                break
+
+        if not target_pod:
+            return JsonResponse({
+                'success': False,
+                'error': 'No running pods found for this domain'
+            }, status=404)
+
+        # Execute cache purge command on nginx container
+        # The cache is stored in /var/cache/nginx
+        exec_command = [
+            '/bin/sh', '-c',
+            'rm -rf /var/cache/nginx/* 2>/dev/null; echo "Cache purged"'
+        ]
+
+        resp = stream(
+            core_api.connect_get_namespaced_pod_exec,
+            target_pod.metadata.name,
+            namespace,
+            container='nginx',
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+
+        logger.info(f"Cache purged for domain {domain}: {resp}")
+
+        # Log the action
+        LogEntry.objects.create(
+            content_object=domain_obj,
+            actor=f"user:{request.user.username}",
+            user=request.user,
+            level="INFO",
+            message=f"FastCGI cache purged for {domain}",
+            data={
+                "domain_id": domain_obj.pk,
+                "pod": target_pod.metadata.name,
+            }
+        )
+
+        return JsonResponse({'success': True, 'message': 'Cache purged successfully'})
+
+    except Exception as e:
+        logger.error(f"Failed to purge cache for {domain}: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
