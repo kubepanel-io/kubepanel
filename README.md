@@ -16,13 +16,13 @@ Since it's kubernetes native, the infrastructure is modular, you can add own con
 
 ```
 bash <(curl \
-https://raw.githubusercontent.com/laszlokulcsar/kubepanel-infra/refs/heads/main/kubepanel-install.sh)
+https://raw.githubusercontent.com/kubepanel-io/kubepanel-infra/refs/heads/main/kubepanel-install.sh)
 ```
 # INSTALL on the 2nd and 3rd node:
 
 ```
 bash <(curl \
-https://raw.githubusercontent.com/laszlokulcsar/kubepanel-infra/refs/heads/main/join-node.sh)
+https://raw.githubusercontent.com/kubepanel-io/kubepanel-infra/refs/heads/main/join-node.sh)
 ```
 
 After the successful installation you can reach the Kubepanel UI on your choosen domain name.
