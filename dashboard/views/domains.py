@@ -51,6 +51,11 @@ from dashboard.k8s import (
     delete_dnszone,
     dnszone_exists,
     get_dnszone,
+    # Panel Ingress operations
+    get_panel_hosts,
+    get_primary_domain,
+    add_panel_domain,
+    remove_panel_domain,
 )
 
 logger = logging.getLogger("django")
@@ -1540,12 +1545,60 @@ def settings(request):
                 logger.error(f"Failed to save feature flags: {e}")
                 messages.error(request, f'Error saving feature flags: {e}')
 
+        # Handle add panel domain (superuser only)
+        elif 'add_panel_domain' in request.POST and request.user.is_superuser:
+            domain_name = request.POST.get('panel_domain_name', '').strip().lower()
+            try:
+                # Validate domain format
+                pattern = r'^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
+                if not re.match(pattern, domain_name):
+                    raise ValueError("Invalid domain name format")
+
+                add_panel_domain(domain_name)
+                messages.success(request, f'Panel domain "{domain_name}" added successfully. TLS certificate will be provisioned automatically.')
+            except ValueError as e:
+                messages.error(request, str(e))
+            except K8sClientError as e:
+                logger.error(f"Failed to add panel domain: {e}")
+                messages.error(request, f'Error adding panel domain: {e}')
+            except Exception as e:
+                logger.error(f"Unexpected error adding panel domain: {e}")
+                messages.error(request, f'Error adding panel domain: {e}')
+
+        # Handle delete panel domain (superuser only)
+        elif 'delete_panel_domain' in request.POST and request.user.is_superuser:
+            domain_name = request.POST.get('panel_domain_name', '').strip().lower()
+            try:
+                remove_panel_domain(domain_name)
+                messages.success(request, f'Panel domain "{domain_name}" removed.')
+            except ValueError as e:
+                messages.error(request, str(e))
+            except K8sClientError as e:
+                logger.error(f"Failed to remove panel domain: {e}")
+                messages.error(request, f'Error removing panel domain: {e}')
+            except Exception as e:
+                logger.error(f"Unexpected error removing panel domain: {e}")
+                messages.error(request, f'Error removing panel domain: {e}')
+
+    # Get panel domains for superusers
+    panel_hosts = None
+    primary_domain = None
+    if request.user.is_superuser:
+        try:
+            panel_hosts = get_panel_hosts()
+            primary_domain = panel_hosts[0] if panel_hosts else None
+        except Exception as e:
+            logger.warning(f"Failed to get panel hosts: {e}")
+            panel_hosts = []
+
     return render(request, "main/settings.html", {
         'password_form': password_form,
         'password_changed': password_changed,
         'system_settings': system_settings,
         'license': license_status,
         'license_usage': license_usage,
+        'panel_hosts': panel_hosts,
+        'primary_domain': primary_domain,
     })
 
 

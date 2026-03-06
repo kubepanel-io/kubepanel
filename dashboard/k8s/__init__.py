@@ -160,6 +160,13 @@ from .smtp_firewall import (
     get_all_rate_limits,
 )
 
+from .panel_ingress import (
+    get_panel_hosts,
+    get_primary_domain,
+    add_panel_domain,
+    remove_panel_domain,
+)
+
 __all__ = [
     # Exceptions
     'K8sClientError',
@@ -308,4 +315,10 @@ __all__ = [
     'remove_rate_limit',
     'get_rate_limit',
     'get_all_rate_limits',
+
+    # Panel Ingress operations
+    'get_panel_hosts',
+    'get_primary_domain',
+    'add_panel_domain',
+    'remove_panel_domain',
 ]
