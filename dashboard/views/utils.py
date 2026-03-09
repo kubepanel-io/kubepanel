@@ -8,7 +8,7 @@ import random
 import string
 import geoip2.database
 
-GEOIP_DB_PATH = "/kubepanel/GeoLite2-Country.mmdb"
+GEOIP_DB_PATH = "/kubepanel/dbip-country-lite-2026-03.mmdb"
 EXCLUDED_EXTENSIONS = [".js", ".css", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".map"]
 
 # ISO 3166-1 alpha-2 country codes with names for WAF dropdowns
