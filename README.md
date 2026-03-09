@@ -1,45 +1,157 @@
-# Kubepanel
+# KubePanel
 
-Kubepanel is a free and open-source web hosting control panel based on Kubernetes (it supports microk8s out of the box at the moment).
-The project is in an early PoC stage at the moment, the goal is to create an open source K8S based alternative to control panels like cPanel, DirectAdmin and others.
-Since it's kubernetes native, the infrastructure is modular, you can add own container images to satisfy various customer needs.
+**Kubernetes-native web hosting control panel — a self-hosted alternative to cPanel and DirectAdmin.**
 
-# Prerequisites
+[![License: KubePanel SAL v1.0](https://img.shields.io/badge/license-KubePanel%20SAL%20v1.0-blue)](./LICENSE)
+[![Kubernetes](https://img.shields.io/badge/kubernetes-microk8s-326CE5?logo=kubernetes)](https://microk8s.io)
+[![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python)](https://www.python.org)
 
-- You need three Ubuntu 24.04 LTS servers with internet access 
-- A public IP address and a DNS entry with an A record pointing to your public IP address. This is required to reach the Kubepanel UI after the installation. i.e.: if you have a domain name 'example.com' you can create an A record 'kubepanel.example.com' which resolves to your servers public IP address.
-- For proper certificate management you can create a wildcard A record pointing to your public IP address(es). If wildcard is not an option, please make sure the following A records are pointing to at least one of your servers IP address: 'kubepanel.yourdomain.tld', 'webmail.kubepanel.yourdomain.tld', 'phpmyadmin.kubepanel.yourdomain.tld'.
-- Open port 80, 443 on your firewall
-- An empty disk attached under /dev/sdb
-  
-# INSTALL on the 1st node:
+---
+
+## What is KubePanel?
+
+KubePanel is a Kubernetes-native web hosting control panel designed as a modern replacement for cPanel, DirectAdmin, and Plesk. It runs on your own infrastructure — three Ubuntu servers are all you need — and uses Kubernetes to deliver high availability, self-healing, and multi-workload hosting out of the box.
+
+Each hosting account runs in its own isolated Kubernetes namespace with dedicated containers for the web application, Nginx, SFTP, and email. Infrastructure is managed by a Kubernetes operator, so provisioning, scaling, and failure recovery happen automatically without manual intervention.
+
+---
+
+## Features
+
+**Workloads & Web**
+- Multi-workload support: PHP, Python, Node.js, and Django — admin-configurable runtimes and versions
+- Nginx reverse proxy per domain with automatic SSL certificates (cert-manager + Let's Encrypt)
+- WordPress one-click pre-installation
+- Domain suspension and unsuspension
+
+**Access & Storage**
+- SFTP/SCP access per hosting account (sidecar container, NodePort)
+- MariaDB database and user provisioned automatically per domain
+
+**Email**
+- Outgoing email with Postfix and per-domain DKIM signing (OpenDKIM)
+- Mailbox management with Roundcube webmail
+
+**Security**
+- Per-domain and global WAF rules
+- Country-based IP blocking (GeoIP)
+- Container-level workload isolation
+
+**DNS**
+- Cloudflare DNS zone management
+
+**Infrastructure**
+- Kubernetes operator (kopf) for continuous reconciliation and self-healing
+- High availability via microk8s multi-node cluster
+- Linstor storage with automatic PVC provisioning
+
+---
+
+## Architecture
 
 ```
-bash <(curl \
-https://raw.githubusercontent.com/kubepanel-io/kubepanel-infra/refs/heads/main/kubepanel-install.sh)
+Django Dashboard          (business logic: accounts, packages, DNS, email)
+       │
+       │  Creates/Updates Domain Custom Resources
+       ▼
+Kubernetes Domain CR      (spec: workload type, resources, email, SSL config)
+       │
+       │  Watches & Reconciles
+       ▼
+Kopf Operator             (provisions all K8s resources, manages secrets,
+       │                   configures DKIM, self-heals on drift)
+       │
+       ▼
+Per-Domain Namespace
+  ├── Deployment (app + nginx + sftp containers)
+  ├── PersistentVolumeClaim
+  ├── Secrets (SFTP credentials, DB credentials, DKIM keys)
+  ├── ConfigMap (nginx config)
+  ├── Service (ClusterIP + NodePort for SFTP)
+  └── Ingress (TLS via cert-manager)
 ```
-# INSTALL on the 2nd and 3rd node:
 
+---
+
+## Supported Workloads
+
+| Type    | Default Port | Proxy Mode | Use Case             |
+|---------|-------------|------------|----------------------|
+| PHP     | 9001        | FastCGI    | PHP-FPM applications |
+| Python  | 8000        | HTTP       | Gunicorn / WSGI apps |
+| Node.js | 3000        | HTTP       | Express / Node apps  |
+| Django  | 8000        | HTTP       | Django applications  |
+
+Workload types and container images are managed through the Django admin — no code changes required to add new runtimes.
+
+---
+
+## Requirements
+
+- **3 × Ubuntu 24.04 LTS servers** with internet access
+- A **public IP address** and a DNS A record pointing to it (e.g. `kubepanel.yourdomain.tld`)
+- For full certificate management: a wildcard A record, or individual A records for `kubepanel.yourdomain.tld`, `webmail.kubepanel.yourdomain.tld`, and `phpmyadmin.kubepanel.yourdomain.tld`
+- **Open ports:** 80, 443 (and NodePort range for SFTP)
+- An **empty disk attached at `/dev/sdb`** on each node (used for Linstor storage)
+
+---
+
+## Installation
+
+**First node:**
+
+```bash
+bash <(curl https://raw.githubusercontent.com/kubepanel-io/kubepanel-infra/refs/heads/main/kubepanel-install.sh)
 ```
-bash <(curl \
-https://raw.githubusercontent.com/kubepanel-io/kubepanel-infra/refs/heads/main/join-node.sh)
+
+**Second and third nodes:**
+
+```bash
+bash <(curl https://raw.githubusercontent.com/kubepanel-io/kubepanel-infra/refs/heads/main/join-node.sh)
 ```
 
-After the successful installation you can reach the Kubepanel UI on your choosen domain name.
+After a successful installation, KubePanel is accessible at the domain you configured during setup.
 
+---
 
-# Features
+## Managed Cloud
 
-- Django based web application for account management
-- A hosting account uses Nginx and PHP containers by default
-- Container images can be extended dynamically based on customer needs
-- SFTP/SCP support (as sidecar container) for uploading codebase to the containers
-- MariaDB as default database backend
-- Postfix with DKIM signing for outgoing emails
-- Automatic HTTPS certificate management by cert-manager
-- Supports the latest Wordpress by default
+Don't want to manage the infrastructure yourself? KubePanel is available as a fully managed cloud service. We provision a dedicated 3-node Kubernetes cluster on your behalf and keep it running — you receive a dashboard URL and admin credentials, ready to go.
 
-# Mailbox management
+Available in EU and US regions. Plans start at $89/month.
 
-- Mailbox management is natively supported now
-- Roundcube is used as a Web UI
+**[View managed plans at kubepanel.io/pricing](https://kubepanel.io/pricing)**
+
+---
+
+## License
+
+KubePanel is **source-available** under the [KubePanel Source-Available License v1.0](./LICENSE).
+
+| Use case | License required |
+|----------|-----------------|
+| Inspect and modify the source code | Free, no key needed |
+| Run KubePanel managing **up to 5 domains** (Community tier) | Free, no key needed |
+| Run KubePanel managing **6+ domains** (Commercial use) | Paid license key required |
+
+Paid licenses are available at **[kubepanel.io/pricing](https://kubepanel.io/pricing)**.
+
+> This is not an OSI-approved open-source license. If your paid license expires, existing hosted sites continue running — only creation of new domains beyond the free tier limit is restricted.
+
+---
+
+## Contributing
+
+Pull requests are welcome. By submitting a contribution, you agree that your code will be licensed under the same [KubePanel Source-Available License v1.0](./LICENSE), including its copyleft and source-disclosure requirements.
+
+Please open an issue first for significant changes to discuss the approach before investing time in implementation.
+
+---
+
+## Links
+
+- **Website:** [kubepanel.io](https://kubepanel.io)
+- **Pricing:** [kubepanel.io/pricing](https://kubepanel.io/pricing)
+- **Issues:** [GitHub Issues](https://github.com/kubepanel-io/kubepanel/issues)
+- **License:** [LICENSE](./LICENSE)
+- **Contact:** licensing@kubepanel.io
