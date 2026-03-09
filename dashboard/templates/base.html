@@ -313,6 +313,24 @@
                             {% endif %}
                         </div>
                     </div>                    
+                    <!-- Webmail (Roundcube) -->
+                    <a id="webmail-link" href="#" target="_blank"
+                       class="text-gray-700 hover:text-primary-600 hover:bg-gray-50 group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg sidebar-transition">
+                        <svg class="text-gray-400 group-hover:text-primary-500 mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        Webmail
+                    </a>
+
+                    <!-- PHPMyAdmin -->
+                    <a id="phpmyadmin-link" href="#" target="_blank"
+                       class="text-gray-700 hover:text-primary-600 hover:bg-gray-50 group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg sidebar-transition">
+                        <svg class="text-gray-400 group-hover:text-primary-500 mr-3 h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+                        </svg>
+                        PHPMyAdmin
+                    </a>
+
                     <!-- Support -->
                     <a href="https://kubepanel.io" target="_blank"
                        class="text-gray-700 hover:text-primary-600 hover:bg-gray-50 group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg sidebar-transition">
@@ -457,6 +475,17 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Set dynamic URLs for Webmail and PHPMyAdmin based on current hostname
+            const currentHost = window.location.hostname;
+            const webmailLink = document.getElementById('webmail-link');
+            const phpmyadminLink = document.getElementById('phpmyadmin-link');
+            if (webmailLink) {
+                webmailLink.href = 'https://webmail.' + currentHost;
+            }
+            if (phpmyadminLink) {
+                phpmyadminLink.href = 'https://phpmyadmin.' + currentHost;
+            }
+
             // Dropdown functionality
             const dropdowns = document.querySelectorAll('.dropdown');
             

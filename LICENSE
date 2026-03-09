@@ -1,0 +1,307 @@
+KubePanel Source-Available License
+Version 1.0
+
+Copyright (c) 2025 ait.hu Web Services Kft. All rights reserved.
+
+════════════════════════════════════════════════════════════════════════
+
+NOTICE: This is a source-available license. It is NOT an open-source
+license as defined by the Open Source Initiative (OSI). The source code
+is publicly available for inspection and modification, but use is subject
+to the conditions below.
+
+════════════════════════════════════════════════════════════════════════
+
+
+1. ACCEPTANCE
+
+By using, copying, modifying, or distributing this Software, you agree
+to be bound by the terms of this License. If you do not agree to these
+terms, you may not use the Software.
+
+
+2. DEFINITIONS
+
+"Licensor" means ait.hu Web Services Kft., the copyright holder of the
+Software.
+
+"Software" means the KubePanel software and all associated source code,
+documentation, configuration files, and container definitions made
+available under this License.
+
+"You" (or "Your") means the individual or legal entity exercising rights
+granted by this License.
+
+"Modification" means any addition to, deletion from, or change to the
+substance or structure of the Software or any of its files.
+
+"Derivative Work" means any work that incorporates, is derived from, or
+builds upon the Software, including Modifications.
+
+"Distribute" means to make the Software or a Derivative Work available
+to any third party, whether by transfer of copies, publication of source
+code, provision as a hosted or managed service, or any other means.
+
+"Community Use" means use of the Software in a production environment
+managing no more than five (5) hosted domains or websites simultaneously.
+
+"Commercial Use" means any production use of the Software that exceeds
+the limits of Community Use, including managing more than five (5) hosted
+domains or websites.
+
+"Competing Product" means any software product, platform, or service that
+provides web hosting control panel functionality to third parties,
+including but not limited to: management of multiple hosted domains or
+websites on behalf of customers, automated web server configuration for
+multiple tenants, containerized workload deployment for hosting customers,
+multi-tenant hosting account management, or SFTP/SSH access provisioning
+for hosting customers. Existing products such as cPanel, DirectAdmin,
+Plesk, and Froxlor are examples of Competing Products.
+
+"License Enforcement Mechanisms" means any code, configuration, or
+technical controls within the Software that verify license keys, count
+hosted domains or sites, enforce domain or feature limits, report usage
+statistics to the Licensor's servers, or restrict access to functionality
+based on license tier.
+
+
+3. GRANT OF RIGHTS
+
+Subject to the terms and conditions of this License, the Licensor grants
+You a worldwide, non-exclusive, non-transferable, non-sublicensable
+license to:
+
+  (a) Use the Software for Community Use, free of charge and without
+      requiring a license key.
+
+  (b) Copy and inspect the Software's source code.
+
+  (c) Modify the Software and create Derivative Works.
+
+  (d) Distribute the Software or Derivative Works, subject to the
+      conditions in Section 4.
+
+All rights not expressly granted herein are reserved by the Licensor.
+
+
+4. CONDITIONS
+
+4.1  Commercial Use Requires a Paid License
+
+     Commercial Use of the Software requires a valid paid license key
+     issued by the Licensor. License keys are available at
+     https://kubepanel.io/pricing.
+
+     Using the Software for Commercial Use without a valid license key
+     is a material breach of this License.
+
+4.2  Copyleft — Source Disclosure
+
+     If You Distribute the Software or any Derivative Work, or if You
+     make the Software or any Derivative Work available as a service to
+     external users over a network (including as a SaaS product or
+     managed service), You must:
+
+       (a) Make the complete corresponding source code of the Derivative
+           Work publicly available to all recipients or users under the
+           terms of this License, at no additional charge and via a
+           publicly accessible means such as a public source code
+           repository;
+
+       (b) Prominently include a complete copy of this License with the
+           Derivative Work; and
+
+       (c) Clearly and prominently identify all Modifications You have
+           made to the original Software, including the date of each
+           Modification.
+
+     You may not impose any additional restrictions on the recipients'
+     exercise of the rights granted by this License.
+
+4.3  Anti-Circumvention
+
+     You may not, and may not authorize or assist others to:
+
+       (a) Remove, disable, obfuscate, replace, bypass, or circumvent
+           the License Enforcement Mechanisms in any way;
+
+       (b) Modify the License Enforcement Mechanisms in a manner that
+           causes the Software to accept unauthorized license keys, skip
+           license validation, misrepresent domain counts, or otherwise
+           operate beyond the limits of a validly issued license key;
+
+       (c) Patch, instrument, or intercept the license validation,
+           phone-home, or domain-counting routines so that the Software
+           reports a false compliance state; or
+
+       (d) Distribute a version of the Software or any Derivative Work
+           in which the License Enforcement Mechanisms have been removed,
+           disabled, or materially altered.
+
+     Any Derivative Work that is Distributed or offered as a service
+     must include all License Enforcement Mechanisms in fully functional
+     form.
+
+4.4  No Competing Products
+
+     You may not use the Software, in whole or in part — including as
+     source code, compiled code, configuration, architectural reference,
+     or algorithmic basis — to develop, operate, provide, or improve a
+     Competing Product.
+
+     For the avoidance of doubt: operating the Software to provide web
+     hosting services to Your own customers (while holding a valid paid
+     license) does not constitute building a Competing Product. Building
+     a Competing Product means creating or contributing to a separate
+     software product or platform that itself provides hosting control
+     panel functionality to third parties.
+
+4.5  Attribution and Notices
+
+     You must:
+
+       (a) Retain all copyright, trademark, and attribution notices
+           present in the Software in all copies and Derivative Works;
+
+       (b) Reproduce this License in full in all copies or substantial
+           portions of the Software or any Derivative Work; and
+
+       (c) Not remove, alter, or obscure any legal notices in the
+           Software.
+
+
+5. PAID LICENSE TERMS
+
+When You hold a valid paid license key issued by the Licensor:
+
+  (a) You may use the Software in production for Commercial Use, up to
+      the domain limit specified in Your license key.
+
+  (b) Your license is valid until the expiration date embedded in Your
+      license key. Renewal is subject to the then-current pricing
+      published at https://kubepanel.io/pricing.
+
+  (c) Graceful Degradation: If Your paid license expires, the Software
+      will not terminate or disrupt existing hosted websites or services.
+      Enforcement of an expired license is limited to preventing the
+      creation of new hosted domains beyond the Community Use limit until
+      a valid license is obtained. This graceful degradation guarantee is
+      a material term of the paid license.
+
+  (d) License keys are issued to a single legal entity and may not be
+      shared, transferred, or used by a different legal entity without
+      the Licensor's prior written consent.
+
+  (e) Use across multiple separate installations or clusters requires a
+      separate license key per installation unless otherwise agreed in
+      writing with the Licensor.
+
+
+6. RESTRICTIONS
+
+In addition to the conditions in Section 4, You may not:
+
+  (a) Sublicense, sell, resell, or transfer this License or any rights
+      granted herein to any third party;
+
+  (b) Use the name "KubePanel", the Licensor's name "ait.hu Web Services
+      Kft.", associated logos, or trademarks to endorse or promote
+      products derived from the Software without the Licensor's prior
+      written permission; or
+
+  (c) Misrepresent the origin of the Software or claim authorship of
+      unmodified portions of the Software.
+
+
+7. INTELLECTUAL PROPERTY
+
+The Licensor retains all copyright, patent, trademark, and other
+intellectual property rights in and to the Software. This License grants
+You no rights in the Software other than those expressly set out herein.
+
+
+8. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND
+NON-INFRINGEMENT. THE LICENSOR DOES NOT WARRANT THAT THE SOFTWARE WILL
+BE ERROR-FREE, UNINTERRUPTED, SECURE, OR FREE OF HARMFUL COMPONENTS.
+YOU ASSUME ALL RISK ARISING FROM YOUR USE OF THE SOFTWARE.
+
+The graceful degradation guarantee in Section 5(c) applies solely to
+holders of valid paid license keys and is not subject to this general
+disclaimer.
+
+
+9. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL
+THE LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+PUNITIVE, OR CONSEQUENTIAL DAMAGES OF ANY KIND (INCLUDING BUT NOT LIMITED
+TO LOSS OF DATA, LOSS OF REVENUE OR PROFITS, BUSINESS INTERRUPTION, OR
+LOSS OF GOODWILL) ARISING OUT OF OR RELATED TO THIS LICENSE OR THE USE
+OF OR INABILITY TO USE THE SOFTWARE, EVEN IF THE LICENSOR HAS BEEN
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+THE LICENSOR'S TOTAL CUMULATIVE LIABILITY TO YOU FOR ALL CLAIMS ARISING
+OUT OF OR RELATED TO THIS LICENSE, REGARDLESS OF THE FORM OF ACTION,
+SHALL NOT EXCEED THE GREATER OF: (A) THE TOTAL AMOUNTS PAID BY YOU TO
+THE LICENSOR IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM, OR
+(B) ONE HUNDRED EUROS (EUR 100).
+
+
+10. TERMINATION
+
+10.1 This License and all rights granted herein terminate automatically
+     and immediately if You breach any condition of this License.
+
+10.2 Upon termination, You must immediately cease all use, copying,
+     modification, and Distribution of the Software and all Derivative
+     Works, and must destroy or delete all copies in Your possession
+     or control.
+
+10.3 Cure: If You cure the breach fully within thirty (30) days of the
+     date You first knew or should have known of the breach, and this is
+     the first breach by You, the Licensor may at its sole discretion
+     reinstate Your license. Reinstatement is not guaranteed.
+
+10.4 Survival: Sections 2, 7, 8, 9, 10.2, 10.4, and 11 survive any
+     termination of this License.
+
+
+11. GENERAL
+
+11.1 Governing Law. This License is governed by and construed in
+     accordance with the laws of Hungary, without regard to its conflict
+     of laws principles. Any disputes arising under this License shall
+     be subject to the exclusive jurisdiction of the courts of Budapest,
+     Hungary.
+
+11.2 Severability. If any provision of this License is held invalid,
+     illegal, or unenforceable, that provision shall be modified to the
+     minimum extent necessary to make it enforceable. If modification is
+     not possible, the provision shall be severed, and the remaining
+     provisions shall continue in full force and effect.
+
+11.3 Entire Agreement. This License constitutes the entire agreement
+     between You and the Licensor with respect to the Software and
+     supersedes all prior or contemporaneous agreements, representations,
+     or understandings relating to the Software.
+
+11.4 No Waiver. Failure by the Licensor to enforce any provision of this
+     License at any time does not constitute a waiver of the Licensor's
+     right to enforce that provision in the future.
+
+11.5 Amendments. The Licensor may publish updated versions of this
+     License. Each version will be given a distinct version number. You
+     may use any version of the Software under the version of this License
+     that accompanied it, or under any later version published by the
+     Licensor.
+
+11.6 Contact. For licensing inquiries, paid license purchases, or written
+     permissions beyond the scope of this License, contact:
+
+       ait.hu Web Services Kft.
+       licensing@kubepanel.io
+       https://kubepanel.io
