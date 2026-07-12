@@ -39,6 +39,7 @@ CSRF_TRUSTED_ORIGINS = ["https://<KUBEPANEL_DOMAIN>"]
 
 INSTALLED_APPS = [
     'dashboard.apps.DashboardConfig',
+    'analytics.apps.AnalyticsConfig',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -94,8 +95,27 @@ DATABASES = {
         'OPTIONS': {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
         },
-    }
+    },
+    # Server-side analytics live in a separate schema so raw request
+    # inserts do not contend with the panel's operational tables.
+    'analytics': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'kubepanel_analytics',
+        'USER': 'kubepanel',
+        'PASSWORD': '<MARIADB_ROOT_PASSWORD>',
+        'HOST': 'mariadb.kubepanel.svc.cluster.local',
+        'PORT': '3306',
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
+    },
 }
+
+DATABASE_ROUTERS = ['analytics.router.AnalyticsRouter']
+
+# Fluent Bit posts log batches to the analytics ingest endpoint; allow
+# larger request bodies than the 2.5 MB Django default.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

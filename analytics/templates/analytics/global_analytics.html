@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Global Analytics | KubePanel{% endblock %}
+
+{% block page_title %}Global Analytics{% endblock %}
+{% block page_subtitle %}Cluster-wide traffic statistics across all hosted domains{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+    <button type="button" data-range="day" class="range-btn px-3 py-1.5 rounded text-sm font-medium bg-white shadow-sm text-gray-900">Day</button>
+    <button type="button" data-range="week" class="range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">Week</button>
+    <button type="button" data-range="month" class="range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">Month</button>
+    <button type="button" data-range="year" class="range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">Year</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">Unique Visitors</span>
+        <div class="text-2xl font-bold text-gray-900 mt-2" id="sum-visitors">--</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">Pageviews</span>
+        <div class="text-2xl font-bold text-gray-900 mt-2" id="sum-pageviews">--</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">Bandwidth</span>
+        <div class="text-2xl font-bold text-gray-900 mt-2" id="sum-bandwidth">--</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">Total Requests</span>
+        <div class="text-2xl font-bold text-gray-900 mt-2" id="sum-requests">--</div>
+        <div class="text-sm text-gray-500" id="sum-errors">-- errors</div>
+    </div>
+</div>
+
+<!-- Timeseries Chart -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div>
+            <h3 class="text-lg font-medium text-gray-900">Traffic</h3>
+            <p class="text-sm text-gray-500">All domains combined</p>
+        </div>
+        <label class="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer">
+            <input type="checkbox" id="include-bots" class="rounded border-gray-300 text-primary-600">
+            <span>Show all requests (incl. bots)</span>
+        </label>
+    </div>
+    <div class="p-6">
+        <canvas id="trafficChart" height="90"></canvas>
+    </div>
+</div>
+
+<!-- Top Domains -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900">Top Domains</h3>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+                <tr>
+                    <th class="px-6 py-3 text-left">Domain</th>
+                    <th class="px-6 py-3 text-right">Visitors</th>
+                    <th class="px-6 py-3 text-right">Pageviews</th>
+                    <th class="px-6 py-3 text-right">Requests</th>
+                    <th class="px-6 py-3 text-right">Bandwidth</th>
+                </tr>
+            </thead>
+            <tbody id="domains-table" class="divide-y divide-gray-100"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Cards Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Countries</h3>
+        </div>
+        <div class="p-4"><ul id="card-countries" class="divide-y divide-gray-100"></ul></div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Top IPs</h3>
+            <p class="text-xs text-gray-500">All traffic, including bots</p>
+        </div>
+        <div class="p-4"><ul id="card-ips" class="divide-y divide-gray-100"></ul></div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Traffic Mix</h3>
+            <p class="text-xs text-gray-500">Human vs. bot requests</p>
+        </div>
+        <div class="p-6 flex items-center space-x-6">
+            <div class="w-36 h-36 flex-shrink-0"><canvas id="mixChart"></canvas></div>
+            <ul id="card-mix" class="flex-1 space-y-2 text-sm"></ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    const apiUrl = '{% url "global_analytics_api" %}';
+
+    let charts = {};
+    let currentRange = 'day';
+    let currentData = null;
+
+    const mixColors = {
+        human: 'rgb(34, 197, 94)',
+        search_engine: 'rgb(59, 130, 246)',
+        ai_bot: 'rgb(147, 51, 234)',
+        other_bot: 'rgb(156, 163, 175)',
+    };
+    const mixLabels = {
+        human: 'Human',
+        search_engine: 'Search engines',
+        ai_bot: 'AI bots',
+        other_bot: 'Other bots',
+    };
+
+    function formatBytes(bytes) {
+        if (!bytes) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return String(num);
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+    }
+
+    function bucketLabel(t, granularity) {
+        if (granularity === 'monthly') return t;
+        const d = new Date(t);
+        if (granularity === 'hourly') {
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+
+    function listRow(label, value, sublabel) {
+        return '<li class="flex items-center justify-between py-2">' +
+            '<span class="text-sm text-gray-700 truncate mr-3" title="' + escapeHtml(label) + '">' +
+            escapeHtml(label) + (sublabel ? ' <span class="text-xs text-gray-400">' + escapeHtml(sublabel) + '</span>' : '') +
+            '</span>' +
+            '<span class="text-sm font-medium text-gray-900 flex-shrink-0">' + escapeHtml(value) + '</span></li>';
+    }
+
+    function renderList(elementId, rows) {
+        const el = document.getElementById(elementId);
+        el.innerHTML = rows.length
+            ? rows.join('')
+            : '<li class="py-6 text-center text-sm text-gray-400">No data for this period</li>';
+    }
+
+    function renderTrafficChart(data) {
+        const includeBots = document.getElementById('include-bots').checked;
+        const labels = data.timeseries.map(b => bucketLabel(b.t, data.meta.granularity));
+        const datasets = includeBots
+            ? [{
+                label: 'All requests',
+                data: data.timeseries.map(b => b.requests),
+                backgroundColor: 'rgba(107, 114, 128, 0.5)',
+                borderRadius: 3,
+            }]
+            : [{
+                label: 'Pageviews',
+                data: data.timeseries.map(b => b.pageviews),
+                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                borderRadius: 3,
+            }, {
+                label: 'Visitors',
+                data: data.timeseries.map(b => b.visitors),
+                backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                borderRadius: 3,
+            }];
+
+        if (charts.traffic) charts.traffic.destroy();
+        charts.traffic = new Chart(document.getElementById('trafficChart'), {
+            type: 'bar',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: { legend: { display: true, position: 'bottom' } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#6B7280', font: { size: 11 }, maxTicksLimit: 16 } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(243, 244, 246, 1)' }, ticks: { color: '#6B7280', font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    function renderMix(summary) {
+        const mix = summary.traffic_mix;
+        const total = Object.values(mix).reduce((a, b) => a + b, 0);
+        const keys = Object.keys(mixLabels);
+
+        if (charts.mix) charts.mix.destroy();
+        charts.mix = new Chart(document.getElementById('mixChart'), {
+            type: 'doughnut',
+            data: {
+                labels: keys.map(k => mixLabels[k]),
+                datasets: [{
+                    data: keys.map(k => mix[k]),
+                    backgroundColor: keys.map(k => mixColors[k]),
+                    borderWidth: 0,
+                }]
+            },
+            options: { plugins: { legend: { display: false } }, cutout: '65%' }
+        });
+
+        renderList('card-mix', keys.map(k => {
+            const pct = total ? ((mix[k] / total) * 100).toFixed(1) : '0.0';
+            return '<li class="flex items-center justify-between">' +
+                '<span class="flex items-center"><span class="w-3 h-3 rounded-full mr-2" style="background:' + mixColors[k] + '"></span>' +
+                mixLabels[k] + '</span>' +
+                '<span class="font-medium text-gray-900">' + pct + '%</span></li>';
+        }));
+    }
+
+    function renderAll(data) {
+        currentData = data;
+        document.getElementById('sum-visitors').textContent = formatNumber(data.summary.visitors);
+        document.getElementById('sum-pageviews').textContent = formatNumber(data.summary.pageviews);
+        document.getElementById('sum-bandwidth').textContent = formatBytes(data.summary.bandwidth_bytes);
+        document.getElementById('sum-requests').textContent = formatNumber(data.summary.requests);
+        document.getElementById('sum-errors').textContent = formatNumber(data.summary.errors) + ' errors';
+
+        renderTrafficChart(data);
+        renderMix(data.summary);
+
+        document.getElementById('domains-table').innerHTML = (data.top_domains || []).map(d =>
+            '<tr class="hover:bg-gray-50">' +
+            '<td class="px-6 py-3 font-medium text-gray-900">' + escapeHtml(d.domain_name) + '</td>' +
+            '<td class="px-6 py-3 text-right">' + formatNumber(d.visitors || 0) + '</td>' +
+            '<td class="px-6 py-3 text-right">' + formatNumber(d.pageviews || 0) + '</td>' +
+            '<td class="px-6 py-3 text-right">' + formatNumber(d.requests || 0) + '</td>' +
+            '<td class="px-6 py-3 text-right">' + formatBytes(d.bandwidth || 0) + '</td></tr>'
+        ).join('') || '<tr><td colspan="5" class="px-6 py-8 text-center text-gray-400">No data for this period</td></tr>';
+
+        renderList('card-countries', data.dimensions.countries.map(c =>
+            '<li class="flex items-center justify-between py-2">' +
+            '<span class="text-sm text-gray-700 flex items-center">' +
+            '<img src="' + c.flag_url + '" alt="" class="w-5 h-auto mr-2 rounded-sm">' +
+            escapeHtml(c.country_name) + '</span>' +
+            '<span class="text-sm font-medium text-gray-900">' + formatNumber(c.views) + '</span></li>'));
+
+        renderList('card-ips', data.dimensions.top_ips.map(ip =>
+            listRow(ip.ip, formatNumber(ip.requests), ip.bot_category === 'human' ? '' : ip.bot_category)));
+    }
+
+    function loadData() {
+        fetch(apiUrl + '?range=' + currentRange)
+            .then(response => response.json())
+            .then(renderAll)
+            .catch(error => console.error('Analytics load failed:', error));
+    }
+
+    document.querySelectorAll('.range-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.range-btn').forEach(other => {
+                other.className = 'range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all';
+            });
+            btn.className = 'range-btn px-3 py-1.5 rounded text-sm font-medium bg-white shadow-sm text-gray-900';
+            currentRange = btn.dataset.range;
+            loadData();
+        });
+    });
+    document.getElementById('include-bots').addEventListener('change', () => {
+        if (currentData) renderTrafficChart(currentData);
+    });
+
+    loadData();
+    setInterval(loadData, 300000);
+})();
+</script>
+{% endblock %}

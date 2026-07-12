@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Analytics - {{ domain.domain_name }} | KubePanel{% endblock %}
+
+{% block page_title %}{{ domain.domain_name }} Analytics{% endblock %}
+{% block page_subtitle %}Server-side traffic statistics from ingress logs{% endblock %}
+
+{% block header_actions %}
+<div class="flex items-center space-x-3">
+    <a href="{% url 'view_domain' domain=domain.domain_name %}"
+       class="text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        <span>Back to Domain</span>
+    </a>
+    <div class="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+        <button type="button" data-range="day" class="range-btn px-3 py-1.5 rounded text-sm font-medium bg-white shadow-sm text-gray-900">Day</button>
+        <button type="button" data-range="week" class="range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">Week</button>
+        <button type="button" data-range="month" class="range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">Month</button>
+        <button type="button" data-range="year" class="range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">Year</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">Unique Visitors</span>
+        <div class="text-2xl font-bold text-gray-900 mt-2" id="sum-visitors">--</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">Pageviews</span>
+        <div class="text-2xl font-bold text-gray-900 mt-2" id="sum-pageviews">--</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">Bandwidth</span>
+        <div class="text-2xl font-bold text-gray-900 mt-2" id="sum-bandwidth">--</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">Total Requests</span>
+        <div class="text-2xl font-bold text-gray-900 mt-2" id="sum-requests">--</div>
+        <div class="text-sm text-gray-500" id="sum-errors">-- errors</div>
+    </div>
+</div>
+
+<!-- Timeseries Chart -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div>
+            <h3 class="text-lg font-medium text-gray-900">Traffic</h3>
+            <p class="text-sm text-gray-500">Visitors and pageviews over time</p>
+        </div>
+        <label class="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer">
+            <input type="checkbox" id="include-bots" class="rounded border-gray-300 text-primary-600">
+            <span>Show all requests (incl. bots)</span>
+        </label>
+    </div>
+    <div class="p-6">
+        <canvas id="trafficChart" height="90"></canvas>
+    </div>
+</div>
+
+<!-- Top Cards Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Top Pages -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900">Top Pages</h3>
+            <div class="flex space-x-1 text-xs">
+                <button type="button" data-pagetab="pages" class="pagetab-btn px-2 py-1 rounded bg-gray-100 font-medium text-gray-900">Pages</button>
+                <button type="button" data-pagetab="entry_pages" class="pagetab-btn px-2 py-1 rounded text-gray-500 hover:bg-gray-50">Entry Pages</button>
+            </div>
+        </div>
+        <div class="p-4"><ul id="card-pages" class="divide-y divide-gray-100"></ul></div>
+    </div>
+
+    <!-- Referrers -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Referrers</h3>
+        </div>
+        <div class="p-4"><ul id="card-referrers" class="divide-y divide-gray-100"></ul></div>
+    </div>
+
+    <!-- Countries -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Countries</h3>
+        </div>
+        <div class="p-4"><ul id="card-countries" class="divide-y divide-gray-100"></ul></div>
+    </div>
+
+    <!-- Browsers / OS / Devices -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900">Browsers</h3>
+            <div class="flex space-x-1 text-xs">
+                <button type="button" data-uatab="browsers" class="uatab-btn px-2 py-1 rounded bg-gray-100 font-medium text-gray-900">Browser</button>
+                <button type="button" data-uatab="operating_systems" class="uatab-btn px-2 py-1 rounded text-gray-500 hover:bg-gray-50">OS</button>
+                <button type="button" data-uatab="devices" class="uatab-btn px-2 py-1 rounded text-gray-500 hover:bg-gray-50">Device</button>
+            </div>
+        </div>
+        <div class="p-4"><ul id="card-browsers" class="divide-y divide-gray-100"></ul></div>
+    </div>
+
+    <!-- Top IPs -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Top IPs</h3>
+            <p class="text-xs text-gray-500">All traffic, including bots</p>
+        </div>
+        <div class="p-4"><ul id="card-ips" class="divide-y divide-gray-100"></ul></div>
+    </div>
+
+    <!-- Traffic Mix -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Traffic Mix</h3>
+            <p class="text-xs text-gray-500">Human vs. bot requests</p>
+        </div>
+        <div class="p-6 flex items-center space-x-6">
+            <div class="w-36 h-36 flex-shrink-0"><canvas id="mixChart"></canvas></div>
+            <ul id="card-mix" class="flex-1 space-y-2 text-sm"></ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    const apiUrl = '{% url "domain_analytics_api" domain=domain.domain_name %}';
+
+    let charts = {};
+    let currentRange = 'day';
+    let currentData = null;
+    let pageTab = 'pages';
+    let uaTab = 'browsers';
+
+    const mixColors = {
+        human: 'rgb(34, 197, 94)',
+        search_engine: 'rgb(59, 130, 246)',
+        ai_bot: 'rgb(147, 51, 234)',
+        other_bot: 'rgb(156, 163, 175)',
+    };
+    const mixLabels = {
+        human: 'Human',
+        search_engine: 'Search engines',
+        ai_bot: 'AI bots',
+        other_bot: 'Other bots',
+    };
+
+    function formatBytes(bytes) {
+        if (!bytes) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return String(num);
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+    }
+
+    function bucketLabel(t, granularity) {
+        if (granularity === 'monthly') return t;
+        const d = new Date(t);
+        if (granularity === 'hourly') {
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+
+    function listRow(label, value, sublabel) {
+        return '<li class="flex items-center justify-between py-2">' +
+            '<span class="text-sm text-gray-700 truncate mr-3" title="' + escapeHtml(label) + '">' +
+            escapeHtml(label) + (sublabel ? ' <span class="text-xs text-gray-400">' + escapeHtml(sublabel) + '</span>' : '') +
+            '</span>' +
+            '<span class="text-sm font-medium text-gray-900 flex-shrink-0">' + escapeHtml(value) + '</span></li>';
+    }
+
+    function renderList(elementId, rows) {
+        const el = document.getElementById(elementId);
+        el.innerHTML = rows.length
+            ? rows.join('')
+            : '<li class="py-6 text-center text-sm text-gray-400">No data for this period</li>';
+    }
+
+    function renderSummary(summary) {
+        document.getElementById('sum-visitors').textContent = formatNumber(summary.visitors);
+        document.getElementById('sum-pageviews').textContent = formatNumber(summary.pageviews);
+        document.getElementById('sum-bandwidth').textContent = formatBytes(summary.bandwidth_bytes);
+        document.getElementById('sum-requests').textContent = formatNumber(summary.requests);
+        document.getElementById('sum-errors').textContent = formatNumber(summary.errors) + ' errors';
+    }
+
+    function renderTrafficChart(data) {
+        const includeBots = document.getElementById('include-bots').checked;
+        const labels = data.timeseries.map(b => bucketLabel(b.t, data.meta.granularity));
+        const datasets = includeBots
+            ? [{
+                label: 'All requests',
+                data: data.timeseries.map(b => b.requests),
+                backgroundColor: 'rgba(107, 114, 128, 0.5)',
+                borderRadius: 3,
+            }]
+            : [{
+                label: 'Pageviews',
+                data: data.timeseries.map(b => b.pageviews),
+                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                borderRadius: 3,
+            }, {
+                label: 'Visitors',
+                data: data.timeseries.map(b => b.visitors),
+                backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                borderRadius: 3,
+            }];
+
+        if (charts.traffic) charts.traffic.destroy();
+        charts.traffic = new Chart(document.getElementById('trafficChart'), {
+            type: 'bar',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: { legend: { display: true, position: 'bottom' } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#6B7280', font: { size: 11 }, maxTicksLimit: 16 } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(243, 244, 246, 1)' }, ticks: { color: '#6B7280', font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    function renderMix(summary) {
+        const mix = summary.traffic_mix;
+        const total = Object.values(mix).reduce((a, b) => a + b, 0);
+        const keys = Object.keys(mixLabels);
+
+        if (charts.mix) charts.mix.destroy();
+        charts.mix = new Chart(document.getElementById('mixChart'), {
+            type: 'doughnut',
+            data: {
+                labels: keys.map(k => mixLabels[k]),
+                datasets: [{
+                    data: keys.map(k => mix[k]),
+                    backgroundColor: keys.map(k => mixColors[k]),
+                    borderWidth: 0,
+                }]
+            },
+            options: { plugins: { legend: { display: false } }, cutout: '65%' }
+        });
+
+        renderList('card-mix', keys.map(k => {
+            const pct = total ? ((mix[k] / total) * 100).toFixed(1) : '0.0';
+            return '<li class="flex items-center justify-between">' +
+                '<span class="flex items-center"><span class="w-3 h-3 rounded-full mr-2" style="background:' + mixColors[k] + '"></span>' +
+                mixLabels[k] + '</span>' +
+                '<span class="font-medium text-gray-900">' + pct + '%</span></li>';
+        }));
+    }
+
+    function renderPages(data) {
+        const dims = data.dimensions;
+        const rows = pageTab === 'entry_pages'
+            ? dims.entry_pages.map(p => listRow(p.path, formatNumber(p.entry_views)))
+            : dims.pages.map(p => listRow(p.path, formatNumber(p.views)));
+        renderList('card-pages', rows);
+    }
+
+    function renderBrowsers(data) {
+        const dims = data.dimensions;
+        let rows;
+        if (uaTab === 'operating_systems') {
+            rows = dims.operating_systems.map(b => listRow(b.os, formatNumber(b.views)));
+        } else if (uaTab === 'devices') {
+            rows = dims.devices.map(b => listRow(b.device_class, formatNumber(b.views)));
+        } else {
+            rows = dims.browsers.map(b => listRow(b.browser, formatNumber(b.views)));
+        }
+        renderList('card-browsers', rows);
+    }
+
+    function renderAll(data) {
+        currentData = data;
+        renderSummary(data.summary);
+        renderTrafficChart(data);
+        renderMix(data.summary);
+        renderPages(data);
+        renderBrowsers(data);
+
+        renderList('card-referrers', data.dimensions.referrers.map(r =>
+            listRow(r.referrer_domain, formatNumber(r.views))));
+
+        renderList('card-countries', data.dimensions.countries.map(c =>
+            '<li class="flex items-center justify-between py-2">' +
+            '<span class="text-sm text-gray-700 flex items-center">' +
+            '<img src="' + c.flag_url + '" alt="" class="w-5 h-auto mr-2 rounded-sm">' +
+            escapeHtml(c.country_name) + '</span>' +
+            '<span class="text-sm font-medium text-gray-900">' + formatNumber(c.views) + '</span></li>'));
+
+        renderList('card-ips', data.dimensions.top_ips.map(ip =>
+            listRow(ip.ip, formatNumber(ip.requests), ip.bot_category === 'human' ? '' : ip.bot_category)));
+    }
+
+    function loadData() {
+        fetch(apiUrl + '?range=' + currentRange)
+            .then(response => response.json())
+            .then(renderAll)
+            .catch(error => console.error('Analytics load failed:', error));
+    }
+
+    // Range switcher
+    document.querySelectorAll('.range-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.range-btn').forEach(other => {
+                other.className = 'range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all';
+            });
+            btn.className = 'range-btn px-3 py-1.5 rounded text-sm font-medium bg-white shadow-sm text-gray-900';
+            currentRange = btn.dataset.range;
+            loadData();
+        });
+    });
+
+    // Card tabs
+    document.querySelectorAll('.pagetab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.pagetab-btn').forEach(other => {
+                other.className = 'pagetab-btn px-2 py-1 rounded text-gray-500 hover:bg-gray-50';
+            });
+            btn.className = 'pagetab-btn px-2 py-1 rounded bg-gray-100 font-medium text-gray-900';
+            pageTab = btn.dataset.pagetab;
+            if (currentData) renderPages(currentData);
+        });
+    });
+    document.querySelectorAll('.uatab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.uatab-btn').forEach(other => {
+                other.className = 'uatab-btn px-2 py-1 rounded text-gray-500 hover:bg-gray-50';
+            });
+            btn.className = 'uatab-btn px-2 py-1 rounded bg-gray-100 font-medium text-gray-900';
+            uaTab = btn.dataset.uatab;
+            if (currentData) renderBrowsers(currentData);
+        });
+    });
+    document.getElementById('include-bots').addEventListener('change', () => {
+        if (currentData) renderTrafficChart(currentData);
+    });
+
+    loadData();
+    setInterval(loadData, 300000);  // refresh every 5 minutes
+})();
+</script>
+{% endblock %}

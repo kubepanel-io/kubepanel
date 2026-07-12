@@ -24,6 +24,7 @@ from dashboard.k8s import (
     K8sNotFoundError,
 )
 from . import views, views_logging
+from analytics import views as analytics_views
 
 urlpatterns = [
     path("", views.kplogin, name="kplogin"),
@@ -164,6 +165,12 @@ urlpatterns = [
     # Global Metrics routes (superuser only)
     path('metrics/', views.global_metrics_page, name='global_metrics_page'),
     path('api/metrics/global/', views.global_metrics_api, name='global_metrics_api'),
+    # Analytics routes (server-side, log-based)
+    path('domains/<str:domain>/analytics/', analytics_views.domain_analytics_page, name='domain_analytics_page'),
+    path('api/domains/<str:domain>/analytics/', analytics_views.domain_analytics_api, name='domain_analytics_api'),
+    path('analytics/', analytics_views.global_analytics_page, name='global_analytics_page'),
+    path('api/analytics/global/', analytics_views.global_analytics_api, name='global_analytics_api'),
+    path('api/analytics/ingest/', analytics_views.analytics_ingest, name='analytics_ingest'),
     # API endpoints
     path('api/logs/', views_logging.logs_api, name='logs_api'),
     path('api/workload-types/', views.get_workload_types, name='api_workload_types'),
