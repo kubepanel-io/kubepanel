@@ -26,6 +26,8 @@ from django.db.models.functions import TruncDate, TruncHour
 from django.utils import timezone
 
 from analytics.models import (
+    RAW_RETENTION_DAYS,
+    HOURLY_RETENTION_DAYS,
     AnalyticsRequest,
     AnalyticsHourlyStat,
     AnalyticsDailyStat,
@@ -38,10 +40,9 @@ from analytics.models import (
 
 logger = logging.getLogger(__name__)
 
-RAW_RETENTION_DAYS = 14
-HOURLY_RETENTION_DAYS = 90
 LOOKBACK_HOURS = 3
 TOP_IPS_PER_DAY = 100
+TOP_PATHS_PER_DAY = 500
 MAX_PATH_LENGTH = 500
 
 STAT_AGGREGATES = dict(
@@ -170,7 +171,9 @@ class Command(BaseCommand):
         ordered pass over the day's raw rows. Delete-and-recreate keeps
         the operation idempotent.
         """
-        paths = defaultdict(lambda: {'views': 0, 'visitors': set(), 'entries': 0})
+        paths = defaultdict(lambda: {
+            'views': 0, 'visitors': set(), 'entries': 0, 'requests': 0, 'errors': 0,
+        })
         referrers = defaultdict(lambda: {'views': 0, 'visitors': set()})
         countries = defaultdict(lambda: {'views': 0, 'visitors': set()})
         browsers = defaultdict(lambda: {'views': 0, 'visitors': set()})
@@ -186,24 +189,30 @@ class Command(BaseCommand):
             .values_list(
                 'visitor_hash', 'path', 'referrer_domain', 'country_code',
                 'browser', 'os', 'device_class', 'bot_category', 'is_page',
-                'ip', 'bytes_sent',
+                'ip', 'bytes_sent', 'status',
             )
             .iterator(chunk_size=5000)
         )
 
         for (vhash, path, ref_domain, country, browser, os_name,
-             device, bot_category, is_page, ip, bytes_sent) in raw_rows:
+             device, bot_category, is_page, ip, bytes_sent, status) in raw_rows:
             ip_entry = ips[ip]
             ip_entry['requests'] += 1
             ip_entry['bandwidth'] += bytes_sent or 0
             ip_entry['country'] = ip_entry['country'] or country
             ip_entry['categories'][bot_category] += 1
 
+            # All-traffic path counters (bots and static files included) -
+            # the "paths under attack" signal
+            path_key = (path or '/')[:MAX_PATH_LENGTH]
+            path_entry = paths[path_key]
+            path_entry['requests'] += 1
+            if status >= 400:
+                path_entry['errors'] += 1
+
             if bot_category != 'human' or not is_page:
                 continue
 
-            path_key = (path or '/')[:MAX_PATH_LENGTH]
-            path_entry = paths[path_key]
             path_entry['views'] += 1
             path_entry['visitors'].add(vhash)
             if vhash not in seen_visitors:
@@ -226,14 +235,20 @@ class Command(BaseCommand):
 
         day_filter = {'domain_name': domain_name, 'date': day}
 
+        # Cap stored paths per day - scanners fuzz thousands of unique
+        # paths; ranking by requests keeps both popular and attacked ones.
+        top_paths = sorted(
+            paths.items(), key=lambda item: item[1]['requests'], reverse=True,
+        )[:TOP_PATHS_PER_DAY]
         AnalyticsPathStat.objects.filter(**day_filter).delete()
         AnalyticsPathStat.objects.bulk_create([
             AnalyticsPathStat(
                 **day_filter, path=path,
                 views=entry['views'], visitors=len(entry['visitors']),
                 entry_views=entry['entries'],
+                requests=entry['requests'], errors=entry['errors'],
             )
-            for path, entry in paths.items()
+            for path, entry in top_paths
         ], batch_size=500)
 
         AnalyticsReferrerStat.objects.filter(**day_filter).delete()

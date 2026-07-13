@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Traffic Explorer | KubePanel{% endblock %}
+
+{% block page_title %}Traffic Explorer{% endblock %}
+{% block page_subtitle %}Raw ingress traffic forensics &mdash; last {{ raw_retention_days }} days, all vhosts{% endblock %}
+
+{% block header_actions %}
+<a href="{% url 'global_analytics_page' %}"
+   class="text-gray-600 hover:text-gray-900 px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+    </svg>
+    <span>Back to Global Analytics</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- Filter Bar -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-8">
+    <div class="flex flex-wrap items-end gap-4">
+        <div>
+            <label class="block text-xs text-gray-500 uppercase tracking-wide mb-1">Vhost</label>
+            <input type="text" id="f-vhost" list="vhost-options" placeholder="all vhosts"
+                   class="rounded-lg border-gray-200 text-sm text-gray-700 w-64">
+            <datalist id="vhost-options"></datalist>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 uppercase tracking-wide mb-1">Path contains</label>
+            <input type="text" id="f-path" placeholder="/wp-login.php"
+                   class="rounded-lg border-gray-200 text-sm text-gray-700 w-64">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 uppercase tracking-wide mb-1">From</label>
+            <input type="date" id="f-start" class="rounded-lg border-gray-200 text-sm text-gray-700">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 uppercase tracking-wide mb-1">To</label>
+            <input type="date" id="f-end" class="rounded-lg border-gray-200 text-sm text-gray-700">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 uppercase tracking-wide mb-1">Traffic</label>
+            <select id="f-bot" class="rounded-lg border-gray-200 text-sm text-gray-700">
+                <option value="">All categories</option>
+                <option value="human">Human</option>
+                <option value="search_engine">Search engines</option>
+                <option value="ai_bot">AI bots</option>
+                <option value="other_bot">Other bots</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 uppercase tracking-wide mb-1">Status</label>
+            <select id="f-status" class="rounded-lg border-gray-200 text-sm text-gray-700">
+                <option value="">All</option>
+                <option value="2xx">2xx</option>
+                <option value="3xx">3xx</option>
+                <option value="4xx">4xx</option>
+                <option value="5xx">5xx</option>
+            </select>
+        </div>
+        <button type="button" id="f-apply"
+                class="btn-primary text-white px-6 py-2 rounded-lg font-medium shadow-sm hover:shadow-md transition-all duration-200">
+            Filter
+        </button>
+        <span id="result-count" class="text-sm text-gray-500 ml-auto"></span>
+    </div>
+</div>
+
+<!-- Status Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">2xx Success</span>
+        <div class="text-2xl font-bold text-green-600 mt-2" id="s-2xx">--</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">3xx Redirect</span>
+        <div class="text-2xl font-bold text-blue-600 mt-2" id="s-3xx">--</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">4xx Client Error</span>
+        <div class="text-2xl font-bold text-amber-600 mt-2" id="s-4xx">--</div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <span class="text-xs text-gray-500 uppercase tracking-wide">5xx Server Error</span>
+        <div class="text-2xl font-bold text-red-600 mt-2" id="s-5xx">--</div>
+    </div>
+</div>
+
+<!-- Timeline -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900">Requests per Hour</h3>
+    </div>
+    <div class="p-6">
+        <canvas id="timelineChart" height="80"></canvas>
+    </div>
+</div>
+
+<!-- Top Tables -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Top Vhosts</h3>
+        </div>
+        <div class="p-4"><ul id="t-vhosts" class="divide-y divide-gray-100"></ul></div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Top Paths</h3>
+        </div>
+        <div class="p-4"><ul id="t-paths" class="divide-y divide-gray-100"></ul></div>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Top IPs</h3>
+        </div>
+        <div class="p-4"><ul id="t-ips" class="divide-y divide-gray-100"></ul></div>
+    </div>
+</div>
+
+<!-- Raw Sample -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-medium text-gray-900">Latest Matching Requests</h3>
+        <p class="text-xs text-gray-500">Most recent 100 raw log lines matching the filters</p>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 text-xs">
+            <thead class="bg-gray-50 text-gray-500 uppercase tracking-wide">
+                <tr>
+                    <th class="px-4 py-2 text-left">Time</th>
+                    <th class="px-4 py-2 text-left">Vhost</th>
+                    <th class="px-4 py-2 text-left">IP</th>
+                    <th class="px-4 py-2 text-left">CC</th>
+                    <th class="px-4 py-2 text-left">Method</th>
+                    <th class="px-4 py-2 text-left">Path</th>
+                    <th class="px-4 py-2 text-right">Status</th>
+                    <th class="px-4 py-2 text-left">Category</th>
+                    <th class="px-4 py-2 text-left">User Agent</th>
+                </tr>
+            </thead>
+            <tbody id="sample-table" class="divide-y divide-gray-100 font-mono"></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    const apiUrl = '{% url "traffic_explorer_api" %}';
+    let timelineChart = null;
+
+    function formatNumber(num) {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return String(num);
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+    }
+
+    function query() {
+        const params = new URLSearchParams();
+        const vhost = document.getElementById('f-vhost').value.trim();
+        const path = document.getElementById('f-path').value.trim();
+        const start = document.getElementById('f-start').value;
+        const end = document.getElementById('f-end').value;
+        const bot = document.getElementById('f-bot').value;
+        const status = document.getElementById('f-status').value;
+        if (vhost) params.set('vhost', vhost);
+        if (path) params.set('path', path);
+        if (start && end) { params.set('start', start); params.set('end', end); }
+        else if (start || end) { params.set('start', start || end); params.set('end', end || start); }
+        if (bot) params.set('bot', bot);
+        if (status) params.set('status', status);
+        return params.toString();
+    }
+
+    function topRow(label, requests, errors, sublabel) {
+        return '<li class="flex items-center justify-between py-2">' +
+            '<span class="text-sm text-gray-700 truncate mr-3" title="' + escapeHtml(label) + '">' +
+            escapeHtml(label) +
+            (sublabel ? ' <span class="text-xs text-gray-400">' + escapeHtml(sublabel) + '</span>' : '') +
+            '</span>' +
+            '<span class="text-sm flex-shrink-0"><span class="font-medium text-gray-900">' + formatNumber(requests) + '</span>' +
+            (errors ? ' <span class="text-red-500">(' + formatNumber(errors) + ' err)</span>' : '') +
+            '</span></li>';
+    }
+
+    function renderList(elementId, rows) {
+        document.getElementById(elementId).innerHTML = rows.length
+            ? rows.join('')
+            : '<li class="py-6 text-center text-sm text-gray-400">No matching traffic</li>';
+    }
+
+    function render(data) {
+        document.getElementById('s-2xx').textContent = formatNumber(data.status_mix['2xx'] || 0);
+        document.getElementById('s-3xx').textContent = formatNumber(data.status_mix['3xx'] || 0);
+        document.getElementById('s-4xx').textContent = formatNumber(data.status_mix['4xx'] || 0);
+        document.getElementById('s-5xx').textContent = formatNumber(data.status_mix['5xx'] || 0);
+        document.getElementById('result-count').textContent =
+            formatNumber(data.total_requests) + ' requests in range';
+
+        // Vhost dropdown suggestions
+        document.getElementById('vhost-options').innerHTML =
+            data.vhost_options.map(v => '<option value="' + escapeHtml(v) + '">').join('');
+
+        // Timeline
+        const labels = data.timeline.map(b =>
+            new Date(b.t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit' }));
+        if (timelineChart) timelineChart.destroy();
+        timelineChart = new Chart(document.getElementById('timelineChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'OK',
+                    data: data.timeline.map(b => b.requests - b.errors),
+                    backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                    stack: 's',
+                }, {
+                    label: 'Errors (4xx/5xx)',
+                    data: data.timeline.map(b => b.errors),
+                    backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                    stack: 's',
+                }]
+            },
+            options: {
+                responsive: true,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: { legend: { display: true, position: 'bottom' } },
+                scales: {
+                    x: { stacked: true, grid: { display: false }, ticks: { maxTicksLimit: 20, font: { size: 10 } } },
+                    y: { stacked: true, beginAtZero: true, ticks: { font: { size: 10 } } }
+                }
+            }
+        });
+
+        renderList('t-vhosts', data.top_vhosts.map(v => topRow(v.vhost || '(none)', v.requests, v.errors)));
+        renderList('t-paths', data.top_paths.map(p => topRow(p.path || '/', p.requests, p.errors)));
+        renderList('t-ips', data.top_ips.map(ip => topRow(
+            ip.ip, ip.requests, ip.errors,
+            [ip.country_code, ip.bot_category !== 'human' ? ip.bot_category : ''].filter(Boolean).join(' ')
+        )));
+
+        const statusColor = s => s >= 500 ? 'text-red-600' : s >= 400 ? 'text-amber-600' : 'text-green-600';
+        document.getElementById('sample-table').innerHTML = data.sample.map(r =>
+            '<tr class="hover:bg-gray-50">' +
+            '<td class="px-4 py-1.5 whitespace-nowrap text-gray-500">' +
+                new Date(r.timestamp).toLocaleString() + '</td>' +
+            '<td class="px-4 py-1.5">' + escapeHtml(r.vhost) + '</td>' +
+            '<td class="px-4 py-1.5">' + escapeHtml(r.ip) + '</td>' +
+            '<td class="px-4 py-1.5">' + escapeHtml(r.country_code) + '</td>' +
+            '<td class="px-4 py-1.5">' + escapeHtml(r.method) + '</td>' +
+            '<td class="px-4 py-1.5 max-w-md truncate" title="' + escapeHtml(r.path) + '">' + escapeHtml(r.path) + '</td>' +
+            '<td class="px-4 py-1.5 text-right font-medium ' + statusColor(r.status) + '">' + r.status + '</td>' +
+            '<td class="px-4 py-1.5">' + escapeHtml(r.bot_category) + '</td>' +
+            '<td class="px-4 py-1.5 max-w-xs truncate text-gray-500" title="' + escapeHtml(r.user_agent) + '">' +
+                escapeHtml(r.user_agent) + '</td></tr>'
+        ).join('') || '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">No matching requests</td></tr>';
+    }
+
+    function loadData() {
+        fetch(apiUrl + '?' + query())
+            .then(response => response.json())
+            .then(render)
+            .catch(error => console.error('Explorer load failed:', error));
+    }
+
+    document.getElementById('f-apply').addEventListener('click', loadData);
+    ['f-vhost', 'f-path'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', e => {
+            if (e.key === 'Enter') loadData();
+        });
+    });
+
+    loadData();
+})();
+</script>
+{% endblock %}

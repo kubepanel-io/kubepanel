@@ -170,6 +170,8 @@ urlpatterns = [
     path('api/domains/<str:domain>/analytics/', analytics_views.domain_analytics_api, name='domain_analytics_api'),
     path('analytics/', analytics_views.global_analytics_page, name='global_analytics_page'),
     path('api/analytics/global/', analytics_views.global_analytics_api, name='global_analytics_api'),
+    path('analytics/explorer/', analytics_views.traffic_explorer_page, name='traffic_explorer_page'),
+    path('api/analytics/explorer/', analytics_views.traffic_explorer_api, name='traffic_explorer_api'),
     path('api/analytics/ingest/', analytics_views.analytics_ingest, name='analytics_ingest'),
     # API endpoints
     path('api/logs/', views_logging.logs_api, name='logs_api'),

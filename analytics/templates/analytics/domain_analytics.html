@@ -21,6 +21,12 @@
         <button type="button" data-range="month" class="range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">Month</button>
         <button type="button" data-range="year" class="range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">Year</button>
     </div>
+    <div class="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+        <input type="date" id="date-start" class="px-2 py-1 rounded text-sm border-gray-200 text-gray-700">
+        <span class="text-gray-400 text-sm">&ndash;</span>
+        <input type="date" id="date-end" class="px-2 py-1 rounded text-sm border-gray-200 text-gray-700">
+        <button type="button" id="apply-range" class="px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all">Apply</button>
+    </div>
 </div>
 {% endblock %}
 
@@ -315,23 +321,51 @@
             listRow(ip.ip, formatNumber(ip.requests), ip.bot_category === 'human' ? '' : ip.bot_category)));
     }
 
+    let customStart = null;
+    let customEnd = null;
+
+    function rangeQuery() {
+        if (customStart && customEnd) {
+            return '?start=' + customStart + '&end=' + customEnd;
+        }
+        return '?range=' + currentRange;
+    }
+
     function loadData() {
-        fetch(apiUrl + '?range=' + currentRange)
+        fetch(apiUrl + rangeQuery())
             .then(response => response.json())
             .then(renderAll)
             .catch(error => console.error('Analytics load failed:', error));
     }
 
-    // Range switcher
+    function clearPresetHighlight() {
+        document.querySelectorAll('.range-btn').forEach(other => {
+            other.className = 'range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all';
+        });
+    }
+
+    // Range switcher (presets clear any custom date range)
     document.querySelectorAll('.range-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.range-btn').forEach(other => {
-                other.className = 'range-btn px-3 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm transition-all';
-            });
+            clearPresetHighlight();
             btn.className = 'range-btn px-3 py-1.5 rounded text-sm font-medium bg-white shadow-sm text-gray-900';
             currentRange = btn.dataset.range;
+            customStart = customEnd = null;
+            document.getElementById('date-start').value = '';
+            document.getElementById('date-end').value = '';
             loadData();
         });
+    });
+
+    // Custom from-to date range
+    document.getElementById('apply-range').addEventListener('click', () => {
+        const start = document.getElementById('date-start').value;
+        const end = document.getElementById('date-end').value;
+        if (!start && !end) return;
+        customStart = start || end;
+        customEnd = end || start;
+        clearPresetHighlight();
+        loadData();
     });
 
     // Card tabs

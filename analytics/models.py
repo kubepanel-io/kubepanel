@@ -26,6 +26,11 @@ BOT_CATEGORY_CHOICES = [
     ('other_bot', 'Other Bot'),
 ]
 
+# Retention policy - enforced by the analytics_rollup command, also used
+# by the API views to pick chart granularity and clamp explorer queries.
+RAW_RETENTION_DAYS = 14
+HOURLY_RETENTION_DAYS = 90
+
 
 class AnalyticsRequest(models.Model):
     """
@@ -37,7 +42,15 @@ class AnalyticsRequest(models.Model):
     (raw IPs are visible here and in AnalyticsIPStat).
     """
     timestamp = models.DateTimeField(db_index=True)
-    domain_name = models.CharField(max_length=253, db_index=True)
+    domain_name = models.CharField(
+        max_length=253, db_index=True,
+        help_text="Site key: canonical Domain name for hosted vhosts, "
+                  "the raw vhost itself for everything else"
+    )
+    vhost = models.CharField(
+        max_length=253, blank=True, default='',
+        help_text="Raw Host header (lowercased, port stripped)"
+    )
 
     # Client
     ip = models.GenericIPAddressField()
@@ -150,11 +163,24 @@ class AnalyticsDimensionBase(models.Model):
 
 
 class AnalyticsPathStat(AnalyticsDimensionBase):
-    """Top pages per domain per day, including entry-page counts."""
+    """
+    Top paths per site per day.
+
+    views/visitors/entry_views count human pageviews only (audience
+    numbers); requests/errors count ALL traffic including bots and
+    static files - the "paths under attack" signal that outlives the
+    raw table's 14-day retention.
+    """
     path = models.CharField(max_length=500)
     entry_views = models.IntegerField(
         default=0,
         help_text="Visitors whose first pageview of the day was this path"
+    )
+    requests = models.IntegerField(
+        default=0, help_text="All requests to this path (incl. bots/static)"
+    )
+    errors = models.IntegerField(
+        default=0, help_text="Requests with status >= 400"
     )
 
     class Meta:

@@ -12,8 +12,10 @@ import os
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone as dt_timezone
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import TruncHour
 from django.http import JsonResponse, HttpResponseForbidden
 from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
@@ -24,6 +26,8 @@ from dashboard.models import Domain
 from dashboard.views.utils import COUNTRIES
 
 from .models import (
+    RAW_RETENTION_DAYS,
+    HOURLY_RETENTION_DAYS,
     AnalyticsRequest,
     AnalyticsHourlyStat,
     AnalyticsDailyStat,
@@ -118,8 +122,10 @@ def analytics_ingest(request):
     """
     Bulk-ingest enriched request rows from Fluent Bit.
 
-    Lines for vhosts KubePanel does not host (panel itself, webmail,
-    IP-based scans, ...) are silently skipped.
+    Every vhost is stored: hosted vhosts (incl. aliases and www) are
+    unified under their canonical Domain name; anything else - the panel
+    itself, manually deployed apps, scan traffic with bogus Host headers -
+    keeps its raw vhost as the site key so admins can analyze it.
     """
     if not _check_ingest_token(request):
         return JsonResponse({'error': 'invalid token'}, status=403)
@@ -141,11 +147,11 @@ def analytics_ingest(request):
     rows = []
     skipped = 0
     for record in records:
-        vhost = (record.get('vhost') or '').lower().split(':')[0]
-        domain_name = resolve_domain(vhost)
-        if not domain_name:
+        vhost = (record.get('vhost') or '').lower().split(':')[0][:253]
+        if not vhost:
             skipped += 1
             continue
+        domain_name = resolve_domain(vhost) or vhost
 
         # Real client IP: first hop of X-Forwarded-For; remote_addr
         # ($proxy_protocol_addr) is only set when proxy protocol is used.
@@ -163,12 +169,14 @@ def analytics_ingest(request):
         bot_category = classify_bot(ua)
         browser, os_name, device_class = parse_user_agent(ua, bot_category)
         referrer_domain, referrer_path = parse_referrer(
-            record.get('http_referrer'), domain_hostnames[domain_name]
+            record.get('http_referrer'),
+            domain_hostnames.get(domain_name) or {vhost},
         )
 
         rows.append(AnalyticsRequest(
             timestamp=ts,
             domain_name=domain_name,
+            vhost=vhost,
             ip=ip,
             visitor_hash=visitor_hash(ip, ua, vhost, ts.date()),
             country_code=lookup_country_code(ip),
@@ -215,18 +223,70 @@ def _range_bounds(range_key):
     return today - timedelta(days=364), now, 'monthly'
 
 
+def _parse_date_param(value):
+    """Parse a YYYY-MM-DD query parameter, or None."""
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _request_range(request):
+    """
+    Resolve the requested time window: explicit ?start=&end= dates win
+    over the ?range= presets. Returns (start, end, granularity, label).
+    Granularity: single day -> hourly (daily if beyond hourly retention),
+    spans up to ~3 months -> daily, longer -> monthly.
+    """
+    start_date = _parse_date_param(request.GET.get('start'))
+    end_date = _parse_date_param(request.GET.get('end'))
+
+    if start_date and end_date:
+        if end_date < start_date:
+            start_date, end_date = end_date, start_date
+        now = timezone.now()
+        start = datetime(start_date.year, start_date.month, start_date.day,
+                         tzinfo=dt_timezone.utc)
+        end = min(
+            datetime(end_date.year, end_date.month, end_date.day,
+                     23, 59, 59, tzinfo=dt_timezone.utc),
+            now,
+        )
+        span_days = (end_date - start_date).days + 1
+        if span_days == 1:
+            hourly_cutoff = now - timedelta(days=HOURLY_RETENTION_DAYS)
+            granularity = 'hourly' if start >= hourly_cutoff else 'daily'
+        elif span_days <= 92:
+            granularity = 'daily'
+        else:
+            granularity = 'monthly'
+        return start, end, granularity, 'custom'
+
+    range_key = request.GET.get('range', 'day')
+    if range_key not in VALID_RANGES:
+        range_key = 'day'
+    start, end, granularity = _range_bounds(range_key)
+    return start, end, granularity, range_key
+
+
+def _site_filter(qs, domain_names):
+    """Restrict a queryset to a site-key list; None means all sites."""
+    if domain_names is None:
+        return qs
+    return qs.filter(domain_name__in=domain_names)
+
+
 def _timeseries(domain_names, start, end, granularity):
     """Chart buckets: [{t, pageviews, visitors, requests, bandwidth}, ...]"""
     if granularity == 'hourly':
         qs = AnalyticsHourlyStat.objects.filter(
-            domain_name__in=domain_names,
             period_start__gte=start, period_start__lte=end,
         )
     else:
         qs = AnalyticsDailyStat.objects.filter(
-            domain_name__in=domain_names,
             period_start__gte=start, period_start__lte=end,
         )
+    qs = _site_filter(qs, domain_names)
 
     buckets = defaultdict(lambda: {'pageviews': 0, 'visitors': 0, 'requests': 0, 'bandwidth': 0})
     for stat in qs:
@@ -247,11 +307,11 @@ def _timeseries(domain_names, start, end, granularity):
 
 def _summary(domain_names, start, end):
     """Range totals from daily stats (visitors = sum of daily uniques)."""
-    totals = AnalyticsDailyStat.objects.filter(
-        domain_name__in=domain_names,
+    qs = AnalyticsDailyStat.objects.filter(
         period_start__gte=start.replace(hour=0, minute=0, second=0, microsecond=0),
         period_start__lte=end,
-    ).aggregate(
+    )
+    totals = _site_filter(qs, domain_names).aggregate(
         pageviews=Sum('pageviews'),
         visitors=Sum('visitors'),
         requests=Sum('requests'),
@@ -289,11 +349,16 @@ def _top(qs, group_fields, value_fields, limit=10):
 
 
 def _dimensions(domain_names, start_date, end_date, limit=10):
-    date_filter = {'domain_name__in': domain_names, 'date__gte': start_date, 'date__lte': end_date}
+    date_filter = {'date__gte': start_date, 'date__lte': end_date}
+    if domain_names is not None:
+        date_filter['domain_name__in'] = domain_names
 
     pages = _top(
         AnalyticsPathStat.objects.filter(**date_filter),
-        ['path'], {'views': 'views', 'visitors': 'visitors', 'entry_views': 'entry_views'}, limit,
+        ['path'],
+        {'views': 'views', 'visitors': 'visitors', 'entry_views': 'entry_views',
+         'requests': 'requests', 'errors': 'errors'},
+        limit,
     )
     entry_pages = _top(
         AnalyticsPathStat.objects.filter(**date_filter, entry_views__gt=0),
@@ -342,19 +407,27 @@ def _dimensions(domain_names, start_date, end_date, limit=10):
     }
 
 
-def _analytics_payload(domain_names, range_key):
-    start, end, granularity = _range_bounds(range_key)
+def _analytics_payload(domain_names, start, end, granularity, range_label):
     return {
         'summary': _summary(domain_names, start, end),
         'timeseries': _timeseries(domain_names, start, end, granularity),
         'dimensions': _dimensions(domain_names, start.date(), end.date()),
         'meta': {
-            'range': range_key,
+            'range': range_label,
             'granularity': granularity,
             'start': start.isoformat(),
             'end': end.isoformat(),
         },
     }
+
+
+def _classify_site(site, hosted, panel_hosts):
+    """hosted / panel / external label for a site key."""
+    if site in hosted:
+        return 'hosted'
+    if site in panel_hosts:
+        return 'panel'
+    return 'external'
 
 
 # ---------------------------------------------------------------------------
@@ -380,11 +453,10 @@ def domain_analytics_api(request, domain):
     if not request.user.is_superuser and domain_obj.owner != request.user:
         return JsonResponse({'error': 'Permission denied'}, status=403)
 
-    range_key = request.GET.get('range', 'day')
-    if range_key not in VALID_RANGES:
-        range_key = 'day'
-
-    return JsonResponse(_analytics_payload([domain_obj.domain_name], range_key))
+    start, end, granularity, label = _request_range(request)
+    return JsonResponse(_analytics_payload(
+        [domain_obj.domain_name], start, end, granularity, label,
+    ))
 
 
 # ---------------------------------------------------------------------------
@@ -400,36 +472,220 @@ def global_analytics_page(request):
     return render(request, 'analytics/global_analytics.html')
 
 
+def _panel_hostnames():
+    """Panel-facing hostnames from settings (internal service names excluded)."""
+    return {
+        host for host in getattr(settings, 'ALLOWED_HOSTS', [])
+        if not host.endswith('.svc.cluster.local')
+    }
+
+
 @login_required(login_url="/dashboard/")
 def global_analytics_api(request):
-    """JSON API for the global dashboard: all domains + per-domain toplist."""
+    """
+    JSON API for the global dashboard. Covers ALL ingress traffic - hosted
+    domains, the panel itself, and external/unknown vhosts. Each site key
+    is labeled hosted/panel/external; ?kind= filters to one label.
+    """
     if not request.user.is_superuser:
         return JsonResponse({'error': 'Permission denied'}, status=403)
 
-    range_key = request.GET.get('range', 'day')
-    if range_key not in VALID_RANGES:
-        range_key = 'day'
+    start, end, granularity, label = _request_range(request)
+    kind = request.GET.get('kind', 'all')
 
-    domain_names = list(Domain.objects.values_list('domain_name', flat=True))
-    payload = _analytics_payload(domain_names, range_key)
+    hosted = set(Domain.objects.values_list('domain_name', flat=True))
+    panel_hosts = _panel_hostnames()
 
-    # Per-domain toplist over the same range
-    start, end, _ = _range_bounds(range_key)
-    per_domain = (
+    # Site keys seen in this range, classified
+    day_start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    seen_sites = set(
         AnalyticsDailyStat.objects.filter(
-            domain_name__in=domain_names,
-            period_start__gte=start.replace(hour=0, minute=0, second=0, microsecond=0),
-            period_start__lte=end,
-        )
+            period_start__gte=day_start, period_start__lte=end,
+        ).values_list('domain_name', flat=True).distinct()
+    )
+    site_kinds = {
+        site: _classify_site(site, hosted, panel_hosts) for site in seen_sites
+    }
+
+    if kind in ('hosted', 'panel', 'external'):
+        site_names = [s for s, k in site_kinds.items() if k == kind]
+    else:
+        kind = 'all'
+        site_names = None  # no restriction
+
+    payload = _analytics_payload(site_names, start, end, granularity, label)
+    payload['meta']['kind'] = kind
+
+    # Per-site toplist over the same range
+    per_site_qs = AnalyticsDailyStat.objects.filter(
+        period_start__gte=day_start, period_start__lte=end,
+    )
+    if site_names is not None:
+        per_site_qs = per_site_qs.filter(domain_name__in=site_names)
+    per_site = (
+        per_site_qs
         .values('domain_name')
         .annotate(
             pageviews=Sum('pageviews'),
             visitors=Sum('visitors'),
             requests=Sum('requests'),
             bandwidth=Sum('bandwidth_bytes'),
+            errors_4xx=Sum('hits_4xx'),
+            errors_5xx=Sum('hits_5xx'),
         )
-        .order_by('-pageviews')[:25]
+        .order_by('-requests')[:50]
     )
-    payload['top_domains'] = list(per_domain)
+    payload['top_domains'] = [
+        {**row,
+         'errors': (row.pop('errors_4xx') or 0) + (row.pop('errors_5xx') or 0),
+         'kind': site_kinds.get(row['domain_name'], 'external')}
+        for row in per_site
+    ]
 
     return JsonResponse(payload)
+
+
+# ---------------------------------------------------------------------------
+# Traffic Explorer (superuser) - raw-table forensics with vhost/path filters
+# ---------------------------------------------------------------------------
+
+STATUS_CLASSES = {
+    '2xx': (200, 300),
+    '3xx': (300, 400),
+    '4xx': (400, 500),
+    '5xx': (500, 600),
+}
+
+EXPLORER_SAMPLE_LIMIT = 100
+EXPLORER_TOP_LIMIT = 25
+
+
+@login_required(login_url="/dashboard/")
+def traffic_explorer_page(request):
+    """Render the raw-traffic explorer."""
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Only superusers can view the traffic explorer.")
+
+    return render(request, 'analytics/traffic_explorer.html', {
+        'raw_retention_days': RAW_RETENTION_DAYS,
+    })
+
+
+@login_required(login_url="/dashboard/")
+def traffic_explorer_api(request):
+    """
+    Filtered aggregation over the raw request table (limited by the
+    14-day raw retention). Filters: vhost (exact), path (substring),
+    start/end dates, bot (category), status (2xx/3xx/4xx/5xx).
+    """
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    now = timezone.now()
+    raw_horizon = now - timedelta(days=RAW_RETENTION_DAYS)
+
+    start_date = _parse_date_param(request.GET.get('start'))
+    end_date = _parse_date_param(request.GET.get('end'))
+    if start_date and end_date:
+        if end_date < start_date:
+            start_date, end_date = end_date, start_date
+        start = datetime(start_date.year, start_date.month, start_date.day,
+                         tzinfo=dt_timezone.utc)
+        end = min(
+            datetime(end_date.year, end_date.month, end_date.day,
+                     23, 59, 59, tzinfo=dt_timezone.utc),
+            now,
+        )
+    else:
+        start = now - timedelta(hours=24)
+        end = now
+    start = max(start, raw_horizon)
+
+    qs = AnalyticsRequest.objects.filter(timestamp__gte=start, timestamp__lte=end)
+
+    vhost = (request.GET.get('vhost') or '').strip().lower()
+    if vhost:
+        qs = qs.filter(vhost=vhost)
+    path_query = (request.GET.get('path') or '').strip()
+    if path_query:
+        qs = qs.filter(path__icontains=path_query)
+    bot = request.GET.get('bot') or ''
+    if bot in {'human', 'search_engine', 'ai_bot', 'other_bot'}:
+        qs = qs.filter(bot_category=bot)
+    status_class = request.GET.get('status') or ''
+    if status_class in STATUS_CLASSES:
+        low, high = STATUS_CLASSES[status_class]
+        qs = qs.filter(status__gte=low, status__lt=high)
+
+    error_filter = Q(status__gte=400)
+
+    timeline_rows = (
+        qs.annotate(hour=TruncHour('timestamp'))
+        .values('hour')
+        .annotate(requests=Count('id'), errors=Count('id', filter=error_filter))
+        .order_by('hour')
+    )
+    status_mix = qs.aggregate(**{
+        name: Count('id', filter=Q(status__gte=low, status__lt=high))
+        for name, (low, high) in STATUS_CLASSES.items()
+    })
+    bot_mix = list(
+        qs.values('bot_category').annotate(requests=Count('id')).order_by('-requests')
+    )
+    top_vhosts = list(
+        qs.values('vhost')
+        .annotate(requests=Count('id'), errors=Count('id', filter=error_filter))
+        .order_by('-requests')[:EXPLORER_TOP_LIMIT]
+    )
+    top_paths = list(
+        qs.values('path')
+        .annotate(requests=Count('id'), errors=Count('id', filter=error_filter))
+        .order_by('-requests')[:EXPLORER_TOP_LIMIT]
+    )
+    top_ips = list(
+        qs.values('ip', 'country_code', 'bot_category')
+        .annotate(requests=Count('id'), errors=Count('id', filter=error_filter))
+        .order_by('-requests')[:EXPLORER_TOP_LIMIT]
+    )
+    sample = list(
+        qs.order_by('-timestamp')
+        .values('timestamp', 'vhost', 'ip', 'country_code', 'method', 'path',
+                'status', 'bot_category', 'user_agent')[:EXPLORER_SAMPLE_LIMIT]
+    )
+    for row in sample:
+        row['timestamp'] = row['timestamp'].isoformat()
+
+    # Dropdown options: busiest vhosts in the window (unfiltered by vhost)
+    options_qs = AnalyticsRequest.objects.filter(
+        timestamp__gte=start, timestamp__lte=end,
+    )
+    vhost_options = [
+        row['vhost']
+        for row in options_qs.values('vhost')
+        .annotate(c=Count('id')).order_by('-c')[:200]
+    ]
+
+    return JsonResponse({
+        'timeline': [
+            {'t': row['hour'].isoformat(),
+             'requests': row['requests'], 'errors': row['errors']}
+            for row in timeline_rows
+        ],
+        'status_mix': status_mix,
+        'bot_mix': bot_mix,
+        'top_vhosts': top_vhosts,
+        'top_paths': top_paths,
+        'top_ips': top_ips,
+        'sample': sample,
+        'vhost_options': vhost_options,
+        'total_requests': sum(status_mix.values()),
+        'meta': {
+            'start': start.isoformat(),
+            'end': end.isoformat(),
+            'raw_retention_days': RAW_RETENTION_DAYS,
+            'filters': {
+                'vhost': vhost, 'path': path_query,
+                'bot': bot, 'status': status_class,
+            },
+        },
+    })
