@@ -32,7 +32,9 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-&psk#na5l=p3q8
 DEBUG = 'False'
 
 #ALLOWED_HOSTS = ["localhost"]
-ALLOWED_HOSTS = ["<KUBEPANEL_DOMAIN>"]
+# The in-cluster service name is required for the analytics ingest
+# endpoint (Fluent Bit posts to the service directly, not via ingress).
+ALLOWED_HOSTS = ["<KUBEPANEL_DOMAIN>", "kubepanel.kubepanel.svc.cluster.local"]
 CSRF_TRUSTED_ORIGINS = ["https://<KUBEPANEL_DOMAIN>"]
 
 # Application definition

@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 NAMESPACE = 'kubepanel'
 INGRESS_NAME = 'ingress'
 
+# Always kept in ALLOWED_HOSTS regardless of Ingress configuration -
+# in-cluster clients (Fluent Bit analytics ingest) reach the panel
+# through the service, not through the Ingress.
+INTERNAL_HOSTS = ['kubepanel.kubepanel.svc.cluster.local']
+
 
 def _get_networking_api() -> client.NetworkingV1Api:
     """Get NetworkingV1Api client."""
@@ -264,8 +269,13 @@ def _update_settings_file(hosts: list[str]) -> None:
     try:
         content = settings_path.read_text()
 
-        # Build the new values
-        hosts_str = ', '.join(f'"{h}"' for h in hosts)
+        # Build the new values. The in-cluster service name must always be
+        # allowed - Fluent Bit posts analytics data to the service directly.
+        all_hosts = list(hosts)
+        for internal_host in INTERNAL_HOSTS:
+            if internal_host not in all_hosts:
+                all_hosts.append(internal_host)
+        hosts_str = ', '.join(f'"{h}"' for h in all_hosts)
         allowed_hosts_line = f'ALLOWED_HOSTS = [{hosts_str}]'
 
         csrf_origins = [f'"https://{h}"' for h in hosts]
