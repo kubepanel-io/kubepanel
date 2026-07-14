@@ -100,7 +100,14 @@
 </div>
 
 <!-- Cards Grid -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Referrers</h3>
+            <p class="text-xs text-gray-500">External referrer domains (human traffic)</p>
+        </div>
+        <div class="p-4"><ul id="card-referrers" class="divide-y divide-gray-100"></ul></div>
+    </div>
     <div class="bg-white rounded-xl shadow-sm border border-gray-200">
         <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-medium text-gray-900">Countries</h3>
@@ -288,6 +295,9 @@
             '<td class="px-6 py-3 text-right">' + formatNumber(d.errors || 0) + '</td>' +
             '<td class="px-6 py-3 text-right">' + formatBytes(d.bandwidth || 0) + '</td></tr>'
         ).join('') || '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">No data for this period</td></tr>';
+
+        renderList('card-referrers', data.dimensions.referrers.map(r =>
+            listRow(r.referrer_domain, formatNumber(r.views))));
 
         renderList('card-countries', data.dimensions.countries.map(c =>
             '<li class="flex items-center justify-between py-2">' +

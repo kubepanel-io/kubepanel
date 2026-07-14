@@ -119,11 +119,31 @@ OTHER_BOT_PATTERNS = [
     'facebookexternalhit', 'whatsapp', 'telegrambot', 'slackbot',
     'discordbot', 'linkedinbot', 'twitterbot', 'pinterestbot',
     'feedfetcher', 'feedburner', 'rss', 'monitoring',
+    'certbot', 'letsencrypt', "let's encrypt", 'acme',
 ]
 
+# Requests to hidden/infrastructure paths are never human traffic, no
+# matter what the user agent claims: ACME validation (/.well-known/
+# acme-challenge/), repo/secret probes (/.git/config, /.env, /.aws/...).
+# Rule: any path segment starting with a dot.
+_INFRA_PATH_RE = re.compile(r'/\.')
 
-def classify_bot(user_agent):
-    """Classify a user agent into human / search_engine / ai_bot / other_bot."""
+
+def is_infra_path(path):
+    """True for hidden-dotfile / infrastructure paths (/.well-known, /.git, /.env, ...)."""
+    if not path:
+        return False
+    return bool(_INFRA_PATH_RE.search(path.split('?', 1)[0]))
+
+
+def classify_bot(user_agent, path=None):
+    """
+    Classify a request into human / search_engine / ai_bot / other_bot.
+
+    Primarily user-agent based; requests to infrastructure paths
+    (see is_infra_path) are downgraded from human to other_bot - ACME
+    validators and secret-probing scanners often send browser-like UAs.
+    """
     if not user_agent or user_agent == '-':
         return 'other_bot'
     ua = user_agent.lower()
@@ -136,6 +156,8 @@ def classify_bot(user_agent):
     for pattern in OTHER_BOT_PATTERNS:
         if pattern in ua:
             return 'other_bot'
+    if path is not None and is_infra_path(path):
+        return 'other_bot'
     return 'human'
 
 

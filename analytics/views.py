@@ -166,7 +166,7 @@ def analytics_ingest(request):
         if ua == '-':
             ua = ''
         path = record.get('path') or ''
-        bot_category = classify_bot(ua)
+        bot_category = classify_bot(ua, path)
         browser, os_name, device_class = parse_user_agent(ua, bot_category)
         referrer_domain, referrer_path = parse_referrer(
             record.get('http_referrer'),
@@ -568,6 +568,7 @@ def traffic_explorer_page(request):
 
     return render(request, 'analytics/traffic_explorer.html', {
         'raw_retention_days': RAW_RETENTION_DAYS,
+        'countries': COUNTRIES,
     })
 
 
@@ -616,6 +617,9 @@ def traffic_explorer_api(request):
     if status_class in STATUS_CLASSES:
         low, high = STATUS_CLASSES[status_class]
         qs = qs.filter(status__gte=low, status__lt=high)
+    country = (request.GET.get('country') or '').strip().upper()
+    if len(country) == 2:
+        qs = qs.filter(country_code=country)
 
     error_filter = Q(status__gte=400)
 
@@ -647,6 +651,12 @@ def traffic_explorer_api(request):
         .annotate(requests=Count('id'), errors=Count('id', filter=error_filter))
         .order_by('-requests')[:EXPLORER_TOP_LIMIT]
     )
+    top_referrers = list(
+        qs.exclude(referrer_domain='')
+        .values('referrer_domain')
+        .annotate(requests=Count('id'))
+        .order_by('-requests')[:EXPLORER_TOP_LIMIT]
+    )
     sample = list(
         qs.order_by('-timestamp')
         .values('timestamp', 'vhost', 'ip', 'country_code', 'method', 'path',
@@ -676,6 +686,7 @@ def traffic_explorer_api(request):
         'top_vhosts': top_vhosts,
         'top_paths': top_paths,
         'top_ips': top_ips,
+        'top_referrers': top_referrers,
         'sample': sample,
         'vhost_options': vhost_options,
         'total_requests': sum(status_mix.values()),
@@ -685,7 +696,7 @@ def traffic_explorer_api(request):
             'raw_retention_days': RAW_RETENTION_DAYS,
             'filters': {
                 'vhost': vhost, 'path': path_query,
-                'bot': bot, 'status': status_class,
+                'bot': bot, 'status': status_class, 'country': country,
             },
         },
     })
