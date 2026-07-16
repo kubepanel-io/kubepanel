@@ -124,6 +124,20 @@ def get_database_password(domain_status) -> Optional[str]:
     return get_secret_from_ref(secret_ref)
 
 
+def get_wordpress_password(domain_status) -> Optional[str]:
+    """
+    Get the WordPress admin password for a domain from its status.
+
+    Args:
+        domain_status: DomainStatus object
+
+    Returns:
+        WordPress admin password or None
+    """
+    secret_ref = domain_status.wordpress_password_secret_ref
+    return get_secret_from_ref(secret_ref)
+
+
 def update_secret_keys(
     name: str,
     namespace: str,

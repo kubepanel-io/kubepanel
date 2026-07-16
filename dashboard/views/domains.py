@@ -33,6 +33,7 @@ from dashboard.k8s import (
     unsuspend_domain as k8s_unsuspend_domain,
     get_sftp_password,
     get_database_password,
+    get_wordpress_password,
     get_secret_value,
     get_tls_certificate_info,
     update_sftp_password as k8s_update_sftp_password,
@@ -331,6 +332,9 @@ def add_domain(request):
             )
             domain_spec.title = domain_name
             domain_spec.wordpress_preinstall = wp_preinstall
+            if wp_preinstall:
+                domain_spec.wordpress_site_title = domain_name
+                domain_spec.wordpress_admin_email = request.user.email or f"admin@{domain_name}"
             domain_spec.email_enabled = True
             domain_spec.timezone = timezone
             domain_spec.sftp_type = "sshgit" if ssh_access else "standard"
@@ -628,6 +632,15 @@ def view_domain(request, domain):
                 k8s_credentials['database_password'] = get_database_password(status)
             except Exception as e:
                 logger.warning(f"Failed to get database password for {domain}: {e}")
+
+            # WordPress admin credentials (only set for auto-installed domains)
+            if status.wordpress_username:
+                k8s_credentials['wordpress_username'] = status.wordpress_username
+                k8s_credentials['wordpress_url'] = status.wordpress_url
+                try:
+                    k8s_credentials['wordpress_password'] = get_wordpress_password(status)
+                except Exception as e:
+                    logger.warning(f"Failed to get WordPress password for {domain}: {e}")
 
             k8s_credentials['dkim_pubkey'] = status.dkim_public_key
             k8s_credentials['dkim_dns_record'] = status.dkim_dns_record

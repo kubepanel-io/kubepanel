@@ -124,6 +124,8 @@ class DomainSpec:
         self.sftp_type: Optional[str] = None  # "standard" or "sshgit"
         self.redis_enabled: Optional[bool] = None
         self.wordpress_preinstall: Optional[bool] = None
+        self.wordpress_site_title: Optional[str] = None
+        self.wordpress_admin_email: Optional[str] = None
 
         # DNS configuration (optional)
         self.dns_enabled: Optional[bool] = None
@@ -247,7 +249,12 @@ class DomainSpec:
             spec["redis"] = {"enabled": self.redis_enabled}
 
         if self.wordpress_preinstall is not None:
-            spec["wordpress"] = {"preinstall": self.wordpress_preinstall}
+            wordpress = {"preinstall": self.wordpress_preinstall}
+            if self.wordpress_site_title:
+                wordpress["siteTitle"] = self.wordpress_site_title
+            if self.wordpress_admin_email:
+                wordpress["adminEmail"] = self.wordpress_admin_email
+            spec["wordpress"] = wordpress
 
         # Add DNS configuration if enabled
         if self.dns_enabled is not None:
@@ -344,6 +351,19 @@ class DomainStatus:
     def database_password_secret_ref(self) -> Optional[dict]:
         return self._raw.get("database", {}).get("passwordSecretRef")
     
+    # WordPress (automated install)
+    @property
+    def wordpress_username(self) -> Optional[str]:
+        return self._raw.get("wordpress", {}).get("username")
+
+    @property
+    def wordpress_url(self) -> Optional[str]:
+        return self._raw.get("wordpress", {}).get("url")
+
+    @property
+    def wordpress_password_secret_ref(self) -> Optional[dict]:
+        return self._raw.get("wordpress", {}).get("passwordSecretRef")
+
     # Email/DKIM
     @property
     def dkim_public_key(self) -> Optional[str]:
